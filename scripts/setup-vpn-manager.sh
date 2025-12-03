@@ -34,7 +34,7 @@ log_info "Fase 1/5: Aggiornamento del sistema e installazione delle dipendenze..
 
 apt-get update && apt-get upgrade -y
 
-if ! apt-get install -y nginx python3-pip python3-venv nodejs npm curl; then
+if ! apt-get install -y nginx python3-pip python3-venv php8.1-fpm php8.1-curl curl; then
   log_error "Installazione delle dipendenze di base fallita."
   exit 1
 fi
@@ -156,13 +156,18 @@ fi
 log_info "Impostazione del servizio di systemd per il backend..."
 cp /opt/vpn-manager/backend/vpn-manager.service /etc/systemd/system/
 
-# Genera una API key sicura e la inserisce nel file .env e la esporta per il frontend
+# Genera una API key sicura e la inserisce nel file .env
 API_KEY=$(cat /proc/sys/kernel/random/uuid)
 echo "API_KEY=$API_KEY" >/opt/vpn-manager/backend/.env
-# La esportiamo in un file per poterla usare dopo nel frontend
-echo "export REACT_APP_API_KEY=$API_KEY" >/root/api_key.env
 
-log_info "API Key generata: $API_KEY"
+log_info "Copia dei file del frontend..."
+mkdir -p /opt/vpn-manager/frontend
+cp -r ../frontend/* /opt/vpn-manager/frontend/
+
+# Inserisce la stessa API Key nel file di configurazione PHP del frontend
+sed -i "s|define('API_KEY', 'mysecretkey');|define('API_KEY', '$API_KEY');|" /opt/vpn-manager/frontend/config.php
+
+log_info "API Key generata e configurata: $API_KEY"
 
 systemctl daemon-reload
 systemctl enable vpn-manager.service
@@ -176,31 +181,17 @@ fi
 
 log_success "Backend API deployato e in esecuzione."
 
-# --- Fase 4: Deploy del Frontend (React) ---
+# --- Fase 4: Deploy del Frontend (PHP) ---
 log_info "Fase 4/5: Deploy del frontend..."
 
-# Creazione directory
-log_info "Copia dei file del frontend..."
-mkdir -p /opt/vpn-manager/frontend
-cp -r ../frontend/* /opt/vpn-manager/frontend/
+# Assicurarsi che i permessi siano corretti per il server web (es. www-data)
+chown -R www-data:www-data /opt/vpn-manager/frontend
+chmod -R 755 /opt/vpn-manager/frontend
 
-# Installa le dipendenze e builda il progetto
-log_info "Installazione delle dipendenze Node.js e build del frontend..."
-cd /opt/vpn-manager/frontend
+# Rimuovere il file api_key.env non più necessario
+rm -f /root/api_key.env
 
-# Carica la REACT_APP_API_KEY generata in precedenza per il processo di build
-source /root/api_key.env
-npm install
-npm run build
-
-if [[ $? -ne 0 ]]; then
-  log_error "Build del frontend fallita."
-  cd - >/dev/null # Torna alla directory precedente
-  exit 1
-fi
-
-cd - >/dev/null # Torna alla directory precedente
-log_success "Frontend deployato e buildato con successo."
+log_success "Frontend PHP deployato con successo."
 
 # --- Fase 5: Configurazione di Nginx ---
 log_info "Fase 5/5: Configurazione di Nginx..."

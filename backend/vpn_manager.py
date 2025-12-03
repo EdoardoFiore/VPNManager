@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- Percorsi e Costanti ---
+# --- Percorsi e Costanti (Configurabili tramite .env) ---
 OPENVPN_SCRIPT_PATH = os.getenv("OPENVPN_SCRIPT_PATH", "/root/openvpn-install.sh")
-EASYRSA_PKI_PATH = "/etc/openvpn/server/easy-rsa/pki/"
-INDEX_FILE_PATH = os.path.join(EASYRSA_PKI_PATH, "index.txt")
-STATUS_LOG_PATH = "/var/log/openvpn/status.log"
+INDEX_FILE_PATH = os.getenv("INDEX_FILE_PATH", "/etc/openvpn/server/easy-rsa/pki/index.txt")
+STATUS_LOG_PATH = os.getenv("STATUS_LOG_PATH", "/var/log/openvpn/status.log")
+CLIENT_CONFIG_DIR = os.getenv("CLIENT_CONFIG_DIR", "/root")
 
 # --- Funzioni di Basso Livello ---
 
@@ -109,16 +109,21 @@ def create_client(client_name: str):
     if exit_code != 0:
         return None, f"Errore durante la creazione del client: {output}"
 
-    # Lo script crea il file in /root/client_name.ovpn
-    config_path = f"/root/{client_name}.ovpn"
+    # Lo script crea il file in CLIENT_CONFIG_DIR
+    config_path = os.path.join(CLIENT_CONFIG_DIR, f"{client_name}.ovpn")
     if os.path.exists(config_path):
         with open(config_path, "r") as f:
             config_content = f.read()
         
-        os.remove(config_path) # Pulisci il file dopo averlo letto
+        # Prova a rimuovere il file di configurazione, ma non fallire se non ci riesci
+        try:
+            os.remove(config_path)
+        except OSError as e:
+            print(f"Attenzione: impossibile rimuovere il file di configurazione {config_path}. Errore: {e}")
+        
         return config_content, None
     else:
-        return None, "File di configurazione .ovpn non trovato dopo la creazione."
+        return None, f"File di configurazione .ovpn non trovato in {CLIENT_CONFIG_DIR} dopo la creazione."
 
 def revoke_client(client_name: str):
     """
