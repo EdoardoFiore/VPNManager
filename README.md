@@ -22,6 +22,55 @@ Questo progetto nasce dall'esigenza di semplificare e rendere più affidabile l'
 
 ---
 
+## ⚙️ Installazione Rapida
+
+L'installazione è progettata per essere il più semplice possibile. Ti basterà clonare la repository ed eseguire uno script.
+
+### Prerequisiti
+
+-   Una macchina (fisica o virtuale) con **Ubuntu 24.04 LTS** pulita.
+-   Accesso come utente `root` o un utente con privilegi `sudo`.
+
+#### Requisiti di Rete
+
+Il server OpenVPN deve essere raggiungibile pubblicamente. Assicurati che la tua configurazione di rete soddisfi uno dei seguenti requisiti:
+
+-   **Scenario 1 (Ideale): IP Pubblico Diretto**
+    Se la tua VM ha un indirizzo IP pubblico assegnato direttamente alla sua interfaccia di rete, lo script funzionerà senza configurazioni aggiuntive.
+
+-   **Scenario 2: VM dietro un NAT/Firewall**
+    Se la tua VM si trova in una rete privata (con un IP come `192.168.x.x`) e accede a Internet tramite un router, devi configurare il **Port Forwarding**. Inoltra la porta UDP scelta per OpenVPN (default: `1194`) dall'IP pubblico del tuo router all'IP privato della tua VM.
+
+La porta `80` (TCP) deve essere sempre accessibile per l'interfaccia web.
+
+### Passaggi
+
+1.  **Clona la Repository**
+
+    Connettiti via SSH alla tua VM Ubuntu e clona questa repository:
+    ```bash
+    git clone https://github.com/EdoardoFiore/vpn_management_system.git
+    ```
+
+2.  **Esegui lo Script di Installazione**
+
+    Naviga nella directory dello script e lancialo con privilegi `sudo`. Lo script si occuperà di tutto il resto.
+    ```bash
+    cd vpn_management_system/scripts/
+    sudo bash setup-vpn-manager.sh
+    ```
+    Durante l'installazione, ti verrà richiesto di creare un nome utente e una password per accedere alla dashboard web protetta da Nginx Basic Authentication.
+
+    L'installazione richiederà alcuni minuti. Lo script aggiornerà il sistema, installerà OpenVPN, configurerà il backend e il frontend e avvierà tutti i servizi.
+
+3.  **Accesso alla Dashboard**
+
+    Una volta completata l'installazione, lo script mostrerà l'URL per accedere alla dashboard web (es. `http://<IP_DELLA_TUA_VM>`) e la chiave API generata.
+
+    Apri l'URL nel tuo browser e inizia a gestire la tua VPN! Ti verranno richieste le credenziali impostate durante l'installazione.
+
+---
+
 ## 🚀 Novità e Miglioramenti Recenti
 
 Questa sezione riassume gli aggiornamenti significativi e le modifiche introdotte per migliorare la funzionalità, la robustezza e la sicurezza del sistema.
@@ -80,55 +129,6 @@ Il file `.env` (`/opt/vpn-manager/backend/.env`) contiene configurazioni sensibi
 -   **Frontend**: JavaScript con [React](https://reactjs.org/) e [Bootstrap](https://getbootstrap.com/)
 -   **Web Server / Reverse Proxy**: [Nginx](https://www.nginx.com/)
 -   **Sistema Operativo**: Progettato per **Ubuntu 24.04 LTS**.
-
----
-
-## ⚙️ Installazione Rapida
-
-L'installazione è progettata per essere il più semplice possibile. Ti basterà clonare la repository ed eseguire uno script.
-
-### Prerequisiti
-
--   Una macchina (fisica o virtuale) con **Ubuntu 24.04 LTS** pulita.
--   Accesso come utente `root` o un utente con privilegi `sudo`.
-
-#### Requisiti di Rete
-
-Il server OpenVPN deve essere raggiungibile pubblicamente. Assicurati che la tua configurazione di rete soddisfi uno dei seguenti requisiti:
-
--   **Scenario 1 (Ideale): IP Pubblico Diretto**
-    Se la tua VM ha un indirizzo IP pubblico assegnato direttamente alla sua interfaccia di rete, lo script funzionerà senza configurazioni aggiuntive.
-
--   **Scenario 2: VM dietro un NAT/Firewall**
-    Se la tua VM si trova in una rete privata (con un IP come `192.168.x.x`) e accede a Internet tramite un router, devi configurare il **Port Forwarding**. Inoltra la porta UDP scelta per OpenVPN (default: `1194`) dall'IP pubblico del tuo router all'IP privato della tua VM.
-
-La porta `80` (TCP) deve essere sempre accessibile per l'interfaccia web.
-
-### Passaggi
-
-1.  **Clona la Repository**
-
-    Connettiti via SSH alla tua VM Ubuntu e clona questa repository:
-    ```bash
-    git clone https://github.com/EdoardoFiore/vpn_management_system.git
-    ```
-
-2.  **Esegui lo Script di Installazione**
-
-    Naviga nella directory dello script e lancialo con privilegi `sudo`. Lo script si occuperà di tutto il resto.
-    ```bash
-    cd vpn_management_system/scripts/
-    sudo bash setup-vpn-manager.sh
-    ```
-    Durante l'installazione, ti verrà richiesto di creare un nome utente e una password per accedere alla dashboard web protetta da Nginx Basic Authentication.
-
-    L'installazione richiederà alcuni minuti. Lo script aggiornerà il sistema, installerà OpenVPN, configurerà il backend e il frontend e avvierà tutti i servizi.
-
-3.  **Accesso alla Dashboard**
-
-    Una volta completata l'installazione, lo script mostrerà l'URL per accedere alla dashboard web (es. `http://<IP_DELLA_TUA_VM>`) e la chiave API generata.
-
-    Apri l'URL nel tuo browser e inizia a gestire la tua VPN! Ti verranno richieste le credenziali impostate durante l'installazione.
 
 ---
 

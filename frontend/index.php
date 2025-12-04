@@ -117,6 +117,7 @@
         </div>
     </div>
     <!-- Tabler Core JS for features like alert dismissal -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
 
     <!-- Modal for Revocation Confirmation -->
@@ -210,12 +211,14 @@
                                         ${client.name}
                                     </td>
                                     <td>
-                                        <button class="btn btn-primary btn-sm me-1" onclick="downloadClient('${client.name}')" title="Scarica Configurazione">
-                                            <i class="ti ti-download"></i>
-                                        </button>
-                                        <button class="btn btn-danger btn-sm" onclick="revokeClient('${client.name}')" title="Revoca Client">
-                                            <i class="ti ti-trash"></i>
-                                        </button>
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-primary btn-sm" onclick="downloadClient('${client.name}')" title="Scarica Configurazione">
+                                                <i class="ti ti-download"></i>
+                                            </button>
+                                            <button class="btn btn-danger btn-sm" onclick="revokeClient('${client.name}')" title="Revoca Client">
+                                                <i class="ti ti-trash"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             `;
