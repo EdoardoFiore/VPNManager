@@ -68,6 +68,10 @@ function create_client($client_name) {
     return api_request('/clients', 'POST', ['client_name' => $client_name]);
 }
 
+function download_client_config($client_name) {
+    return api_request('/clients/' . urlencode($client_name) . '/download');
+}
+
 function revoke_client($client_name) {
     return api_request('/clients/' . urlencode($client_name), 'DELETE');
 }

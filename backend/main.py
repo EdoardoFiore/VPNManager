@@ -72,6 +72,21 @@ async def create_new_client(request: ClientRequest):
     if error:
         raise HTTPException(status_code=500, detail=error)
 
+    return {"message": f"Client '{client_name}' creato con successo. Puoi scaricare il file .ovpn usando l'endpoint di download."}
+
+@app.get("/api/clients/{client_name}/download", dependencies=[Depends(get_api_key)])
+async def download_client_config(client_name: str):
+    """
+    Scarica il file di configurazione .ovpn per un client esistente.
+    """
+    if not client_name or not client_name.isalnum():
+        raise HTTPException(status_code=400, detail="Il nome del client non è valido.")
+    
+    config_content, error = vpn_manager.get_client_config(client_name)
+
+    if error:
+        raise HTTPException(status_code=404, detail=error) # 404 if file not found
+
     return PlainTextResponse(
         content=config_content,
         media_type="application/x-openvpn-profile",
