@@ -122,6 +122,7 @@ AUTO_INSTALL=y \
   PORT_CHOICE=1      # Default: 1194
 PROTOCOL_CHOICE=1    # Default: UDP
 COMPRESSION_CHOICE=2 # Default: No
+DNS=1         # Use current system resolvers
 CLIENT="test-client" \
   PASS=1 \
   ./openvpn-install.sh
