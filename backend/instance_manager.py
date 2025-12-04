@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import logging
+import re
 from typing import List, Optional, Dict
 from pydantic import BaseModel
 import iptables_manager
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 DATA_FILE = "/opt/vpn-manager/backend/data/instances.json"
 OPENVPN_CONFIG_DIR = "/etc/openvpn"
+DEFAULT_CONFIG_FILE = os.path.join(OPENVPN_CONFIG_DIR, "server.conf")
 
 class Instance(BaseModel):
     id: str
@@ -21,24 +23,82 @@ class Instance(BaseModel):
     status: str = "stopped" # stopped, running
 
 def _load_instances() -> List[Instance]:
-    if not os.path.exists(DATA_FILE):
-        return []
-    try:
-        with open(DATA_FILE, "r") as f:
-            data = json.load(f)
-            return [Instance(**item) for item in data]
-    except json.JSONDecodeError:
-        return []
+    instances = []
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r") as f:
+                data = json.load(f)
+                instances = [Instance(**item) for item in data]
+        except json.JSONDecodeError:
+            pass
+    
+    # Try to import default instance if not present
+    default_instance = _import_default_instance()
+    if default_instance:
+        # Check if already in instances (by id or port)
+        if not any(i.id == default_instance.id for i in instances) and \
+           not any(i.port == default_instance.port for i in instances):
+            instances.insert(0, default_instance)
+            _save_instances(instances)
+            
+    return instances
 
 def _save_instances(instances: List[Instance]):
+    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
     with open(DATA_FILE, "w") as f:
         json.dump([inst.dict() for inst in instances], f, indent=4)
+
+def _import_default_instance() -> Optional[Instance]:
+    """
+    Parses /etc/openvpn/server.conf to create a default Instance object.
+    """
+    if not os.path.exists(DEFAULT_CONFIG_FILE):
+        return None
+
+    try:
+        with open(DEFAULT_CONFIG_FILE, "r") as f:
+            content = f.read()
+        
+        port_match = re.search(r'^port\s+(\d+)', content, re.MULTILINE)
+        proto_match = re.search(r'^proto\s+(\w+)', content, re.MULTILINE)
+        dev_match = re.search(r'^dev\s+(\w+)', content, re.MULTILINE)
+        server_match = re.search(r'^server\s+([\d\.]+)\s+([\d\.]+)', content, re.MULTILINE)
+
+        if port_match and proto_match and dev_match and server_match:
+            port = int(port_match.group(1))
+            protocol = proto_match.group(1)
+            tun_interface = dev_match.group(1)
+            network = server_match.group(1)
+            netmask = server_match.group(2)
+            
+            # Convert netmask to CIDR (simple lookup or calculation)
+            cidr = 24 # Default fallback
+            if netmask == "255.255.255.0": cidr = 24
+            elif netmask == "255.255.0.0": cidr = 16
+            elif netmask == "255.0.0.0": cidr = 8
+            # TODO: Add more robust netmask to CIDR conversion if needed
+
+            subnet = f"{network}/{cidr}"
+
+            return Instance(
+                id="default",
+                name="Default",
+                port=port,
+                protocol=protocol,
+                subnet=subnet,
+                tun_interface=tun_interface,
+                status="stopped"
+            )
+    except Exception as e:
+        logger.error(f"Failed to parse default config: {e}")
+        return None
+    return None
 
 def get_all_instances() -> List[Instance]:
     instances = _load_instances()
     # Update status based on systemd
     for inst in instances:
-        if _is_service_active(inst.name):
+        if _is_service_active(inst):
             inst.status = "running"
         else:
             inst.status = "stopped"
@@ -51,8 +111,15 @@ def get_instance(instance_id: str) -> Optional[Instance]:
             return inst
     return None
 
-def _is_service_active(instance_name: str) -> bool:
-    service_name = f"openvpn-server@server_{instance_name}"
+def _get_service_name(instance: Instance) -> str:
+    # If it's the default instance, it might be running as 'openvpn@server' or just 'openvpn'
+    # But for consistency in our new system, we treat it as 'openvpn@server' if the file is server.conf
+    if instance.id == "default":
+        return "openvpn@server"
+    return f"openvpn@server_{instance.name}"
+
+def _is_service_active(instance: Instance) -> bool:
+    service_name = _get_service_name(instance)
     try:
         subprocess.run(["systemctl", "is-active", "--quiet", service_name], check=True)
         return True
@@ -62,11 +129,6 @@ def _is_service_active(instance_name: str) -> bool:
 def create_instance(name: str, port: int, subnet: str, protocol: str = "udp") -> Instance:
     """
     Creates a new OpenVPN instance.
-    1. Validates input.
-    2. Generates config file.
-    3. Starts service.
-    4. Applies iptables.
-    5. Saves to registry.
     """
     instances = get_all_instances()
     if any(inst.name == name for inst in instances):
@@ -74,14 +136,19 @@ def create_instance(name: str, port: int, subnet: str, protocol: str = "udp") ->
     if any(inst.port == port for inst in instances):
         raise ValueError(f"Port {port} is already in use.")
 
-    # Determine next available TUN interface (simple heuristic)
-    used_tuns = [int(inst.tun_interface.replace("tun", "")) for inst in instances if inst.tun_interface.startswith("tun")]
+    # Determine next available TUN interface
+    used_tuns = []
+    for inst in instances:
+        match = re.search(r'tun(\d+)', inst.tun_interface)
+        if match:
+            used_tuns.append(int(match.group(1)))
+            
     next_tun_id = 0
     while next_tun_id in used_tuns:
         next_tun_id += 1
     tun_interface = f"tun{next_tun_id}"
 
-    instance_id = name.lower().replace(" ", "_") # Simple ID generation
+    instance_id = name.lower().replace(" ", "_")
 
     new_instance = Instance(
         id=instance_id,
@@ -97,12 +164,16 @@ def create_instance(name: str, port: int, subnet: str, protocol: str = "udp") ->
     _generate_openvpn_config(new_instance)
 
     # Enable and Start Service
-    service_name = f"openvpn-server@server_{name}"
+    service_name = _get_service_name(new_instance)
     try:
         subprocess.run(["systemctl", "enable", service_name], check=True)
         subprocess.run(["systemctl", "start", service_name], check=True)
         new_instance.status = "running"
     except subprocess.CalledProcessError as e:
+        # Clean up if start fails
+        try:
+             os.remove(os.path.join(OPENVPN_CONFIG_DIR, f"server_{name}.conf"))
+        except: pass
         raise RuntimeError(f"Failed to start OpenVPN service: {e}")
 
     # Apply iptables
@@ -121,7 +192,7 @@ def delete_instance(instance_id: str):
         raise ValueError("Instance not found")
 
     # Stop Service
-    service_name = f"openvpn-server@server_{inst.name}"
+    service_name = _get_service_name(inst)
     subprocess.run(["systemctl", "stop", service_name], check=False)
     subprocess.run(["systemctl", "disable", service_name], check=False)
 
@@ -129,7 +200,8 @@ def delete_instance(instance_id: str):
     iptables_manager.remove_openvpn_rules(inst.port, inst.protocol, inst.tun_interface, inst.subnet)
 
     # Remove Config
-    config_path = os.path.join(OPENVPN_CONFIG_DIR, f"server_{inst.name}.conf")
+    config_filename = "server.conf" if inst.id == "default" else f"server_{inst.name}.conf"
+    config_path = os.path.join(OPENVPN_CONFIG_DIR, config_filename)
     if os.path.exists(config_path):
         os.remove(config_path)
 
@@ -141,15 +213,23 @@ def _generate_openvpn_config(instance: Instance):
     """
     Generates a server configuration file based on a template or defaults.
     """
-    # This is a simplified config generation. In a real scenario, we might copy a template.
-    # We need to ensure we use the shared PKI paths.
-    
-    # Load paths from env or defaults (assuming shared PKI)
     ca_path = os.getenv("CA_PATH", "/etc/openvpn/easy-rsa/pki/ca.crt")
     cert_path = os.getenv("CERT_PATH", "/etc/openvpn/easy-rsa/pki/issued/server.crt")
     key_path = os.getenv("KEY_PATH", "/etc/openvpn/easy-rsa/pki/private/server.key")
     dh_path = os.getenv("DH_PATH", "/etc/openvpn/easy-rsa/pki/dh.pem")
     crl_path = os.getenv("CRL_PATH", "/etc/openvpn/easy-rsa/pki/crl.pem")
+    
+    # Handle subnet mask
+    network = instance.subnet.split('/')[0]
+    cidr = instance.subnet.split('/')[1] if '/' in instance.subnet else '24'
+    
+    # Simple CIDR to Netmask conversion
+    netmask = "255.255.255.0"
+    if cidr == '8': netmask = "255.0.0.0"
+    elif cidr == '16': netmask = "255.255.0.0"
+    elif cidr == '24': netmask = "255.255.255.0"
+    # For other CIDRs, OpenVPN topology subnet handles it, but 'server' directive needs netmask.
+    # We'll stick to common ones or rely on topology subnet if supported fully.
     
     config_content = f"""
 port {instance.port}
@@ -160,7 +240,7 @@ cert {cert_path}
 key {key_path}
 dh {dh_path}
 topology subnet
-server {instance.subnet.split('/')[0]} {instance.subnet.split('/')[1] if '/' in instance.subnet else '255.255.255.0'}
+server {network} {netmask}
 ifconfig-pool-persist ipp_{instance.name}.txt
 keepalive 10 120
 cipher AES-256-GCM
@@ -173,8 +253,8 @@ verb 3
 crl-verify {crl_path}
 explicit-exit-notify 1
 """
-    # Note: subnet mask handling above is very basic. Better to use ipaddress module.
     
     config_path = os.path.join(OPENVPN_CONFIG_DIR, f"server_{instance.name}.conf")
     with open(config_path, "w") as f:
         f.write(config_content)
+

@@ -3,6 +3,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def _get_default_interface():
+    """Detects the default network interface."""
+    try:
+        # ip route | grep default
+        result = subprocess.run(["ip", "route"], capture_output=True, text=True, check=True)
+        for line in result.stdout.splitlines():
+            if "default" in line:
+                parts = line.split()
+                if "dev" in parts:
+                    return parts[parts.index("dev") + 1]
+    except Exception as e:
+        logger.warning(f"Could not detect default interface: {e}")
+    return "eth0" # Fallback
+
+DEFAULT_INTERFACE = _get_default_interface()
+
 def _run_iptables(args):
     """Run an iptables command."""
     command = f"iptables {args}"
@@ -14,10 +30,13 @@ def _run_iptables(args):
         logger.error(error_msg)
         return False, error_msg
 
-def add_openvpn_rules(port: int, proto: str, tun_interface: str, subnet: str, outgoing_interface: str = "ens18"):
+def add_openvpn_rules(port: int, proto: str, tun_interface: str, subnet: str, outgoing_interface: str = None):
     """
     Adds iptables rules for a new OpenVPN instance.
     """
+    if outgoing_interface is None:
+        outgoing_interface = DEFAULT_INTERFACE
+
     # 1. Allow incoming traffic on the VPN port
     _run_iptables(f"-I INPUT -p {proto} --dport {port} -j ACCEPT")
 
@@ -37,11 +56,14 @@ def add_openvpn_rules(port: int, proto: str, tun_interface: str, subnet: str, ou
 
     return True
 
-def remove_openvpn_rules(port: int, proto: str, tun_interface: str, subnet: str, outgoing_interface: str = "ens18"):
+def remove_openvpn_rules(port: int, proto: str, tun_interface: str, subnet: str, outgoing_interface: str = None):
     """
     Removes iptables rules for an OpenVPN instance.
     Note: We use -D instead of -I/-A. We ignore errors if rules don't exist.
     """
+    if outgoing_interface is None:
+        outgoing_interface = DEFAULT_INTERFACE
+
     _run_iptables(f"-D INPUT -p {proto} --dport {port} -j ACCEPT")
     _run_iptables(f"-D INPUT -i {tun_interface} -j ACCEPT")
     _run_iptables(f"-D FORWARD -i {tun_interface} -j ACCEPT")
