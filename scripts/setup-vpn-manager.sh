@@ -37,6 +37,7 @@ apt-get update && apt-get upgrade -y
 log_info "Aggiunta del repository PPA per PHP 8.1..."
 apt-get install -y software-properties-common apt-transport-https
 add-apt-repository ppa:ondrej/php -y
+sleep 5 # Give apt some time to fully update after adding PPA
 
 if ! apt-get install -y nginx python3-pip python3-venv php8.1-fpm php8.1-curl curl; then
   log_error "Installazione delle dipendenze di base fallita."
@@ -126,7 +127,7 @@ if [[ ${#split_tunnel_routes[@]} -gt 0 ]]; then
 
   # Riavvia OpenVPN per applicare le modifiche
   log_info "Riavvio di OpenVPN per applicare la nuova configurazione..."
-  systemctl restart openvpn-server@server.service
+  systemctl restart openvpn.service
   log_success "Split-tunneling configurato con le rotte specificate."
 else
   log_info "Nessuna rotta specificata. Verrà utilizzato il full-tunneling di default (tutto il traffico attraverso la VPN)."

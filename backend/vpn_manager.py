@@ -43,7 +43,7 @@ def get_all_clients_from_index():
             if parts[0] == "V":  # 'V' sta per Valido
                 # Il nome del client si trova dopo l'ID univoco
                 client_name = parts[-1].split("=")[-1]
-                if client_name != "server": # Escludi il certificato del server
+                if not client_name.startswith("server"): # Escludi il certificato del server
                     clients.append({"name": client_name, "status": "disconnected"})
     return clients
 
@@ -145,10 +145,34 @@ def revoke_client(client_name: str):
     except ValueError:
         return False, f"Client '{client_name}' non trovato."
 
-    command = f"MENU_OPTION='2' CLIENT_TO_REVOKE='{client_index}' {OPENVPN_SCRIPT_PATH}"
-    output, exit_code = _run_command(command)
+    command = f"{OPENVPN_SCRIPT_PATH}"
+    # Simulate interactive input:
+    # 2 (for remove client)
+    # {client_index} (the client number)
+    # y (to confirm)
+    input_str = f"2\n{client_index}\ny\n"
+    
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            check=True,
+            input=input_str, # Pass input to stdin
+            env=dict(os.environ, AUTO_INSTALL='y', APPROVE_INSTALL='y', PASS='1') # Keep these, though they might not apply to revoke
+        )
+        output = result.stdout.strip()
+        exit_code = result.returncode
+    except subprocess.CalledProcessError as e:
+        output = e.stderr.strip()
+        exit_code = e.returncode
 
     if exit_code != 0:
         return False, f"Errore durante la revoca del client: {output}"
+    
+    # Check output for specific success message from openvpn-install.sh
+    if "Client removed!" not in output and "Certificate revoked" not in output:
+        return False, f"Revoca client non confermata dall'output dello script: {output}"
 
     return True, f"Client '{client_name}' revocato con successo."
