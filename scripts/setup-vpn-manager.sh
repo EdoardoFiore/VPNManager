@@ -282,6 +282,7 @@ log_info "API Key e variabili di configurazione generate e configurate nel .env 
 # Assegna la chiave generata ad API_KEY per il resto dello script (es. per il frontend PHP)
 API_KEY="$API_KEY_GENERATED"
 
+
 log_info "Copia dei file del frontend..."
 mkdir -p /opt/vpn-manager/frontend
 cp -r ../frontend/* /opt/vpn-manager/frontend/

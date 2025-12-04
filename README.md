@@ -20,6 +20,58 @@ Questo progetto nasce dall'esigenza di semplificare e rendere più affidabile l'
 -   **Sicuro**: Genera una chiave API univoca per proteggere l'accesso al backend.
 -   **Automatizzato e Affidabile**: Utilizza script collaudati dalla community per la configurazione di OpenVPN, riducendo il rischio di errori manuali.
 
+---
+
+## 🚀 Novità e Miglioramenti Recenti
+
+Questa sezione riassume gli aggiornamenti significativi e le modifiche introdotte per migliorare la funzionalità, la robustezza e la sicurezza del sistema.
+
+### 🐛 Correzioni e Miglioramenti Funzionali:
+-   **Validazione Nomi Client Flessibile**: Ora i nomi dei client possono includere lettere, numeri, trattini (`-`), underscore (`_`) e punti (`.`), offrendo maggiore libertà nella denominazione.
+-   **Prevenzione Duplicati**: Il sistema ora impedisce la creazione di client con nomi già esistenti.
+-   **Revoca Client Robusta**: La revoca dei client è stata completamente rifattorizzata per utilizzare direttamente i comandi Easy-RSA. Questo garantisce un processo di revoca affidabile, un corretto aggiornamento dell'indice dei certificati (`index.txt`) e della Certificate Revocation List (CRL).
+-   **Avviso di Revoca Irreversibile**: Un popup di conferma più chiaro avvisa l'utente che l'operazione di revoca è irreversibile.
+-   **Script di Installazione Più Robusto**: Migliorata la gestione degli aggiornamenti `apt-get` e risolti problemi occasionali di pacchetti non trovati.
+-   **Scoperta Dinamica dei Percorsi**: Lo script di installazione ora individua dinamicamente i percorsi critici di OpenVPN e Easy-RSA sul sistema, rendendo l'installazione più adattabile a diverse configurazioni.
+
+### 🔒 Miglioramenti della Sicurezza:
+-   **Autenticazione Frontend (Nginx Basic Auth)**: La dashboard web è ora protetta da Nginx Basic Authentication, richiedendo un nome utente e una password per l'accesso. Questo garantisce che solo gli utenti autorizzati possano accedere all'interfaccia di gestione.
+
+### ⚙️ Gestione della Configurazione:
+-   **Centralizzazione della Configurazione con `.env`**: I percorsi critici e altre impostazioni (come la chiave API) sono ora gestiti in un unico file `.env` situato in `/opt/vpn-manager/backend/.env`. Questo file viene popolato automaticamente durante l'installazione e letto sia dal backend Python che dagli script Bash per garantire coerenza.
+
+---
+
+## 👥 Gestione Utenti Nginx Basic Auth
+
+Per aggiungere, modificare o rimuovere utenti per l'autenticazione Nginx Basic Auth che protegge la dashboard web, puoi utilizzare il comando `htpasswd` sul server. Il file delle password si trova in `/etc/nginx/.htpasswd`.
+
+-   **Aggiungere un nuovo utente (o cambiare la password di un utente esistente):**
+    ```bash
+    sudo htpasswd /etc/nginx/.htpasswd <nome_utente>
+    ```
+    Ti verrà chiesto di inserire e confermare la password. Se l'utente non esiste, verrà creato. Se esiste, la sua password verrà aggiornata.
+
+-   **Rimuovere un utente:**
+    ```bash
+    sudo htpasswd -D /etc/nginx/.htpasswd <nome_utente>
+    ```
+
+**Importante**: Dopo ogni modifica al file `.htpasswd`, è consigliabile riavviare Nginx per assicurarsi che i cambiamenti vengano caricati:
+```bash
+sudo systemctl reload nginx
+```
+
+---
+
+## 🔒 Sicurezza del File `.env`
+
+Il file `.env` (`/opt/vpn-manager/backend/.env`) contiene configurazioni sensibili (come la chiave API e percorsi di sistema). È importante sapere che:
+-   **Non è accessibile via web**: La directory `/opt/vpn-manager/backend/` è al di fuori della root dei documenti di Nginx, quindi il file `.env` non può essere letto direttamente tramite un browser web.
+-   **Utilizzo interno**: È destinato esclusivamente ad essere letto dal backend FastAPI e dagli script di gestione.
+
+---
+
 ## 🚀 Stack Tecnologico
 
 -   **VPN**: [OpenVPN](https://openvpn.net/)
@@ -28,16 +80,6 @@ Questo progetto nasce dall'esigenza di semplificare e rendere più affidabile l'
 -   **Frontend**: JavaScript con [React](https://reactjs.org/) e [Bootstrap](https://getbootstrap.com/)
 -   **Web Server / Reverse Proxy**: [Nginx](https://www.nginx.com/)
 -   **Sistema Operativo**: Progettato per **Ubuntu 24.04 LTS**.
-
-## 🖼️ Screenshot
-
-*Ecco un'anteprima dell'interfaccia web.*
-
-**(Placeholder per uno screenshot della dashboard principale)**
-`![Dashboard Principale](https://user-images.githubusercontent.com/../placeholder.png)`
-
-**(Placeholder per uno screenshot del form di creazione client)**
-`![Creazione Client](https://user-images.githubusercontent.com/../placeholder.png)`
 
 ---
 
@@ -78,6 +120,7 @@ La porta `80` (TCP) deve essere sempre accessibile per l'interfaccia web.
     cd vpn_management_system/scripts/
     sudo bash setup-vpn-manager.sh
     ```
+    Durante l'installazione, ti verrà richiesto di creare un nome utente e una password per accedere alla dashboard web protetta da Nginx Basic Authentication.
 
     L'installazione richiederà alcuni minuti. Lo script aggiornerà il sistema, installerà OpenVPN, configurerà il backend e il frontend e avvierà tutti i servizi.
 
@@ -85,7 +128,7 @@ La porta `80` (TCP) deve essere sempre accessibile per l'interfaccia web.
 
     Una volta completata l'installazione, lo script mostrerà l'URL per accedere alla dashboard web (es. `http://<IP_DELLA_TUA_VM>`) e la chiave API generata.
 
-    Apri l'URL nel tuo browser e inizia a gestire la tua VPN!
+    Apri l'URL nel tuo browser e inizia a gestire la tua VPN! Ti verranno richieste le credenziali impostate durante l'installazione.
 
 ---
 
