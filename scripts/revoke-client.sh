@@ -2,6 +2,9 @@
 # /scripts/revoke-client.sh
 # Questo script esegue le operazioni di revoca client che richiedono privilegi di root.
 
+# Carica le variabili d'ambiente dal file .env del backend
+source /opt/vpn-manager/backend/.env
+
 CLIENT_NAME="$1"
 
 if [[ -z "$CLIENT_NAME" ]]; then
@@ -9,9 +12,10 @@ if [[ -z "$CLIENT_NAME" ]]; then
     exit 1
 fi
 
-EASYRSA_DIR="/etc/openvpn/easy-rsa"
-OPENVPN_DIR="/etc/openvpn"
-IPP_FILE="${OPENVPN_DIR}/ipp.txt"
+# Queste variabili verranno ora caricate dal file .env
+# EASYRSA_DIR="/etc/openvpn/easy-rsa"
+# OPENVPN_DIR="/etc/openvpn"
+# IPP_FILE="${OPENVPN_DIR}/ipp.txt"
 
 log_error() {
   echo "[ERROR] $1" >&2

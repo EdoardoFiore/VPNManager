@@ -68,14 +68,16 @@ chmod +x openvpn-install.sh
 
 # Esegue lo script in modalità non interattiva
 # NOTA: questo crea un primo utente chiamato 'test-client'
-log_info "Esecuzione dello script di installazione di OpenVPN PER IL SERVER in modalità non interattiva..."
+log_info "Esecuzione dello script di installazione di OpenVPN in modalità non interattiva..."
 AUTO_INSTALL=y \
   ENDPOINT="$PUBLIC_IP" \
   APPROVE_INSTALL=y \
   APPROVE_IP=y \
   PORT_CHOICE=1      # Default: 1194
 PROTOCOL_CHOICE=1    # Default: UDP
-COMPRESSION_CHOICE=2 \
+COMPRESSION_CHOICE=2 # Default: No
+CLIENT="test-client" \
+  PASS=1 \
   ./openvpn-install.sh
 
 if [[ ! -f /etc/openvpn/server.conf ]]; then
@@ -83,17 +85,7 @@ if [[ ! -f /etc/openvpn/server.conf ]]; then
   exit 1
 fi
 
-log_success "OpenVPN installato e configurato con successo."
-
-# Ora crea il client di test usando il nostro script
-log_info "Creazione del client di test 'test-client'..."
-/opt/vpn-manager/scripts/create-client.sh "test-client"
-if [[ $? -ne 0 ]]; then
-  log_error "Creazione del client 'test-client' fallita."
-  exit 1
-fi
-
-log_success "Un primo client 'test-client.ovpn' è stato creato in /root/."
+log_success "OpenVPN installato e configurato con successo. Un primo client 'test-client.ovpn' è stato creato in /root/."
 
 # --- Configurazione opzionale per Split-Tunneling ---
 declare -a split_tunnel_routes=()
@@ -177,8 +169,22 @@ log_info "Impostazione del servizio di systemd per il backend..."
 cp /opt/vpn-manager/backend/vpn-manager.service /etc/systemd/system/
 
 # Genera una API key sicura e la inserisce nel file .env
-API_KEY=$(cat /proc/sys/kernel/random/uuid)
-echo "API_KEY=$API_KEY" >/opt/vpn-manager/backend/.env
+API_KEY_GENERATED=$(cat /proc/sys/kernel/random/uuid) # Use a new variable name for clarity
+ENV_FILE="/opt/vpn-manager/backend/.env"
+
+echo "API_KEY=$API_KEY_GENERATED" > "$ENV_FILE"
+echo "OPENVPN_SCRIPT_PATH=/usr/local/bin/openvpn-install.sh" >> "$ENV_FILE"
+echo "INDEX_FILE_PATH=/etc/openvpn/easy-rsa/pki/index.txt" >> "$ENV_FILE"
+echo "STATUS_LOG_PATH=/var/log/openvpn/status.log" >> "$ENV_FILE"
+echo "CLIENT_CONFIG_DIR=/root" >> "$ENV_FILE"
+echo "EASYRSA_DIR=/etc/openvpn/easy-rsa" >> "$ENV_FILE"
+echo "OPENVPN_DIR=/etc/openvpn" >> "$ENV_FILE"
+echo "IPP_FILE=/etc/openvpn/ipp.txt" >> "$ENV_FILE"
+
+log_info "API Key e variabili di configurazione generate e configurate nel .env del backend."
+
+# Assegna la chiave generata ad API_KEY per il resto dello script (es. per il frontend PHP)
+API_KEY="$API_KEY_GENERATED"
 
 log_info "Copia dei file del frontend..."
 mkdir -p /opt/vpn-manager/frontend
@@ -186,8 +192,6 @@ cp -r ../frontend/* /opt/vpn-manager/frontend/
 
 # Inserisce la stessa API Key nel file di configurazione PHP del frontend
 sed -i "s|define('API_KEY', 'mysecretkey');|define('API_KEY', '$API_KEY');|" /opt/vpn-manager/frontend/config.php
-
-log_info "API Key generata e configurata: $API_KEY"
 
 systemctl daemon-reload
 systemctl enable vpn-manager.service

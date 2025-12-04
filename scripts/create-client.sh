@@ -3,6 +3,9 @@
 # Questo script crea un nuovo client OpenVPN usando Easy-RSA e genera il file .ovpn.
 # Richiede privilegi di root.
 
+# Carica le variabili d'ambiente dal file .env del backend
+source /opt/vpn-manager/backend/.env
+
 CLIENT_NAME="$1"
 
 if [[ -z "$CLIENT_NAME" ]]; then
@@ -16,9 +19,10 @@ if ! [[ "$CLIENT_NAME" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
     exit 1
 fi
 
-EASYRSA_DIR="/etc/openvpn/easy-rsa"
-OPENVPN_DIR="/etc/openvpn"
-CLIENT_CONFIG_DIR="/root" # Abbiamo deciso di usare sempre /root per i file generati
+# Queste variabili verranno ora caricate dal file .env
+# EASYRSA_DIR="/etc/openvpn/easy-rsa"
+# OPENVPN_DIR="/etc/openvpn"
+# CLIENT_CONFIG_DIR="/root" # Abbiamo deciso di usare sempre /root per i file generati
 
 log_error() {
   echo "[ERROR] $1" >&2
