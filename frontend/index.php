@@ -118,6 +118,36 @@
     </div>
     <!-- Tabler Core JS for features like alert dismissal -->
     <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
+
+    <!-- Modal for Revocation Confirmation -->
+    <div class="modal modal-blur fade" id="modal-revoke-confirm" tabindex="-1" role="dialog" aria-hidden="true">
+      <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <div class="modal-status bg-danger"></div>
+          <div class="modal-body text-center py-4">
+            <i class="ti ti-alert-triangle icon mb-2 text-danger icon-lg"></i>
+            <h3>Conferma Revoca Client</h3>
+            <div class="text-muted" id="revoke-modal-message">
+              Sei sicuro di voler revocare il client '<span id="revoke-client-name"></span>'?
+              Questa operazione è IRREVERSIBILE e rimuoverà l'accesso VPN per questo client.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <div class="w-100">
+              <div class="row">
+                <div class="col"><a href="#" class="btn w-100" data-bs-dismiss="modal">
+                    Annulla
+                  </a></div>
+                <div class="col"><a href="#" class="btn btn-danger w-100" id="confirm-revoke-button" data-bs-dismiss="modal">
+                    Revoca
+                  </a></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <script>
         const API_AJAX_HANDLER = 'ajax_handler.php';
 
@@ -308,11 +338,27 @@
             }
         }
 
-        async function revokeClient(clientName) {
-            if (!confirm(`Sei sicuro di voler revocare il client '${clientName}'? Questa operazione è IRREVERSIBILE!`)) {
-                return;
-            }
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchAndRenderClients();
 
+            const confirmRevokeButton = document.getElementById('confirm-revoke-button');
+            confirmRevokeButton.addEventListener('click', (event) => {
+                const clientName = event.currentTarget.dataset.clientName;
+                if (clientName) {
+                    revokeClientAction(clientName);
+                }
+            });
+        });
+
+        async function revokeClient(clientName) {
+            document.getElementById('revoke-client-name').textContent = clientName;
+            document.getElementById('confirm-revoke-button').dataset.clientName = clientName; // Set data attribute
+            const revokeModal = new bootstrap.Modal(document.getElementById('modal-revoke-confirm'));
+            revokeModal.show();
+        }
+
+        async function revokeClientAction(clientName) {
             showNotification('info', `Revoca client '${clientName}'...`);
             try {
                 const formData = new FormData();
@@ -337,9 +383,6 @@
                 showNotification('danger', `Errore di rete o API non raggiungibile: ${error.message}`);
             }
         }
-
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', fetchAndRenderClients);
     </script>
 </body>
 </html>
