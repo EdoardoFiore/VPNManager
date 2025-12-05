@@ -147,12 +147,18 @@ def create_instance(name: str, port: int, subnet: str, protocol: str = "udp",
     """
     Creates a new OpenVPN instance.
     """
+    logger.info(f"=== Starting instance creation: name={name}, port={port}, subnet={subnet}")
+    
     instances = get_all_instances()
     if any(inst.name == name for inst in instances):
+        logger.error(f"Instance with name '{name}' already exists")
         raise ValueError(f"Instance with name '{name}' already exists.")
     if any(inst.port == port for inst in instances):
+        logger.error(f"Port {port} is already in use")
         raise ValueError(f"Port {port} is already in use.")
 
+    logger.info("Validation passed, determining TUN interface...")
+    
     # Determine next available TUN interface
     used_tuns = []
     for inst in instances:
@@ -164,11 +170,15 @@ def create_instance(name: str, port: int, subnet: str, protocol: str = "udp",
     while next_tun_id in used_tuns:
         next_tun_id += 1
     tun_interface = f"tun{next_tun_id}"
+    
+    logger.info(f"Assigned TUN interface: {tun_interface}")
 
     instance_id = name.lower().replace(" ", "_")
-
+    
     if routes is None:
         routes = []
+    
+    logger.info(f"Creating Instance object with id={instance_id}")
 
     new_instance = Instance(
         id=instance_id,
@@ -181,13 +191,21 @@ def create_instance(name: str, port: int, subnet: str, protocol: str = "udp",
         routes=routes,
         status="stopped"
     )
+    
+    logger.info("Instance object created, generating OpenVPN config...")
 
     # Generate Config
-    _generate_openvpn_config(new_instance)
+    try:
+        _generate_openvpn_config(new_instance)
+        logger.info("Config generation completed successfully")
+    except Exception as e:
+        logger.error(f"Config generation failed: {e}", exc_info=True)
+        raise RuntimeError(f"Failed to generate config: {e}")
 
     # Enable and Start Service
     service_name = _get_service_name(new_instance)
     try:
+        logger.info(f"Enabling and starting systemd service: {service_name}")
         subprocess.run(["/usr/bin/systemctl", "enable", service_name], check=True)
         subprocess.run(["/usr/bin/systemctl", "start", service_name], check=True)
         new_instance.status = "running"
