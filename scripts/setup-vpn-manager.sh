@@ -284,6 +284,35 @@ log_info "API Key e variabili di configurazione generate e configurate nel .env 
 API_KEY="$API_KEY_GENERATED"
 
 
+log_info "Creazione della sistemd unit per il backend..."
+cat > /etc/systemd/system/vpn-manager.service <<'EOF'
+[Unit]
+Description=VPN Manager Backend (FastAPI/Uvicorn)
+After=network.target openvpn.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/vpn-manager/backend
+Environment="PATH=/opt/vpn-manager/backend/venv/bin"
+ExecStart=/opt/vpn-manager/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+log_info "Abilitazione IP forwarding per OpenVPN..."
+bash /opt/vpn-manager/scripts/enable-ip-forwarding.sh
+
+log_info "Configurazione iptables persistence..."
+chmod +x /opt/vpn-manager/scripts/save-iptables.sh
+chmod +x /opt/vpn-manager/scripts/restore-iptables.sh
+cp /opt/vpn-manager/scripts/iptables-openvpn.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable iptables-openvpn.service
+
 log_info "Copia dei file del frontend..."
 mkdir -p /opt/vpn-manager/frontend
 cp -r ../frontend/* /opt/vpn-manager/frontend/

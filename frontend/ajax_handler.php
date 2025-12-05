@@ -5,8 +5,17 @@ require_once 'api_client.php';
 
 header('Content-Type: application/json');
 
+// Handle both traditional POST and JSON payload
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
+// If no action in GET/POST, try JSON body
+if (empty($action)) {
+    $input = file_get_contents('php://input');
+    $json_data = json_decode($input, true);
+    if ($json_data && isset($json_data['action'])) {
+        $action = $json_data['action'];
+    }
+}
 
 switch ($action) {
     case 'get_network_interfaces':
@@ -34,7 +43,6 @@ switch ($action) {
             $data['port'],
             $data['subnet'],
             $data['protocol'] ?? 'udp',
-            $data['outgoing_interface'] ?? null,
             $data['tunnel_mode'] ?? 'full',
             $data['routes'] ?? []
         );

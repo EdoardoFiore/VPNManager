@@ -27,7 +27,6 @@ class InstanceRequest(BaseModel):
     port: int
     subnet: str
     protocol: str = "udp"
-    outgoing_interface: str = None  # Optional, auto-detect if not provided
     tunnel_mode: str = "full"  # "full" or "split"
     routes: List[RouteConfig] = []  # Custom routes for split tunnel
 
@@ -78,7 +77,6 @@ async def create_instance(request: InstanceRequest):
             port=request.port,
             subnet=request.subnet,
             protocol=request.protocol,
-            outgoing_interface=request.outgoing_interface,
             tunnel_mode=request.tunnel_mode,
             routes=[route.dict() for route in request.routes]
         )

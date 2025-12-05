@@ -189,17 +189,6 @@
                             </div>
                             <div class="col-md-12">
                                 <div class="mb-3">
-                                    <label class="form-label">Interfaccia di Rete</label>
-                                    <select class="form-select" name="outgoing_interface"
-                                        id="outgoing-interface-select">
-                                        <option value="">Auto-detect (Consigliato)</option>
-                                    </select>
-                                    <small class="form-hint">Seleziona l'interfaccia di rete da usare per il routing
-                                        VPN.</small>
-                                </div>
-                            </div>
-                            <div class="col-md-12">
-                                <div class="mb-3">
                                     <label class="form-label">Modalità Tunnel</label>
                                     <select class="form-select" name="tunnel_mode" id="tunnel-mode-select"
                                         onchange="toggleRouteConfig()">
@@ -363,7 +352,7 @@
                 const response = await fetch(`${API_AJAX_HANDLER}?action=get_network_interfaces`);
                 const result = await response.json();
                 const select = document.getElementById(`route-interface-${routeId}`);
-                
+
                 if (result.success && result.body) {
                     result.body.forEach(iface => {
                         const option = document.createElement('option');
@@ -427,11 +416,11 @@
         async function createInstance() {
             const form = document.getElementById('createInstanceForm');
             const formData = new FormData(form);
-            
+
             // Gather routes if split tunnel
             const tunnelMode = formData.get('tunnel_mode');
             const routes = [];
-            
+
             if (tunnelMode === 'split') {
                 const routeNetworks = document.querySelectorAll('[data-route-network]');
                 routeNetworks.forEach(input => {
@@ -439,13 +428,13 @@
                     const network = input.value.trim();
                     const interfaceSelect = document.querySelector(`[data-route-interface="${routeId}"]`);
                     const interfaceName = interfaceSelect ? interfaceSelect.value : '';
-                    
+
                     if (network && interfaceName) {
                         routes.push({ network, interface: interfaceName });
                     }
                 });
             }
-            
+
             // Build request payload
             const payload = {
                 action: 'create_instance',
@@ -453,14 +442,13 @@
                 port: parseInt(formData.get('port')),
                 subnet: formData.get('subnet'),
                 protocol: 'udp',
-                outgoing_interface: formData.get('outgoing_interface') || null,
                 tunnel_mode: tunnelMode,
                 routes: routes
             };
 
             try {
-                const response = await fetch(API_AJAX_HANDLER, { 
-                    method: 'POST', 
+                const response = await fetch(API_AJAX_HANDLER, {
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
@@ -478,30 +466,6 @@
                 }
             } catch (e) {
                 showNotification('danger', 'Errore di connessione: ' + e.message);
-            }
-        }
-
-        async function loadNetworkInterfaces() {
-            try {
-                const response = await fetch(`${API_AJAX_HANDLER}?action=get_network_interfaces`);
-                const result = await response.json();
-                const select = document.getElementById('outgoing-interface-select');
-
-                // Clear existing options except the auto-detect
-                while (select.options.length > 1) {
-                    select.remove(1);
-                }
-
-                if (result.success && result.body) {
-                    result.body.forEach(iface => {
-                        const option = document.createElement('option');
-                        option.value = iface.name;
-                        option.textContent = `${iface.name} (${iface.ip}/${iface.cidr})`;
-                        select.appendChild(option);
-                    });
-                }
-            } catch (e) {
-                console.error('Error loading network interfaces:', e);
             }
         }
 

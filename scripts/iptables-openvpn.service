@@ -1,0 +1,12 @@
+[Unit]
+Description=Restore iptables rules for OpenVPN
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/vpn-manager/scripts/restore-iptables.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
