@@ -294,8 +294,8 @@ After=network.target openvpn.service
 Type=simple
 User=root
 WorkingDirectory=/opt/vpn-manager/backend
-Environment="PATH=/opt/vpn-manager/backend/venv/bin"
-ExecStart=/opt/vpn-manager/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Environment="PATH=/opt/vpn-manager-env/bin"
+ExecStart=/opt/vpn-manager-env/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 
@@ -312,6 +312,10 @@ chmod +x /opt/vpn-manager/scripts/restore-iptables.sh
 cp /opt/vpn-manager/scripts/iptables-openvpn.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable iptables-openvpn.service
+
+systemctl daemon-reload
+systemctl enable vpn-manager.service
+systemctl start vpn-manager.service
 
 log_info "Copia dei file del frontend..."
 mkdir -p /opt/vpn-manager/frontend
