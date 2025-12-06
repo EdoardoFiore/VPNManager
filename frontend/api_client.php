@@ -21,7 +21,7 @@ function api_request($endpoint, $method = 'GET', $data = null)
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 
-    if ($method === 'POST' && $data) {
+    if (($method === 'POST' || $method === 'PATCH' || $method === 'PUT') && $data) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
     }
 

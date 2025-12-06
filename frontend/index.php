@@ -178,7 +178,8 @@
                                         <div id="routes-edit-mode" style="display: none;">
                                             <div class="mb-3">
                                                 <label class="form-label">Modalità Tunnel</label>
-                                                <select class="form-select" id="tunnel-mode-edit">
+                                                <select class="form-select" id="tunnel-mode-edit"
+                                                    onchange="toggleRouteConfigEdit()">
                                                     <option value="full">Full Tunnel</option>
                                                     <option value="split">Split Tunnel</option>
                                                 </select>
@@ -506,7 +507,7 @@
 
                 if (result.success) {
                     showNotification('success', 'Istanza creata con successo!');
-                    bootstrap.Modal.getInstance(document.getElementById('modal-create-instance')).hide();
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('modal-create-instance')).hide();
                     form.reset();
                     document.getElementById('routes-container').innerHTML = '';
                     routeCounter = 0;
@@ -585,7 +586,7 @@
                         // Strip instance prefix for display
                         const displayName = client.name.replace(`${currentInstance.name}_`, '');
                         const fullName = client.name; // Keep full name for API calls
-                        
+
                         if (client.status === 'connected') {
                             connBody.innerHTML += `
                                 <tr>
@@ -736,6 +737,7 @@
 
             // Pre-populate edit form
             document.getElementById('tunnel-mode-edit').value = currentInstance.tunnel_mode;
+            toggleRouteConfigEdit();
 
             // Clear and populate routes
             const container = document.getElementById('routes-edit-container');
@@ -746,6 +748,20 @@
                 for (const route of currentInstance.routes) {
                     await addRouteEdit(route.network, route.interface);
                 }
+            }
+        }
+
+        function toggleRouteConfigEdit() {
+            const tunnelMode = document.getElementById('tunnel-mode-edit').value;
+            const container = document.getElementById('routes-edit-container');
+            const addBtn = document.querySelector('button[onclick="addRouteEdit()"]');
+
+            if (tunnelMode === 'split') {
+                container.style.display = 'block';
+                if (addBtn) addBtn.style.display = 'inline-block';
+            } else {
+                container.style.display = 'none';
+                if (addBtn) addBtn.style.display = 'none';
             }
         }
 
