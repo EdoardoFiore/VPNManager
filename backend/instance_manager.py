@@ -493,7 +493,12 @@ def _generate_openvpn_config(instance: Instance):
     # Ensure directory exists
     os.makedirs(OPENVPN_CONFIG_DIR, exist_ok=True)
     
-    config_path = os.path.join(OPENVPN_CONFIG_DIR, f"server_{instance.name}.conf")
+    # Determine config filename
+    conf_filename = f"server_{instance.name}.conf"
+    if instance.id == "default":
+        conf_filename = "server.conf"
+
+    config_path = os.path.join(OPENVPN_CONFIG_DIR, conf_filename)
     logger.info(f"Writing config to: {config_path}")
     
     try:
