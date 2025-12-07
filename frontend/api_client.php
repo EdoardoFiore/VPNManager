@@ -3,7 +3,7 @@
 
 require_once 'config.php';
 
-function api_request($endpoint, $method = 'GET', $data = null)
+function api_request($endpoint, $method = 'GET', $data = [], $raw_response = false)
 {
     $url = API_BASE_URL . $endpoint;
     $ch = curl_init();
@@ -44,11 +44,15 @@ function api_request($endpoint, $method = 'GET', $data = null)
 
     $header = substr($response, 0, $header_size);
     $body_str = substr($response, $header_size);
-    $body = json_decode($body_str, true);
 
-    // Se il json_decode fallisce, potrebbe essere un file o testo semplice
-    if (json_last_error() !== JSON_ERROR_NONE) {
+    if ($raw_response) {
         $body = $body_str;
+    } else {
+        $body = json_decode($body_str, true);
+        // Se il json_decode fallisce, potrebbe essere un file o testo semplice
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $body = $body_str;
+        }
     }
 
     $is_success = ($http_code >= 200 && $http_code < 300);
@@ -116,7 +120,7 @@ function create_client($instance_id, $client_name)
 
 function download_client_config($instance_id, $client_name)
 {
-    return api_request('/instances/' . urlencode($instance_id) . '/clients/' . urlencode($client_name) . '/download');
+    return api_request("/instances/$instance_id/clients/$client_name/download", 'GET', [], true);
 }
 
 function revoke_client($instance_id, $client_name)
