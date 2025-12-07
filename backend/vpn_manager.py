@@ -101,11 +101,12 @@ def _get_connected_clients(instance_name: str):
                 parts = line.split(',')
                 # status-version 2 format:
                 # CLIENT_LIST,Common Name,Real Address,Virtual Address,Bytes Received,Bytes Sent,Connected Since,...
-                if len(parts) > 3:
+                if len(parts) > 7:
                     client_name = parts[1]
                     real_address = parts[2]
                     virtual_address = parts[3]
-                    connected_since = parts[6] if len(parts) > 6 else "Unknown"
+                    # Index 7 is "Connected Since" in the user's log version (due to IPv6 field at 4)
+                    connected_since = parts[7]
 
                     # Handle case where real address has port
                     if ":" in real_address:

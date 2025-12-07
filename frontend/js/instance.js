@@ -64,7 +64,16 @@ async function fetchAndRenderClients() {
                 if (client.status === 'connected') {
                     connBody.innerHTML += `
                         <tr>
-                            <td>${displayName}</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="status-indicator status-green status-indicator-animated">
+                                        <span class="status-indicator-circle"></span>
+                                        <span class="status-indicator-circle"></span>
+                                        <span class="status-indicator-circle"></span>
+                                    </span>
+                                    ${displayName}
+                                </div>
+                            </td>
                             <td>${client.virtual_ip || '-'}</td>
                             <td>${formatDateTime(client.connected_since)}</td>
                             <td>
