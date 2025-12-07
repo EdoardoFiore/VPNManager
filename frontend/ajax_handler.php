@@ -28,6 +28,16 @@ switch ($action) {
         echo json_encode($response);
         break;
 
+    case 'get_instance':
+        $instance_id = $_GET['instance_id'] ?? '';
+        if (empty($instance_id)) {
+            echo json_encode(['success' => false, 'body' => ['detail' => 'ID istanza mancante.']]);
+            exit;
+        }
+        $response = get_instance($instance_id);
+        echo json_encode($response);
+        break;
+
     case 'create_instance':
         // Handle JSON payload
         $input = file_get_contents('php://input');

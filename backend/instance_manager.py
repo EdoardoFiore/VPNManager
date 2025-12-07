@@ -125,6 +125,14 @@ def _import_default_instance() -> Optional[Instance]:
         return None
     return None
 
+def get_instance_by_id(instance_id: str) -> Optional[Instance]:
+    """Retrieve a single instance by ID."""
+    instances = get_all_instances()
+    for inst in instances:
+        if inst.id == instance_id:
+            return inst
+    return None
+
 def get_all_instances() -> List[Instance]:
     instances = _load_instances()
     # Update status based on systemd

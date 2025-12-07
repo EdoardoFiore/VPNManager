@@ -74,6 +74,14 @@ async def get_instances():
     """Restituisce la lista di tutte le istanze OpenVPN."""
     return instance_manager.get_all_instances()
 
+@app.get("/api/instances/{instance_id}", dependencies=[Depends(get_api_key)])
+async def get_instance(instance_id: str):
+    """Restituisce i dettagli di una specifica istanza."""
+    instance = instance_manager.get_instance_by_id(instance_id)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    return instance
+
 @app.post("/api/instances", dependencies=[Depends(get_api_key)])
 async def create_instance(request: InstanceRequest):
     """Crea una nuova istanza OpenVPN."""
