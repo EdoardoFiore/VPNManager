@@ -61,6 +61,29 @@ async function fetchAndRenderClients() {
                 const displayName = client.name.replace(`${currentInstance.name}_`, '');
                 const fullName = client.name;
 
+                // Always render to Available Clients list (Left Side)
+                availBody.innerHTML += `
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                ${client.status === 'connected' ? '<span class="status-dot status-dot-animated status-green me-2"></span>' : ''}
+                                ${displayName}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2 justify-content-end">
+                                <button class="btn btn-primary btn-sm btn-icon" onclick="downloadClient('${fullName}')" title="Scarica Configurazione">
+                                    <i class="ti ti-download"></i>
+                                </button>
+                                <button class="btn btn-danger btn-sm btn-icon" onclick="revokeClient('${fullName}')" title="Revoca Client">
+                                    <i class="ti ti-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+
+                // If connected, ALSO render to Connected Clients list (Right Side)
                 if (client.status === 'connected') {
                     connBody.innerHTML += `
                         <tr>
@@ -74,7 +97,11 @@ async function fetchAndRenderClients() {
                                     ${displayName}
                                 </div>
                             </td>
-                            <td>${client.virtual_ip || '-'}</td>
+                            <td>${client.real_ip || '-'}</td>
+                            <td class="text-muted">
+                                <div><i class="ti ti-arrow-down icon-sm text-green"></i> ${formatBytes(client.bytes_received)}</div>
+                                <div><i class="ti ti-arrow-up icon-sm text-blue"></i> ${formatBytes(client.bytes_sent)}</div>
+                            </td>
                             <td>${formatDateTime(client.connected_since)}</td>
                             <td>
                                 <button class="btn btn-danger btn-sm btn-icon" onclick="revokeClient('${fullName}')">
@@ -83,28 +110,14 @@ async function fetchAndRenderClients() {
                             </td>
                         </tr>
                     `;
-                } else {
-                    availBody.innerHTML += `
-                        <tr>
-                            <td>${displayName}</td>
-                            <td>
-                                <div class="d-flex gap-2">
-                                    <button class="btn btn-primary btn-sm btn-icon" onclick="downloadClient('${fullName}')" title="Scarica Configurazione">
-                                        <i class="ti ti-download"></i>
-                                    </button>
-                                    <button class="btn btn-danger btn-sm btn-icon" onclick="revokeClient('${fullName}')" title="Revoca Client">
-                                        <i class="ti ti-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
                 }
             });
 
             if (clients.length === 0) {
                 availBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">Nessun client.</td></tr>';
-                connBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Nessun client connesso.</td></tr>';
+            }
+            if (connBody.innerHTML === '') {
+                connBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nessun client connesso.</td></tr>';
             }
 
         } else {

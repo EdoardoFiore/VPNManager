@@ -107,6 +107,8 @@ def _get_connected_clients(instance_name: str):
                     virtual_address = parts[3]
                     # Index 7 is "Connected Since" in the user's log version (due to IPv6 field at 4)
                     connected_since = parts[7]
+                    bytes_received = parts[5]
+                    bytes_sent = parts[6]
 
                     # Handle case where real address has port
                     if ":" in real_address:
@@ -115,7 +117,9 @@ def _get_connected_clients(instance_name: str):
                     connected_clients[client_name] = {
                         "virtual_ip": virtual_address,
                         "real_ip": real_address,
-                        "connected_since": connected_since
+                        "connected_since": connected_since,
+                        "bytes_received": bytes_received,
+                        "bytes_sent": bytes_sent
                     }
     except Exception as e:
         logger.error(f"Error reading status log for {instance_name}: {e}")

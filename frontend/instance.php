@@ -92,8 +92,9 @@ require_once 'includes/header.php';
                     <thead>
                         <tr>
                             <th>Client</th>
-                            <th>IP</th>
-                            <th>Da</th>
+                            <th>IP Reale</th>
+                            <th>Traffico</th>
+                            <th>Connesso da</th>
                             <th class="w-1"></th>
                         </tr>
                     </thead>
