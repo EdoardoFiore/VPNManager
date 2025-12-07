@@ -66,11 +66,38 @@ find_dir_in_paths() {
   echo "$found_path"
 }
 
+# --- Funzioni Grafiche ---
+print_banner() {
+  echo -e "\033[1;36m"
+  cat << "EOF"
+ _    _ ______ _   _   __  __
+| |  | || ___ \ \ | | |  \/  |
+| |  | || |_/ /  \| | | .  . | __ _ _ __   __ _  __ _  ___ _ __
+| |  | ||  __/| . ` | | |\/| |/ _` | '_ \ / _` |/ _` |/ _ \ '__|
+\  \/  /| |   | |\  | | |  | | (_| | | | | (_| | (_| |  __/ |
+ \____/ \_|   \_| \_/ \_|  |_/\__,_|_| |_|\__,_|\__, |\___|_|
+                                                 __/ |
+                                                |___/
+EOF
+  echo -e "\033[0m"
+}
+
 # --- Controllo Esecuzione come Root ---
 if [[ $EUID -ne 0 ]]; then
   log_error "Questo script deve essere eseguito come root. Usa 'sudo bash setup-vpn-manager.sh'"
   exit 1
 fi
+
+print_banner
+echo ""
+log_info "Benvenuto nel programma di installazione automatico."
+echo ""
+echo -n "Inizio installazione in "
+for i in 3 2 1; do
+  echo -n "$i... "
+  sleep 1
+done
+echo ""
 
 # --- Inizio Installazione ---
 log_info "Avvio dell'installazione del sistema di gestione VPN..."
@@ -136,51 +163,8 @@ fi
 
 log_success "OpenVPN installato e configurato con successo. Un primo client 'test-client.ovpn' è stato creato in /root/."
 
-# --- Configurazione opzionale per Split-Tunneling ---
-declare -a split_tunnel_routes=()
-log_info "Configurazione Split-Tunneling (opzionale)..."
-
-while true; do
-  read -p "Vuoi aggiungere una rete privata da instradare via VPN? (es. 192.168.1.0 255.255.255.0). Lascia vuoto per terminare: " route_input
-
-  # Se l'input è vuoto, esci dal loop
-  if [[ -z "$route_input" ]]; then
-    break
-  fi
-
-  # Semplice validazione per assicurarsi che ci sia uno spazio tra rete e maschera
-  if [[ "$route_input" != *" "* ]]; then
-    log_error "Formato non valido. Assicurati di inserire INDIRIZZO RETE <spazio> SUBNET MASK."
-    continue
-  fi
-
-  split_tunnel_routes+=("$route_input")
-  log_info "Aggiunta rotta: $route_input"
-done
-
-# Se sono state aggiunte rotte, modifica la configurazione del server
-if [[ ${#split_tunnel_routes[@]} -gt 0 ]]; then
-  log_info "Applicazione della configurazione split-tunneling..."
-
-  # Commenta il redirect-gateway di default
-  sed -i 's|^push "redirect-gateway def1.*|# &|' /etc/openvpn/server.conf
-  if [[ $? -ne 0 ]]; then
-    log_error "Modifica di server.conf per lo split-tunneling fallita."
-    exit 1
-  fi
-
-  # Aggiunge le nuove rotte
-  for route in "${split_tunnel_routes[@]}"; do
-    echo "push \"route $route\"" >>/etc/openvpn/server.conf
-  done
-
-  # Riavvia OpenVPN per applicare le modifiche
-  log_info "Riavvio di OpenVPN per applicare la nuova configurazione..."
-  systemctl restart openvpn.service
-  log_success "Split-tunneling configurato con le rotte specificate."
-else
-  log_info "Nessuna rotta specificata. Verrà utilizzato il full-tunneling di default (tutto il traffico attraverso la VPN)."
-fi
+# La configurazione avanzata (es. Split Tunneling) può essere gestita tramite la Dashboard Web.
+log_info "OpenVPN è pronto. Le configurazioni avanzate possono essere effettuate via Web UI."
 
 # Sposta lo script di openvpn in una posizione accessibile dal backend
 mv ./openvpn-install.sh /usr/local/bin/openvpn-install.sh
@@ -391,24 +375,42 @@ log_success "Nginx configurato e riavviato con successo."
 # --- Configurazione Nginx Basic Auth ---
 log_info "Fase 5/5: Configurazione Nginx Basic Auth..."
 
-HTPASSWD_FILE="/etc/nginx/.htpasswd"
-read -rp "Inserisci il nome utente per accedere alla dashboard web: " NGINX_USER
+echo -e "\033[1;35m"
+cat << "EOF"
+ _   _  _____  _____  _____    
+| | | |/  ___||  ___|| ___ \    
+| | | |\ `--. | |__  | |_/ /  
+| | | | `--. \|  __| |    /   
+| |_| |/\__/ /| |___ | |\ \  
+ \___/ \____/ \____/ \_| \_|   
+EOF
+echo -e "\033[0m"
 
-until [[ -n "$NGINX_USER" ]]; do
-    log_error "Il nome utente non può essere vuoto."
+HTPASSWD_FILE="/etc/nginx/.htpasswd"
+
+while true; do
     read -rp "Inserisci il nome utente per accedere alla dashboard web: " NGINX_USER
+
+    if [[ -z "$NGINX_USER" ]]; then
+        log_error "Il nome utente non può essere vuoto."
+        continue
+    fi
+
+    # La password verrà richiesta da htpasswd stesso
+    # Usiamo -c per creare/sovrascrivere il file la prima volta
+    htpasswd -Bc "$HTPASSWD_FILE" "$NGINX_USER"
+
+    if [[ $? -eq 0 ]]; then
+        log_success "Utente Nginx Basic Auth '$NGINX_USER' creato con successo."
+        break
+    else
+        log_error "Creazione utente fallita (probabile mismatch password). Riprova."
+        echo "Premi INVIO per riprovare, o Ctrl+C per annullare (Attenzione: l'installazione è quasi finita)."
+        read
+    fi
 done
 
-# La password verrà richiesta da htpasswd stesso
-htpasswd -Bc "$HTPASSWD_FILE" "$NGINX_USER"
-
-if [[ $? -ne 0 ]]; then
-    log_error "Creazione utente Nginx Basic Auth fallita."
-    exit 1
-fi
 chmod 644 "$HTPASSWD_FILE" # Assicurati che Nginx possa leggere il file
-
-log_success "Utente Nginx Basic Auth '$NGINX_USER' creato con successo."
 
 # Riavvia Nginx per applicare le modifiche all'autenticazione (htpasswd e nginx.conf)
 log_info "Riavvio di Nginx per applicare le modifiche all'autenticazione..."
