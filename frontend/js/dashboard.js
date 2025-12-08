@@ -200,15 +200,53 @@ async function createInstance() {
         } else {
             showNotification('danger', 'Errore creazione: ' + (result.body.detail || 'Sconosciuto'));
         }
+        const container = document.getElementById('top-clients-container');
+
+        if (!container) return; // Container might not exist yet if index.php isn't updated
+        container.innerHTML = '';
+
+        if (result.success) {
+            const clients = result.body;
+            if (clients.length === 0) {
+                container.innerHTML = '<div class="text-muted text-center py-3">Nessun client attivo al momento.</div>';
+                return;
+            }
+
+            // Find max for progress bar calculation
+            const maxBytes = Math.max(...clients.map(c => c.total_bytes));
+
+            clients.forEach(client => {
+                const percentage = (client.total_bytes / maxBytes) * 100;
+                const displayName = client.client_name.replace(`${client.instance_name}_`, '');
+
+                // Format connected since time (HH:MM)
+                let timeStr = '-';
+                if (client.connected_since) {
+                    const date = new Date(client.connected_since);
+                    timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+
+                const html = `
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <div>
+                                <span class="fw-bold">${displayName}</span>
+                                <span class="text-muted small ms-2">(${client.instance_name})</span>
+                            </div>
+                            <div class="text-end">
+                                <span class="fw-bold text-dark">${formatBytes(client.total_bytes)}</span>
+                                <div class="text-muted small">Connesso: ${timeStr}</div>
+                            </div>
+                        </div>
+                        <div class="progress progress-sm">
+                            <div class="progress-bar bg-primary" style="width: ${percentage}%" role="progressbar"></div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += html;
+            });
+        }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        console.error('Error loading top clients:', e);
     }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    loadInstances();
-    const instanceModal = document.getElementById('modal-create-instance');
-    if (instanceModal) {
-        // Could preloader here if needed
-    }
-});

@@ -133,6 +133,39 @@ def update_instance_routes(instance_id: str, request: RouteUpdateRequest, api_ke
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# --- Endpoints Statistiche ---
+
+@app.get("/api/stats/top-clients", dependencies=[Depends(get_api_key)])
+async def get_top_clients():
+    """Restituisce i top 5 client per traffico totale (tutte le istanze)."""
+    instances = instance_manager.get_all_instances()
+    all_clients = []
+
+    for inst in instances:
+        if inst.status == "running":
+            connected = vpn_manager.get_connected_clients(inst.name)
+            for name, data in connected.items():
+                # data keys: virtual_ip, real_ip, connected_since, bytes_received, bytes_sent
+                try:
+                    b_rx = int(data.get("bytes_received", 0))
+                    b_tx = int(data.get("bytes_sent", 0))
+                    total_bytes = b_rx + b_tx
+                    
+                    all_clients.append({
+                        "client_name": name,
+                        "instance_name": inst.name,
+                        "total_bytes": total_bytes,
+                        "bytes_received": b_rx,
+                        "bytes_sent": b_tx,
+                        "connected_since": data.get("connected_since", "-")
+                    })
+                except (ValueError, TypeError):
+                    continue
+
+    # Sort by total_bytes descending
+    sorted_clients = sorted(all_clients, key=lambda x: x["total_bytes"], reverse=True)
+    return sorted_clients[:5]
+
 # --- Endpoints Network ---
 
 @app.get("/api/network/interfaces", dependencies=[Depends(get_api_key)])

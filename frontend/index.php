@@ -15,10 +15,30 @@ require_once 'includes/header.php';
 
 <div id="notification-container"></div>
 
-<div class="row row-cards" id="instances-container">
-    <!-- Instances will be loaded here by JS -->
-    <div class="col-12 text-center p-5">
-        <div class="spinner-border text-primary" role="status"></div>
+<div class="row">
+    <!-- Main Column: Instances -->
+    <div class="col-lg-8">
+        <h3 class="mb-3">Istanze Attive</h3>
+        <div class="row row-cards" id="instances-container">
+            <!-- Instances will be loaded here by JS -->
+            <div class="col-12 text-center p-5">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar: Stats -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Top Users (Sessione)</h3>
+            </div>
+            <div class="card-body" id="top-clients-container">
+                <div class="text-center p-3">
+                    <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
