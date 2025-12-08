@@ -91,28 +91,35 @@ def add_member_to_group(group_id: str, client_identifier: str, subnet_info: Dict
     group = next((g for g in groups if g.id == group_id), None)
     if not group:
         raise ValueError("Group not found")
+
+    instance_name = subnet_info["instance_name"]
     
-    # Validation: Ensure member belongs to group's instance
-    # client_identifier is "instance_client". We expect prefix to match group.instance_id
-    # But group.instance_id is "server_test", client_id is "server_test_client1"
-    # Actually wait. `client_identifier` passed from frontend is usually "instance_client".
-    # `subnet_info["instance_name"]` should match `group.instance_id`.
+    # --- Start of Correction Logic ---
+    # Sanitize the client_identifier to prevent duplicate prefixes.
+    # E.g. handles cases where "instance_instance_client" is received.
+    correct_identifier = client_identifier
+    prefix_to_check = f"{instance_name}_"
     
-    if subnet_info["instance_name"] != group.instance_id:
+    # Repeatedly strip the prefix if it's duplicated
+    while correct_identifier.startswith(prefix_to_check + instance_name):
+        correct_identifier = correct_identifier[len(prefix_to_check):]
+    # --- End of Correction Logic ---
+
+    if instance_name != group.instance_id:
         raise ValueError(f"Client does not belong to instance {group.instance_id}")
 
-    if client_identifier not in group.members:
-        # 1. Allocate Static IP
-        instance_name = subnet_info["instance_name"]
-        client_base_name = client_identifier.replace(f"{instance_name}_", "")
+    if correct_identifier not in group.members:
+        # 1. Allocate Static IP using the corrected base name
+        client_base_name = correct_identifier.replace(f"{instance_name}_", "")
         
         ip = ip_manager.allocate_static_ip(instance_name, subnet_info["subnet"], client_base_name)
         if not ip:
-            raise RuntimeError("Failed to allocate static IP")
+            raise RuntimeError(f"Failed to allocate static IP for {client_base_name}")
 
-        group.members.append(client_identifier)
+        group.members.append(correct_identifier)
         _save_groups(groups)
         apply_firewall_rules()
+    
     return True
 
 def remove_member_from_group(group_id: str, client_identifier: str, instance_name: str):
