@@ -248,57 +248,85 @@ def _get_group_ips(group_id: str) -> List[str]:
 def apply_firewall_rules():
     """
     Re-generates the VPN_sys_FORWARD chain based on current groups and rules.
+    This version is more robust and provides detailed logging.
     """
     logger.info("Applying firewall rules...")
     
-    # We need instance manager to resolve instance names from client IDs
-    # Since we can't easily import instance_manager (circular), we might need to load instances.json manually here
-    # or handle this logic differently.
-    # Let's try loading instances.json directly as it is safe.
+    # Load instances configuration with proper error handling
     instances_data = []
+    instances_file = "/opt/vpn-manager/backend/data/instances.json"
     try:
-        with open("/opt/vpn-manager/backend/data/instances.json", "r") as f:
+        with open(instances_file, "r") as f:
             instances_data = json.load(f)
-    except: pass
-    
-    # Helper to find IP
+        # Sort instances by name length (desc) to avoid prefix conflicts (e.g., "vpn" vs "vpn_dev")
+        instances_data.sort(key=lambda x: len(x.get("name", "")), reverse=True)
+        logger.info(f"Successfully loaded {len(instances_data)} instance definitions.")
+    except FileNotFoundError:
+        logger.error(f"CRITICAL: Could not find instances file at {instances_file}. Cannot apply any client-specific rules.")
+        return
+    except json.JSONDecodeError:
+        logger.error(f"CRITICAL: Could not parse instances file at {instances_file}. File might be corrupt.")
+        return
+    except Exception as e:
+        logger.error(f"CRITICAL: An unexpected error occurred loading {instances_file}: {e}")
+        return
+
+    # Helper function to find a client's IP
     def get_client_ip(member_id):
-        # formatted_name = instance.name + "_" + client_name
+        logger.debug(f"Attempting to find IP for member '{member_id}'")
         for inst in instances_data:
-            prefix = inst["name"] + "_"
+            instance_name = inst.get("name")
+            if not instance_name:
+                continue
+            
+            prefix = f"{instance_name}_"
             if member_id.startswith(prefix):
                  client_name_only = member_id[len(prefix):]
-                 return ip_manager.get_assigned_ip(inst["name"], client_name_only)
+                 logger.debug(f"Match found. Instance: '{instance_name}', Client: '{client_name_only}'")
+                 ip = ip_manager.get_assigned_ip(instance_name, client_name_only)
+                 if ip:
+                     logger.info(f"Found IP {ip} for client '{client_name_only}' in instance '{instance_name}'.")
+                     return ip
+                 else:
+                     logger.warning(f"Could not find assigned IP for client '{client_name_only}' in instance '{instance_name}'. CCD file might be missing or empty.")
+                 return None # Important: return after first match
+        
+        logger.warning(f"No matching instance found for member_id '{member_id}'.")
         return None
 
-    # Load all Data
+    # Load all groups and rules
     groups = _load_groups()
     rules = _load_rules()
     
     # 1. Flush/Create Chain
-    subprocess.run(["iptables", "-N", CHAIN_NAME], check=False) # Ensure exist
-    subprocess.run(["iptables", "-F", CHAIN_NAME], check=True) # Flush
+    try:
+        subprocess.run(["iptables", "-N", CHAIN_NAME], check=False, capture_output=True) # Ensure chain exists, ignore error if it does
+        subprocess.run(["iptables", "-F", CHAIN_NAME], check=True) # Flush existing rules
+        logger.info(f"Chain '{CHAIN_NAME}' created/flushed successfully.")
+    except Exception as e:
+        logger.error(f"Failed to create or flush iptables chain '{CHAIN_NAME}': {e}")
+        return
     
-    # Ensure Chain is referenced in FORWARD (at top)
-    # Check if rule exists
-    check = subprocess.run(f"iptables -C FORWARD -j {CHAIN_NAME}", shell=True)
-    if check.returncode != 0:
-        subprocess.run(f"iptables -I FORWARD 1 -j {CHAIN_NAME}", shell=True)
-    
-    # 2. Iterate Rules
-    # Rules are global or per group?
-    # Our data model is per group. But we also have "order".
-    # If we want a global ordering (e.g. Block All at very bottom), rules need a global context.
-    # Current model: Rule belongs to Group.
-    # Execution: For each Group, collect IPs, then apply rules?
-    # NO. Rules should be applied in a global list if we want inter-mixing, OR per group.
-    # Usually "Group A has these rules".
-    
-    # Let's process group by group.
+    # 2. Ensure Chain is referenced in FORWARD chain (at the top)
+    check_cmd = f"iptables -C FORWARD -j {CHAIN_NAME}"
+    if subprocess.run(check_cmd, shell=True, capture_output=True).returncode != 0:
+        insert_cmd = f"iptables -I FORWARD 1 -j {CHAIN_NAME}"
+        try:
+            subprocess.run(insert_cmd, shell=True, check=True)
+            logger.info(f"Inserted jump from FORWARD to '{CHAIN_NAME}'.")
+        except Exception as e:
+            logger.error(f"Failed to insert jump rule into FORWARD chain: {e}")
+            return
+
+    # 3. Iterate through groups and apply their rules
     for group in groups:
-        group_rules = [r for r in rules if r.group_id == group.id]
-        group_rules.sort(key=lambda x: x.order)
+        logger.debug(f"Processing group '{group.name}' (ID: {group.id})")
+        group_rules = sorted([r for r in rules if r.group_id == group.id], key=lambda x: x.order)
         
+        if not group_rules:
+            logger.debug(f"No rules found for group '{group.name}'. Skipping.")
+            continue
+            
         member_ips = []
         for member in group.members:
             ip = get_client_ip(member)
@@ -306,39 +334,34 @@ def apply_firewall_rules():
                 member_ips.append(ip)
         
         if not member_ips:
+            logger.warning(f"Group '{group.name}' has no members with assigned IPs. Skipping rule application for this group.")
             continue
             
-        # Combine IPs for iptables (comma separated, max items limitation usually)
-        # If too many, we need multiple rules or ipset. For MVP, multiple rules loops.
-        
-        for rule in group_rules:
-            # Construct iptables command
-            # -s <source_ip>
-            
-            # Protocol
-            proto_arg = f"-p {rule.protocol}"
-            if rule.protocol == "all":
-                proto_arg = "-p all"
-            
-            # Port
-            port_arg = ""
-            if rule.port and rule.protocol in ["tcp", "udp"]:
-                port_arg = f"--dport {rule.port}"
-            
-            # Destination
-            dest_arg = ""
-            if rule.destination and rule.destination != "0.0.0.0/0":
-                dest_arg = f"-d {rule.destination}"
-            
-            # Action
-            target = rule.action.upper() # ACCEPT, DROP, REJECT
-            
-            # Apply for each IP (inefficient for many users, need IPSet later)
-            for ip in member_ips:
-                cmd = f"iptables -A {CHAIN_NAME} -s {ip} {proto_arg} {port_arg} {dest_arg} -j {target}"
-                try:
-                    subprocess.run(cmd, shell=True, check=True)
-                except Exception as e:
-                    logger.error(f"Failed to apply rule: {cmd} - {e}")
+        logger.info(f"Applying {len(group_rules)} rules for {len(member_ips)} members in group '{group.name}'.")
 
-    logger.info("Firewall rules applied.")
+        for rule in group_rules:
+            # Construct iptables command arguments
+            proto_arg = f"-p {rule.protocol}" if rule.protocol != "all" else ""
+            port_arg = f"--dport {rule.port}" if rule.port and rule.protocol in ["tcp", "udp"] else ""
+            dest_arg = f"-d {rule.destination}" if rule.destination and rule.destination != "0.0.0.0/0" else ""
+            target = rule.action.upper()
+            
+            # Apply the rule for each member IP
+            for ip in member_ips:
+                cmd_parts = ["iptables", "-A", CHAIN_NAME, "-s", ip]
+                if proto_arg: cmd_parts.extend(proto_arg.split())
+                if port_arg: cmd_parts.extend(port_arg.split())
+                if dest_arg: cmd_parts.extend(dest_arg.split())
+                cmd_parts.extend(["-j", target])
+                
+                cmd_str = " ".join(cmd_parts)
+                logger.info(f"Executing: {cmd_str}")
+                
+                try:
+                    subprocess.run(cmd_parts, check=True, capture_output=True, text=True)
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Failed to apply rule: {cmd_str}\n  Error: {e.stderr.strip()}")
+                except Exception as e:
+                    logger.error(f"An unexpected error occurred executing rule: {cmd_str}\n  Error: {e}")
+
+    logger.info("Firewall rules application process finished.")
