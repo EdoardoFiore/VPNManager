@@ -66,7 +66,7 @@
                 </h1>
                 <div class="navbar-nav flex-row order-md-last">
                     <div class="nav-item">
-                        <a href="https://github.com/edoardofiore/vpn_management_system" target="_blank"
+                        <a href="https://github.com/edoardofiore/vpnmanager" target="_blank"
                             class="nav-link px-0" title="Source Code" rel="noreferrer">
                             <i class="ti ti-brand-github icon"></i>
                         </a>

@@ -354,12 +354,41 @@ require_once 'includes/header.php';
 
 <!-- Modal Revoke Confirm -->
 <div class="modal modal-blur fade" id="modal-revoke-confirm" tabindex="-1" role="dialog" aria-hidden="true">
-<!-- ... existing modals ... -->
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Conferma Revoca</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Sei sicuro di voler revocare l'accesso per il client <strong id="revoke-client-name"></strong>?</p>
+                <p class="text-muted">Questa azione non può essere annullata. Il client non potrà più connettersi.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger" id="confirm-revoke-button" data-bs-dismiss="modal">Sì, revoca</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Modal Delete Instance -->
 <div class="modal modal-blur fade" id="modal-delete-instance" tabindex="-1" role="dialog" aria-hidden="true">
-<!-- ... existing modals ... -->
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Conferma Eliminazione Istanza</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Sei sicuro di voler eliminare questa istanza? Tutti i client e le configurazioni associate verranno rimosse permanentemente. Questa azione non può essere annullata.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger" onclick="deleteInstanceAction()" data-bs-dismiss="modal">Sì, elimina</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <?php
