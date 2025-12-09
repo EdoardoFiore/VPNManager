@@ -11,7 +11,7 @@ import vpn_manager
 import instance_manager
 import network_utils
 import firewall_manager as instance_firewall_manager # Renamed for clarity on instance-specific firewall
-import machine_firewall_manager # Will be created later
+from machine_firewall_manager import machine_firewall_manager # Will be created later
 
 # --- Modelli Pydantic ---
 class ClientRequest(BaseModel):
