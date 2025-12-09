@@ -205,4 +205,40 @@ function update_instance_firewall_policy($instance_id, $new_policy) {
         'default_policy' => $new_policy
     ]);
 }
+
+// --- Machine Firewall Rules Functions ---
+
+function get_machine_firewall_rules() {
+    return api_request('/machine-firewall/rules');
+}
+
+function add_machine_firewall_rule($rule_data) {
+    return api_request('/machine-firewall/rules', 'POST', $rule_data);
+}
+
+function delete_machine_firewall_rule($rule_id) {
+    return api_request('/machine-firewall/rules/' . urlencode($rule_id), 'DELETE');
+}
+
+function apply_machine_firewall_rules($orders) {
+    return api_request('/machine-firewall/rules/apply', 'PATCH', $orders);
+}
+
+// --- Machine Network Interface Functions ---
+
+function get_machine_network_interfaces() {
+    return api_request('/machine-network/interfaces');
+}
+
+function get_machine_network_interface_config($interface_name) {
+    return api_request('/machine-network/interfaces/' . urlencode($interface_name) . '/config');
+}
+
+function update_machine_network_interface_config($interface_name, $config_data) {
+    return api_request('/machine-network/interfaces/' . urlencode($interface_name) . '/config', 'POST', $config_data);
+}
+
+function apply_global_netplan_config() {
+    return api_request('/machine-network/netplan-apply', 'POST');
+}
 ?>
