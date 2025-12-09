@@ -1,391 +1,115 @@
 <?php
 // index.php
-
-// Non più necessario require_once 'api_client.php'; direttamente qui per logica POST
-// Verrà usato solo per configurazione iniziale se necessario, ma ora le chiamate sono via JS a ajax_handler.php
-
+require_once 'includes/header.php';
 ?>
 
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pannello di Gestione VPN</title>
-    <!-- Tabler Core CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
-    <!-- Tabler Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
-    <style>
-        body { min-width: 320px; }
-    </style>
-</head>
-<body>
-    <div class="page">
-        <header class="navbar navbar-expand-md d-print-none">
-            <div class="container-xl">
-                <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
-                    <a href=".">Pannello di Gestione VPN</a>
-                </h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Istanze OpenVPN</h2>
+    <div class="d-flex align-items-center gap-2">
+        <span class="text-muted small me-2" id="connection-status"></span>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-create-instance">
+            <i class="ti ti-plus icon"></i> Nuova Istanza
+        </button>
+    </div>
+</div>
+
+<div id="notification-container"></div>
+
+<div class="row">
+    <!-- Main Column: Instances -->
+    <div class="col-lg-8">
+        <h3 class="mb-3">Istanze Attive</h3>
+        <div class="row row-cards" id="instances-container">
+            <!-- Instances will be loaded here by JS -->
+            <div class="col-12 text-center p-5">
+                <div class="spinner-border text-primary" role="status"></div>
             </div>
-        </header>
+        </div>
+    </div>
 
-        <div class="page-wrapper">
-            <div class="page-body">
-                <div class="container-xl">
-
-                    <div id="notification-container"></div>
-
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h3 class="card-title">Aggiungi Nuovo Client</h3>
-                        </div>
-                        <div class="card-body">
-                            <form id="addClientForm" onsubmit="event.preventDefault(); createClient();">
-                                <div class="row g-2">
-                                    <div class="col">
-                                        <input type="text" id="clientNameInput" class="form-control" placeholder="Es: laptop-mario-rossi" required>
-                                    </div>
-                                    <div class="col-auto">
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="ti ti-plus icon"></i> Crea Client
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="form-text">
-                                    Usare solo lettere, numeri, trattini (-) e underscore (_).
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h3 class="card-title">Client Disponibili per Download</h3>
-                            <div class="card-actions">
-                                <button class="btn" onclick="fetchAndRenderClients()">
-                                    <i class="ti ti-refresh icon"></i>
-                                    Aggiorna
-                                </button>
-                            </div>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-vcenter card-table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Client</th>
-                                        <th class="w-1"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="availableClientsTableBody">
-                                    <!-- I client disponibili verranno iniettati qui da JavaScript -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title">Client Connessi</h3>
-                            <div class="card-actions">
-                                <button class="btn" onclick="fetchAndRenderClients()">
-                                    <i class="ti ti-refresh icon"></i>
-                                    Aggiorna
-                                </button>
-                            </div>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-vcenter card-table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Client</th>
-                                        <th>IP Virtuale</th>
-                                        <th>IP Reale</th>
-                                        <th>Connesso Dal</th>
-                                        <th class="w-1"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="connectedClientsTableBody">
-                                    <!-- I client connessi verranno iniettati qui da JavaScript -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
+    <!-- Sidebar: Stats -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Top Users (Sessione)</h3>
+            </div>
+            <div class="card-body" id="top-clients-container">
+                <div class="text-center p-3">
+                    <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
                 </div>
             </div>
         </div>
     </div>
-    <!-- Tabler Core JS for features like alert dismissal -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
+</div>
 
-    <!-- Modal for Revocation Confirmation -->
-    <div class="modal modal-blur fade" id="modal-revoke-confirm" tabindex="-1" role="dialog" aria-hidden="true">
-      <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+<!-- Modal Create Instance -->
+<div class="modal modal-blur fade" id="modal-create-instance" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          <div class="modal-status bg-danger"></div>
-          <div class="modal-body text-center py-4">
-            <i class="ti ti-alert-triangle icon mb-2 text-danger icon-lg"></i>
-            <h3>Conferma Revoca Client</h3>
-            <div class="text-muted" id="revoke-modal-message">
-              Sei sicuro di voler revocare il client '<span id="revoke-client-name"></span>'?
-              Questa operazione è IRREVERSIBILE e rimuoverà l'accesso VPN per questo client.
+            <div class="modal-header">
+                <h5 class="modal-title">Nuova Istanza OpenVPN</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-          </div>
-          <div class="modal-footer">
-            <div class="w-100">
-              <div class="row">
-                <div class="col"><a href="#" class="btn w-100" data-bs-dismiss="modal">
-                    Annulla
-                  </a></div>
-                <div class="col"><a href="#" class="btn btn-danger w-100" id="confirm-revoke-button" data-bs-dismiss="modal">
-                    Revoca
-                  </a></div>
-              </div>
+            <div class="modal-body">
+                <form id="createInstanceForm">
+                    <div class="mb-3">
+                        <label class="form-label">Nome Istanza</label>
+                        <input type="text" class="form-control" name="name" id="instanceNameInput" placeholder="Es: vpn-ufficio" required>
+                        <div class="invalid-feedback">Il nome può contenere solo lettere, numeri e trattini.</div>
+                        <small class="form-hint">Solo lettere, numeri e trattini.</small>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="mb-3">
+                                <label class="form-label">Porta UDP</label>
+                                <input type="number" class="form-control" name="port" placeholder="1194" required>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="mb-3">
+                                <label class="form-label">Subnet VPN</label>
+                                <input type="text" class="form-control" name="subnet" placeholder="10.8.0.0/24"
+                                    required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Modalità Tunnel</label>
+                        <select class="form-select" name="tunnel_mode" id="tunnel-mode-select"
+                            onchange="toggleRouteConfig()">
+                            <option value="full">Full Tunnel (Tutto il traffico)</option>
+                            <option value="split">Split Tunnel (Solo reti specifiche)</option>
+                        </select>
+                    </div>
+
+                    <!-- DNS Configuration (Full Tunnel Only) -->
+                    <div class="mb-3">
+                        <label class="form-label">DNS Servers</label>
+                        <input type="text" class="form-control" name="dns_servers" placeholder="Es: 1.1.1.1, 8.8.8.8">
+                        <small class="form-hint">Lascia vuoto per usare i default (Google). Visibile solo in Full
+                            Tunnel.</small>
+                    </div>
+
+                    <!-- Routes Configuration (Split Tunnel Only) -->
+                    <div id="routes-config" style="display: none;">
+                        <label class="form-label">Rotte Personalizzate</label>
+                        <div id="routes-container"></div>
+                        <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="addRoute()">
+                            <i class="ti ti-plus"></i> Aggiungi Rotta
+                        </button>
+                    </div>
+                </form>
             </div>
-          </div>
+            <div class="modal-footer">
+                <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" onclick="createInstance()">Crea Istanza</button>
+            </div>
         </div>
-      </div>
     </div>
-    <script>
-        const API_AJAX_HANDLER = 'ajax_handler.php';
+</div>
 
-        function showNotification(type, message) {
-            const container = document.getElementById('notification-container');
-            const alertHtml = `
-                <div class="alert alert-${type} alert-dismissible" role="alert">
-                    ${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            `;
-            container.innerHTML = alertHtml;
-        }
-
-        function formatDateTime(isoString) {
-            if (!isoString) return 'N/D';
-            try {
-                const date = new Date(isoString);
-                return date.toLocaleString('it-IT', {
-                    day: '2-digit', month: '2-digit', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit', second: '2-digit'
-                });
-            } catch (e) {
-                return 'N/D';
-            }
-        }
-
-        async function fetchAndRenderClients() {
-            showNotification('info', 'Caricamento client...');
-            try {
-                const response = await fetch(`${API_AJAX_HANDLER}?action=get_clients`);
-                const result = await response.json();
-
-                if (result.success) {
-                    const clients = result.body;
-                    const availableClientsTableBody = document.getElementById('availableClientsTableBody');
-                    const connectedClientsTableBody = document.getElementById('connectedClientsTableBody');
-
-                    availableClientsTableBody.innerHTML = '';
-                    connectedClientsTableBody.innerHTML = '';
-
-                    const connected = clients.filter(c => c.status === 'connected');
-                    const disconnected = clients.filter(c => c.status !== 'connected'); // Tutti i non connessi sono disponibili (o revocabili)
-
-                    if (disconnected.length === 0) {
-                        availableClientsTableBody.innerHTML = `
-                            <tr>
-                                <td colspan="2" class="text-center text-muted">
-                                    <i class="ti ti-server-off icon-lg my-3"></i>
-                                    <p>Nessun client VPN disponibile per il download.</p>
-                                </td>
-                            </tr>
-                        `;
-                    } else {
-                        disconnected.forEach(client => {
-                            const row = `
-                                <tr>
-                                    <td>
-                                        <span class="badge bg-secondary me-1"></span>
-                                        ${client.name}
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2">
-                                            <button class="btn btn-primary btn-sm" onclick="downloadClient('${client.name}')" title="Scarica Configurazione">
-                                                <i class="ti ti-download"></i>
-                                            </button>
-                                            <button class="btn btn-danger btn-sm" onclick="revokeClient('${client.name}')" title="Revoca Client">
-                                                <i class="ti ti-trash"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            `;
-                            availableClientsTableBody.innerHTML += row;
-                        });
-                    }
-
-                    if (connected.length === 0) {
-                        connectedClientsTableBody.innerHTML = `
-                            <tr>
-                                <td colspan="5" class="text-center text-muted">
-                                    <i class="ti ti-server-off icon-lg my-3"></i>
-                                    <p>Nessun client VPN connesso.</p>
-                                </td>
-                            </tr>
-                        `;
-                    } else {
-                        connected.forEach(client => {
-                            const row = `
-                                <tr>
-                                    <td>
-                                        <span class="badge bg-success me-1"></span>
-                                        ${client.name}
-                                    </td>
-                                    <td class="text-muted">${client.virtual_ip || 'N/D'}</td>
-                                    <td class="text-muted">${client.real_ip || 'N/D'}</td>
-                                    <td class="text-muted">${formatDateTime(client.connected_since)}</td>
-                                    <td>
-                                        <button class="btn btn-danger btn-sm" onclick="revokeClient('${client.name}')" title="Revoca Client">
-                                            <i class="ti ti-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            `;
-                            connectedClientsTableBody.innerHTML += row;
-                        });
-                    }
-                    showNotification('success', 'Client caricati con successo.');
-
-                } else {
-                    const errorMessage = result.body.detail || 'Errore sconosciuto durante il caricamento dei client.';
-                    showNotification('danger', `Errore: ${errorMessage}`);
-                }
-            } catch (error) {
-                console.error('Errore fetching clients:', error);
-                showNotification('danger', `Errore di rete o API non raggiungibile: ${error.message}`);
-            }
-        }
-
-        async function createClient() {
-            const clientNameInput = document.getElementById('clientNameInput');
-            const clientName = clientNameInput.value.trim();
-
-            if (!clientName) {
-                showNotification('danger', 'Il nome del client non può essere vuoto.');
-                return;
-            }
-            // Basic client name validation (alphanumeric, underscore, hyphen, period)
-            if (!/^[a-zA-Z0-9_.-]+$/.test(clientName)) {
-                showNotification('danger', 'Nome client non valido. Usare solo lettere, numeri, trattini e underscore.');
-                return;
-            }
-
-            showNotification('info', `Creazione client '${clientName}'...`);
-            try {
-                const formData = new FormData();
-                formData.append('action', 'create_client');
-                formData.append('client_name', clientName);
-
-                const response = await fetch(API_AJAX_HANDLER, {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await response.json();
-
-                if (result.success) {
-                    showNotification('success', result.body.message || `Client '${clientName}' creato con successo.`);
-                    clientNameInput.value = ''; // Clear input
-                    fetchAndRenderClients(); // Refresh lists
-                } else {
-                    const errorMessage = result.body.detail || 'Errore sconosciuto durante la creazione del client.';
-                    showNotification('danger', `Errore: ${errorMessage}`);
-                }
-            } catch (error) {
-                console.error('Errore creating client:', error);
-                showNotification('danger', `Errore di rete o API non raggiungibile: ${error.message}`);
-            }
-        }
-
-        async function downloadClient(clientName) {
-            showNotification('info', `Preparazione download per '${clientName}'...`);
-            try {
-                // Fetch the .ovpn content directly. ajax_handler is set up to return the raw file.
-                const response = await fetch(`${API_AJAX_HANDLER}?action=download_client&client_name=${clientName}`);
-                
-                // Check if the response is JSON (meaning an error occurred)
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    const errorResult = await response.json();
-                    const errorMessage = errorResult.body.detail || 'Errore sconosciuto durante il download.';
-                    showNotification('danger', `Errore download: ${errorMessage}`);
-                    return;
-                }
-
-                // If not JSON, it's the .ovpn file content
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `${clientName}.ovpn`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                showNotification('success', `Download di '${clientName}.ovpn' avviato.`);
-
-            } catch (error) {
-                console.error('Errore downloading client config:', error);
-                showNotification('danger', `Errore di rete o API non raggiungibile: ${error.message}`);
-            }
-        }
-
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            fetchAndRenderClients();
-
-            const confirmRevokeButton = document.getElementById('confirm-revoke-button');
-            confirmRevokeButton.addEventListener('click', (event) => {
-                const clientName = event.currentTarget.dataset.clientName;
-                if (clientName) {
-                    revokeClientAction(clientName);
-                }
-            });
-        });
-
-        async function revokeClient(clientName) {
-            document.getElementById('revoke-client-name').textContent = clientName;
-            document.getElementById('confirm-revoke-button').dataset.clientName = clientName; // Set data attribute
-            const revokeModal = new bootstrap.Modal(document.getElementById('modal-revoke-confirm'));
-            revokeModal.show();
-        }
-
-        async function revokeClientAction(clientName) {
-            showNotification('info', `Revoca client '${clientName}'...`);
-            try {
-                const formData = new FormData();
-                formData.append('action', 'revoke_client');
-                formData.append('client_name', clientName);
-
-                const response = await fetch(API_AJAX_HANDLER, {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await response.json();
-
-                if (result.success) {
-                    showNotification('success', result.body.message || `Client '${clientName}' revocato con successo.`);
-                    fetchAndRenderClients(); // Refresh lists
-                } else {
-                    const errorMessage = result.body.detail || 'Errore sconosciuto durante la revoca.';
-                    showNotification('danger', `Errore: ${errorMessage}`);
-                }
-            } catch (error) {
-                console.error('Errore revoking client:', error);
-                showNotification('danger', `Errore di rete o API non raggiungibile: ${error.message}`);
-            }
-        }
-    </script>
-</body>
-</html>
+<?php
+$extra_scripts = ['js/dashboard.js'];
+require_once 'includes/footer.php';
+?>
