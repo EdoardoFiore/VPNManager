@@ -520,3 +520,40 @@ async function moveRule(ruleId, direction) {
         loadRules(currentGroupId); // Reload to reflect changes
     }
 }
+
+async function saveInstanceFirewallPolicy() {
+    if (!currentInstance) {
+        showNotification("danger", "Errore: Istanza non selezionata.");
+        return;
+    }
+
+    const defaultPolicy = document.getElementById("instance-firewall-default-policy").value;
+
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}`, { // Use API_AJAX_HANDLER
+            method: "POST", // ajax_handler.php expects POST for actions with body
+            headers: { 
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                action: "update_instance_firewall_policy", // Specify the action
+                instance_id: currentInstance.id,
+                default_policy: defaultPolicy
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification("success", "Policy firewall istanza salvata con successo.");
+            // Update the currentInstance object with the new policy
+            currentInstance.firewall_default_policy = defaultPolicy;
+        } else {
+            showNotification("danger", "Errore salvataggio policy: " + (result.body.detail || "Sconosciuto"));
+        }
+    } catch (e) {
+        console.error("Error saving instance firewall policy:", e);
+        showNotification("danger", "Errore di rete durante il salvataggio della policy.");
+    }
+}
+

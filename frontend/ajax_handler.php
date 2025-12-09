@@ -241,6 +241,18 @@ switch ($action) {
          echo json_encode($response);
          break;
 
+    case 'update_instance_firewall_policy':
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+
+        if (!$data || !isset($data['instance_id']) || !isset($data['default_policy'])) {
+            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti per aggiornamento policy firewall.']]);
+            exit;
+        }
+        $response = update_instance_firewall_policy($data['instance_id'], $data['default_policy']);
+        echo json_encode($response);
+        break;
+
     default:
         echo json_encode(['success' => false, 'body' => ['detail' => 'Azione non riconosciuta.']]);
         break;

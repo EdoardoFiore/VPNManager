@@ -7,6 +7,7 @@ from typing import List, Dict, Optional
 from ipaddress import ip_network, AddressValueError
 from pydantic import BaseModel, validator
 import ip_manager
+import instance_manager
 
 logger = logging.getLogger(__name__)
 

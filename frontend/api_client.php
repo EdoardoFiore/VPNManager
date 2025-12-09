@@ -199,4 +199,10 @@ function delete_rule($rule_id) {
 function reorder_rules($orders) {
     return api_request('/firewall/rules/order', 'POST', $orders);
 }
+
+function update_instance_firewall_policy($instance_id, $new_policy) {
+    return api_request("/instances/{$instance_id}/firewall-policy", 'PATCH', [
+        'default_policy' => $new_policy
+    ]);
+}
 ?>
