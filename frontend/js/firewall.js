@@ -189,39 +189,54 @@ async function openAddMemberModal() {
     select.innerHTML = '<option value="">Caricamento...</option>';
     select.disabled = true;
 
-    // Load available clients ONLY from CURRENT Instance
     try {
+        // 1. Get all members already in any group for this instance
+        const existingMembers = new Set();
+        allGroups.filter(g => g.instance_id === currentInstance.id)
+                 .forEach(g => {
+                     g.members.forEach(m => existingMembers.add(m));
+                 });
+
+        // 2. Load available clients from the API
         const clientResp = await fetch(`${API_AJAX_HANDLER}?action=get_clients&instance_id=${currentInstance.id}`);
         const clientData = await clientResp.json();
         const clients = clientData.body || [];
 
         availableClientData = [];
         select.innerHTML = '<option value="">Seleziona un utente...</option>';
+        let optionsAdded = 0;
 
+        // 3. Populate dropdown, excluding existing members
         clients.forEach(c => {
-            // Create unique ID for backend
-            const id = `${currentInstance.name}_${c.name}`;
-            // Clean name for display (strip instance prefix)
-            let displayName = c.name;
-            if (c.name.startsWith(currentInstance.name + "_")) {
-                displayName = c.name.replace(currentInstance.name + "_", "");
+            const clientIdentifier = c.name; // The name from get_clients is the full identifier
+            
+            if (existingMembers.has(clientIdentifier)) {
+                return; // Skip this client, it's already in a group
             }
+            
+            const displayName = clientIdentifier.replace(`${currentInstance.name}_`, "");
 
             availableClientData.push({
-                id: id,
-                client_name: c.name,
+                id: clientIdentifier,
+                client_name: displayName,
                 instance_name: currentInstance.name,
                 subnet: currentInstance.subnet,
-                display: displayName // Clean name
+                display: displayName
             });
 
             const opt = document.createElement('option');
-            opt.value = id;
-            opt.textContent = displayName; // Clean name
+            opt.value = clientIdentifier;
+            opt.textContent = displayName;
             select.appendChild(opt);
+            optionsAdded++;
         });
-
-        select.disabled = false;
+        
+        if (optionsAdded === 0) {
+            select.innerHTML = '<option value="" disabled>Nessun client disponibile o tutti già in un gruppo.</option>';
+            select.disabled = true;
+        } else {
+            select.disabled = false;
+        }
 
     } catch (e) {
         select.innerHTML = '<option value="">Errore caricamento</option>';
@@ -363,13 +378,56 @@ function togglePortInput() {
 async function createRule() {
     const action = document.getElementById('rule-action').value;
     const proto = document.getElementById('rule-proto').value;
-    const dest = document.getElementById('rule-dest').value;
-    const port = document.getElementById('rule-port').value;
-    const desc = document.getElementById('rule-desc').value;
+    const destInput = document.getElementById('rule-dest');
+    const portInput = document.getElementById('rule-port');
+    const descInput = document.getElementById('rule-desc');
 
-    if (!dest) return alert("Destinazione richiesta.");
+    // --- VALIDATION ---
+    let isValid = true;
+    const dest = destInput.value.trim();
+    const port = portInput.value.trim();
 
-    // Fix: Send dispatch action in URL to avoid collision with rule 'action' field in body
+    // Reset validation
+    destInput.classList.remove('is-invalid');
+    portInput.classList.remove('is-invalid');
+
+    const cidrRegex = /^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$/;
+    const portRegex = /^\d{1,5}$/;
+    const portRangeRegex = /^\d{1,5}:\d{1,5}$/;
+
+    if (dest === '' || (!cidrRegex.test(dest) && dest.toLowerCase() !== 'any')) {
+        isValid = false;
+        destInput.classList.add('is-invalid');
+    }
+
+    if (port !== '' && (proto === 'tcp' || proto === 'udp')) {
+        if (portRegex.test(port)) {
+            const portNum = parseInt(port, 10);
+            if (portNum < 1 || portNum > 65535) {
+                isValid = false;
+                portInput.classList.add('is-invalid');
+            }
+        } else if (portRangeRegex.test(port)) {
+            const [start, end] = port.split(':').map(p => parseInt(p, 10));
+            if (start < 1 || start > 65535 || end < 1 || end > 65535 || start >= end) {
+                isValid = false;
+                portInput.classList.add('is-invalid');
+            }
+        } else {
+            isValid = false;
+            portInput.classList.add('is-invalid');
+        }
+    } else if (port !== '' && (proto !== 'tcp' && proto !== 'udp')) {
+        isValid = false;
+        portInput.classList.add('is-invalid');
+    }
+
+    if (!isValid) {
+        showNotification('danger', 'Uno o più campi della regola non sono validi.');
+        return;
+    }
+    // --- END VALIDATION ---
+
     const response = await fetch(`${API_AJAX_HANDLER}?action=create_rule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -379,16 +437,27 @@ async function createRule() {
             protocol: proto,
             destination: dest,
             port: port,
-            description: desc
+            description: descInput.value
         })
     });
 
     const result = await response.json();
     if (result.success) {
-        bootstrap.Modal.getInstance(document.getElementById('modal-add-rule')).hide();
+        // Reset form and hide modal
+        destInput.value = '';
+        portInput.value = '';
+        descInput.value = '';
+        document.getElementById('rule-action').value = 'ACCEPT';
+        document.getElementById('rule-proto').value = 'tcp';
+        togglePortInput();
+        
+        const modalInstance = bootstrap.Modal.getInstance(document.getElementById('modal-add-rule'));
+        if (modalInstance) {
+            modalInstance.hide();
+        }
         loadRules(currentGroupId);
     } else {
-        alert("Errore: " + result.body.detail);
+        showNotification('danger', 'Errore: ' + (result.body.detail || 'Sconosciuto'));
     }
 }
 

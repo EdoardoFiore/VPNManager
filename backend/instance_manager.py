@@ -3,6 +3,7 @@ import os
 import subprocess
 import logging
 import re
+from ipaddress import ip_network, ip_address, AddressValueError
 from typing import List, Optional, Dict
 from pydantic import BaseModel
 import iptables_manager
@@ -171,16 +172,39 @@ def create_instance(name: str, port: int, subnet: str, protocol: str = "udp",
     """
     Creates a new OpenVPN instance.
     """
-    logger.info(f"=== Starting instance creation: name={name}, port={port}, subnet={subnet}")
-    
-    instances = get_all_instances()
-    if any(inst.name == name for inst in instances):
-        logger.error(f"Instance with name '{name}' already exists")
-        raise ValueError(f"Instance with name '{name}' already exists.")
-    if any(inst.port == port for inst in instances):
-        logger.error(f"Port {port} is already in use")
-        raise ValueError(f"Port {port} is already in use.")
+    # --- Validation ---
+    logger.info(f"Validating instance creation request: name={name}, port={port}, subnet={subnet}")
+    name_regex = r"^[a-zA-Z0-9-]+$"
+    if not re.fullmatch(name_regex, name):
+        raise ValueError("Il nome dell'istanza può contenere solo lettere, numeri e trattini.")
 
+    try:
+        new_subnet = ip_network(subnet, strict=False)
+        if not new_subnet.is_private:
+            raise ValueError(f"La subnet '{subnet}' deve appartenere a un range di IP privati (RFC 1918).")
+    except (AddressValueError, ValueError) as e:
+        if "must belong to a private IP range" in str(e):
+             raise e
+        raise ValueError(f"Formato subnet non valido: '{subnet}'. Usare la notazione CIDR (es. 10.8.0.0/24).")
+
+    instances = get_all_instances()
+    
+    if any(inst.name.lower() == name.lower() for inst in instances):
+        raise ValueError(f"Istanza con nome '{name}' già esistente.")
+    
+    if any(inst.port == port for inst in instances):
+        raise ValueError(f"Porta {port} già in uso.")
+
+    for inst in instances:
+        try:
+            existing_subnet = ip_network(inst.subnet, strict=False)
+            if new_subnet.overlaps(existing_subnet):
+                raise ValueError(f"La subnet '{subnet}' è in conflitto con la subnet '{inst.subnet}' (istanza '{inst.name}').")
+        except (AddressValueError, ValueError):
+            logger.warning(f"Could not parse existing subnet '{inst.subnet}' for instance '{inst.name}' during validation. Skipping.")
+            continue
+    # --- End Validation ---
+    
     logger.info("Validation passed, determining TUN interface...")
     
     # Determine next available TUN interface
@@ -300,6 +324,25 @@ def update_instance_routes(instance_id: str, tunnel_mode: str, routes: List[Dict
     Regenerates config and restarts the service.
     """
     logger.info(f"Updating routes for instance '{instance_id}'")
+
+    # --- Validation ---
+    if dns_servers:
+        for ip in dns_servers:
+            try:
+                ip_address(ip)
+            except ValueError:
+                raise ValueError(f"Indirizzo IP per DNS non valido: '{ip}'")
+
+    if tunnel_mode == "split" and routes:
+        for route in routes:
+            network = route.get("network")
+            if not network:
+                raise ValueError("Ogni rotta deve avere una 'network' definita.")
+            try:
+                ip_network(network, strict=False)
+            except (AddressValueError, ValueError):
+                raise ValueError(f"Formato subnet per rotta non valido: '{network}'")
+    # --- End Validation ---
     
     instances = get_all_instances()
     instance = None

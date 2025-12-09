@@ -54,7 +54,8 @@ require_once 'includes/header.php';
                 <form id="createInstanceForm">
                     <div class="mb-3">
                         <label class="form-label">Nome Istanza</label>
-                        <input type="text" class="form-control" name="name" placeholder="Es: vpn-ufficio" required>
+                        <input type="text" class="form-control" name="name" id="instanceNameInput" placeholder="Es: vpn-ufficio" required>
+                        <div class="invalid-feedback">Il nome può contenere solo lettere, numeri e trattini.</div>
                         <small class="form-hint">Solo lettere, numeri e trattini.</small>
                     </div>
                     <div class="row">

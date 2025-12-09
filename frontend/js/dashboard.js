@@ -134,6 +134,17 @@ async function populateRouteInterface(routeId) {
 
 async function createInstance() {
     const form = document.getElementById('createInstanceForm');
+    const instanceNameInput = document.getElementById('instanceNameInput');
+
+    // --- VALIDATION ---
+    const nameRegex = /^[a-zA-Z0-9-]+$/;
+    if (instanceNameInput.value.trim() === '' || !nameRegex.test(instanceNameInput.value)) {
+        instanceNameInput.classList.add('is-invalid');
+        showNotification('danger', 'Il nome dell\'istanza non è valido.');
+        return;
+    }
+    // --- END VALIDATION ---
+
     const formData = new FormData(form);
 
     const dnsInput = formData.get('dns_servers');
@@ -206,11 +217,22 @@ async function createInstance() {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadInstances();
-    const instanceModal = document.getElementById('modal-create-instance');
-    if (instanceModal) {
-        // Possible init code
-    }
     loadTopClients();
+
+    // Real-time validation for instance name
+    const instanceNameInput = document.getElementById('instanceNameInput');
+    if (instanceNameInput) {
+        instanceNameInput.addEventListener('input', () => {
+            const nameRegex = /^[a-zA-Z0-9-]+$/;
+            const value = instanceNameInput.value;
+
+            if (value.trim() === '' || !nameRegex.test(value)) {
+                instanceNameInput.classList.add('is-invalid');
+            } else {
+                instanceNameInput.classList.remove('is-invalid');
+            }
+        });
+    }
 });
 
 async function loadTopClients() {

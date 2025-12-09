@@ -1,9 +1,11 @@
 import json
 import os
+import re
 import subprocess
 import logging
 from typing import List, Dict, Optional
-from pydantic import BaseModel
+from ipaddress import ip_network, AddressValueError
+from pydantic import BaseModel, validator
 import ip_manager
 
 logger = logging.getLogger(__name__)
@@ -25,12 +27,52 @@ class Group(BaseModel):
 class Rule(BaseModel):
     id: str
     group_id: str
-    action: str # ACCEPT, DROP, REJECT
-    protocol: str # tcp, udp, icmp, all
-    port: Optional[str] = None # single port or range
-    destination: str # CIDR or "0.0.0.0/0" (any)
+    action: str 
+    protocol: str
+    port: Optional[str] = None
+    destination: str
     description: str = ""
     order: int = 0
+
+    @validator('destination')
+    def validate_destination(cls, v):
+        """Validate that the destination is a valid IP, CIDR, or 'any'."""
+        if v.lower() == 'any':
+            return '0.0.0.0/0'
+        try:
+            ip_network(v, strict=False)
+            return v
+        except (AddressValueError, ValueError):
+            raise ValueError(f"'{v}' is not a valid IP address or CIDR network.")
+
+    @validator('port')
+    def validate_port(cls, v, values):
+        """Validate that the port is a single number or a valid range."""
+        if v is None:
+            return None
+
+        protocol = values.get('protocol')
+        if protocol not in ['tcp', 'udp']:
+            raise ValueError(f"La porta non è applicabile per il protocollo '{protocol}'.")
+
+        port_range_regex = r"^\d{1,5}(:\d{1,5})?$"
+        if not re.fullmatch(port_range_regex, str(v)):
+            raise ValueError("La porta deve essere un numero singolo o un intervallo come '1000:2000'.")
+
+        parts = str(v).split(':')
+        start_port = int(parts[0])
+        
+        if not (1 <= start_port <= 65535):
+            raise ValueError(f"La porta '{start_port}' è fuori dal range valido (1-65535).")
+
+        if len(parts) == 2:
+            end_port = int(parts[1])
+            if not (1 <= end_port <= 65535):
+                raise ValueError(f"La porta finale '{end_port}' è fuori dal range valido (1-65535).")
+            if start_port >= end_port:
+                raise ValueError("Nell'intervallo di porte, la porta iniziale deve essere minore di quella finale.")
+        
+        return str(v)
 
 def _load_groups() -> List[Group]:
     if os.path.exists(GROUPS_FILE):

@@ -53,6 +53,7 @@ require_once 'includes/header.php';
                         <div class="col">
                             <input type="text" id="clientNameInput" class="form-control" placeholder="Es: laptop-mario-rossi"
                                 required>
+                            <div class="invalid-feedback">Solo lettere, numeri, trattini, punti e underscore.</div>
                         </div>
                         <div class="col-auto">
                             <button type="submit" class="btn btn-primary">
@@ -334,10 +335,12 @@ require_once 'includes/header.php';
                 <div class="mb-3">
                     <label class="form-label">Destinazione (CIDR o IP)</label>
                     <input type="text" class="form-control" id="rule-dest" placeholder="0.0.0.0/0 per tutto, o 192.168.1.50">
+                    <div class="invalid-feedback">Destinazione non valida. Inserisci un IP, un CIDR o 'any'.</div>
                 </div>
                 <div class="mb-3" id="port-container">
                     <label class="form-label">Porta (Opzionale)</label>
                     <input type="text" class="form-control" id="rule-port" placeholder="80, 443, 1000:2000">
+                    <div class="invalid-feedback">Porta non valida. Inserisci un numero (1-65535) o un intervallo (es. 1000:2000).</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Descrizione</label>

@@ -135,7 +135,16 @@ async function createClient() {
     if (!currentInstance) return;
     const input = document.getElementById('clientNameInput');
     const name = input.value.trim();
-    if (!name) return;
+
+    // --- VALIDATION ---
+    const nameRegex = /^[a-zA-Z0-9_.-]+$/;
+    if (name === '' || !nameRegex.test(name)) {
+        input.classList.add('is-invalid');
+        showNotification('danger', 'Il nome del client non è valido.');
+        return;
+    }
+    // --- END VALIDATION ---
+
 
     try {
         const formData = new FormData();
@@ -285,6 +294,7 @@ function renderRouteEditContainer() {
             <div class="mb-3">
                 <label class="form-label">DNS Servers</label>
                 <input type="text" class="form-control" id="dns-servers-edit-input" value="${dnsValue}" placeholder="Es: 1.1.1.1, 8.8.8.8">
+                <div class="invalid-feedback">Uno o più indirizzi IP non sono validi.</div>
                 <small class="form-hint">Lascia vuoto per usare i default (Google).</small>
             </div>
         `;
@@ -326,11 +336,13 @@ async function addRouteEdit(network = '', interfaceName = '') {
         <div class="row mb-2" id="edit-route-${routeId}">
             <div class="col-md-5">
                 <input type="text" class="form-control" placeholder="192.168.1.0/24" data-edit-route-network="${routeId}" value="${network}">
+                <div class="invalid-feedback">Formato CIDR non valido (es. 192.168.1.0/24).</div>
             </div>
             <div class="col-md-5">
                 <select class="form-select" data-edit-route-interface="${routeId}" id="edit-route-interface-${routeId}">
                     <option value="">Seleziona Interfaccia</option>
                 </select>
+                <div class="invalid-feedback">Seleziona un'interfaccia.</div>
             </div>
             <div class="col-md-2">
                 <button type="button" class="btn btn-danger btn-sm" onclick="removeRouteEdit(${routeId})">
@@ -373,27 +385,57 @@ async function saveRoutes() {
     if (!currentInstance) return;
 
     const tunnelMode = document.getElementById('tunnel-mode-edit').value;
+    let isValid = true;
+
+    // Helper functions for validation
+    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    const cidrRegex = /^([0-9]{1,3}\.){3}[0-9]{1,3}\/([0-9]|[1-2][0-9]|3[0-2])$/;
+    
+    // --- Clear previous validation states ---
+    document.querySelectorAll('#routes-edit-mode .is-invalid').forEach(el => el.classList.remove('is-invalid'));
+
     let dnsServers = [];
     if (tunnelMode === 'full') {
         const dnsInput = document.getElementById('dns-servers-edit-input');
         if (dnsInput && dnsInput.value.trim() !== '') {
             dnsServers = dnsInput.value.split(',').map(s => s.trim()).filter(s => s !== '');
+            for (const ip of dnsServers) {
+                if (!ipRegex.test(ip)) {
+                    isValid = false;
+                    dnsInput.classList.add('is-invalid');
+                    break; 
+                }
+            }
         }
     }
 
     const routes = [];
     if (tunnelMode === 'split') {
-        const routeNetworks = document.querySelectorAll('[data-edit-route-network]');
-        routeNetworks.forEach(input => {
+        const routeNetworkInputs = document.querySelectorAll('[data-edit-route-network]');
+        routeNetworkInputs.forEach(input => {
             const routeId = input.getAttribute('data-edit-route-network');
             const network = input.value.trim();
             const interfaceSelect = document.querySelector(`[data-edit-route-interface="${routeId}"]`);
-            const interfaceName = interfaceSelect ? interfaceSelect.value : '';
+            
+            if (network === '' || !cidrRegex.test(network)) {
+                isValid = false;
+                input.classList.add('is-invalid');
+            }
 
-            if (network && interfaceName) {
-                routes.push({ network, interface: interfaceName });
+            if (!interfaceSelect || interfaceSelect.value === '') {
+                isValid = false;
+                if(interfaceSelect) interfaceSelect.classList.add('is-invalid');
+            }
+            
+            if (network && interfaceSelect && interfaceSelect.value) {
+                routes.push({ network: network, interface: interfaceSelect.value });
             }
         });
+    }
+
+    if (!isValid) {
+        showNotification('danger', 'Uno o più campi non sono validi. Controlla e riprova.');
+        return;
     }
 
     const payload = {
@@ -456,5 +498,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const instanceId = urlParams.get('id');
     if (instanceId) {
         loadInstanceDetails(instanceId);
+    }
+
+    // Real-time validation for client name
+    const clientNameInput = document.getElementById('clientNameInput');
+    if (clientNameInput) {
+        clientNameInput.addEventListener('input', () => {
+            const nameRegex = /^[a-zA-Z0-9_.-]+$/;
+            const value = clientNameInput.value;
+
+            if (value.trim() === '' || !nameRegex.test(value)) {
+                clientNameInput.classList.add('is-invalid');
+            } else {
+                clientNameInput.classList.remove('is-invalid');
+            }
+        });
     }
 });
