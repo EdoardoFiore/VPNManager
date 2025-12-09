@@ -355,7 +355,7 @@ function renderRules(rules) {
             <td><code>${rule.destination}</code></td>
             <td>${rule.port || '*'}</td>
             <td class="text-end">
-                <button class="btn btn-sm btn-ghost-danger" onclick="deleteRule('${rule.id}')">
+                <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteRule('${rule.id}')">
                     <i class="ti ti-trash"></i>
                 </button>
             </td>
@@ -474,8 +474,35 @@ function openAddRuleModal() {
     modal.show();
 }
 
-async function deleteRule(ruleId) {
-    if (!confirm("Eliminare questa regola?")) return;
+// New function to show the confirmation modal
+function confirmDeleteRule(ruleId) {
+    const rule = window.currentRules.find(r => r.id === ruleId);
+    if (!rule) {
+        // Handle error: rule not found, maybe show a generic error or just return
+        console.error("Rule not found for ID:", ruleId);
+        return;
+    }
+
+    let badgeClass = 'bg-secondary';
+    if (rule.action === 'ACCEPT') badgeClass = 'bg-success';
+    if (rule.action === 'DROP') badgeClass = 'bg-danger';
+
+    const ruleDescriptionHtml = `
+        <strong>Azione:</strong> <span class="badge ${badgeClass}">${rule.action}</span><br>
+        <strong>Protocollo:</strong> ${rule.protocol.toUpperCase()}<br>
+        <strong>Destinazione:</strong> <code>${rule.destination}</code><br>
+        <strong>Porta:</strong> ${rule.port || '*'}
+    `;
+
+    document.getElementById('delete-rule-summary').innerHTML = ruleDescriptionHtml;
+    document.getElementById('confirm-delete-rule-button').onclick = () => performDeleteRule(ruleId);
+    new bootstrap.Modal(document.getElementById('modal-delete-rule-confirm')).show();
+}
+
+// Renamed from deleteRule to performDeleteRule
+async function performDeleteRule(ruleId) {
+    // The modal should be dismissed by the button's data-bs-dismiss="modal"
+    // So no need to close it here.
 
     const response = await fetch(`${API_AJAX_HANDLER}`, {
         method: 'POST',
@@ -484,7 +511,10 @@ async function deleteRule(ruleId) {
     });
 
     if ((await response.json()).success) {
+        showNotification('success', 'Regola firewall eliminata.');
         loadRules(currentGroupId);
+    } else {
+        showNotification('danger', 'Errore eliminazione regola.');
     }
 }
 

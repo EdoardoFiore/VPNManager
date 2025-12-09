@@ -371,6 +371,27 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+<!-- Modal Delete Rule Confirm -->
+<div class="modal modal-blur fade" id="modal-delete-rule-confirm" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Conferma Eliminazione Regola</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Sei sicuro di voler eliminare la seguente regola?</p>
+                <div id="delete-rule-summary" class="mb-3"></div>
+                <p class="text-muted">Questa azione non può essere annullata. La regola firewall verrà rimossa permanentemente.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-rule-button" data-bs-dismiss="modal">Sì, elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Revoke Confirm -->
 <div class="modal modal-blur fade" id="modal-revoke-confirm" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
