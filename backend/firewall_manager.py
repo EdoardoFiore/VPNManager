@@ -334,14 +334,15 @@ def apply_firewall_rules():
         group_chain_name = f"VIG_{group.id}"
         group_rules = sorted([r for r in rules if r.group_id == group.id], key=lambda x: x.order)
         
-        for rule in group_rules:
+        # Insert rules in reverse order with -I to maintain the correct sequence
+        for rule in reversed(group_rules):
             # A member's packet only reaches this chain if it's from that member.
             # So, we only need to specify destination, proto, port.
             proto_arg = f"-p {rule.protocol}" if rule.protocol != "all" else ""
             port_arg = f"--dport {rule.port}" if rule.port and rule.protocol in ["tcp", "udp"] else ""
             dest_arg = f"-d {rule.destination}" if rule.destination and rule.destination != "0.0.0.0/0" else ""
             
-            cmd = ["iptables", "-A", group_chain_name]
+            cmd = ["iptables", "-I", group_chain_name] # Use -I to insert at the top
             if proto_arg: cmd.extend(proto_arg.split())
             if port_arg: cmd.extend(port_arg.split())
             if dest_arg: cmd.extend(dest_arg.split())
