@@ -382,6 +382,17 @@ async def add_machine_firewall_rule_endpoint(rule_data: MachineFirewallRuleModel
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.put("/api/machine-firewall/rules/{rule_id}", response_model=MachineFirewallRuleModel, dependencies=[Depends(get_api_key)])
+async def update_machine_firewall_rule_endpoint(rule_id: str, rule_data: MachineFirewallRuleModel):
+    """Update a machine-level firewall rule."""
+    try:
+        updated_rule = machine_firewall_manager.update_rule(rule_id, rule_data.dict())
+        return updated_rule
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.delete("/api/machine-firewall/rules/{rule_id}", dependencies=[Depends(get_api_key)])
 async def delete_machine_firewall_rule_endpoint(rule_id: str):
     """Delete a machine-level firewall rule."""

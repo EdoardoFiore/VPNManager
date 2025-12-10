@@ -83,11 +83,13 @@ def _run_iptables(table: str, args: List[str]):
     command.extend(args)
 
     try:
-        logger.debug(f"Executing iptables command: {' '.join(command)}")
+        full_command_str = ' '.join(command)
+        logger.debug(f"Executing iptables command: {full_command_str}")
         subprocess.run(command, check=True, capture_output=True, text=True)
         return True, None
     except subprocess.CalledProcessError as e:
-        error_msg = f"iptables error (exit code {e.returncode}): {e.stderr.strip()}"
+        full_command_str = ' '.join(command)
+        error_msg = f"iptables error (exit code {e.returncode}) on command '{full_command_str}': {e.stderr.strip()}"
         logger.error(error_msg)
         return False, error_msg
 
@@ -160,8 +162,8 @@ def _build_iptables_args_from_rule(rule: MachineFirewallRule, operation: str = "
     return args
 
 def add_machine_firewall_rule(rule: MachineFirewallRule) -> (bool, Optional[str]):
-    """Adds a new generic machine-level iptables rule."""
-    args = _build_iptables_args_from_rule(rule, operation="-A")
+    """Adds a new generic machine-level iptables rule by inserting it at the top."""
+    args = _build_iptables_args_from_rule(rule, operation="-I")
     return _run_iptables(rule.table, args)
 
 def delete_machine_firewall_rule(rule: MachineFirewallRule) -> (bool, Optional[str]):
@@ -176,94 +178,49 @@ def clear_machine_firewall_rules_by_comment_prefix(table: str = "filter", commen
     success = True
     error_message = None
     
-    # List all rules with line numbers
     try:
-        # Use iptables-save for robust parsing, then iptables -D for deletion by rule spec.
-        # Direct deletion by line number is risky if rules change concurrently.
-        # Listing by specific comment is not directly supported by iptables-save well.
-        # Instead, we will parse iptables -S output, which shows full rule specification.
-        
-        # Get rules for the specific table
+        # Use iptables -S which shows full rule specification for easier parsing.
         list_command = ["/usr/sbin/iptables", "-t", table, "-S"]
         logger.debug(f"Executing iptables list command: {' '.join(list_command)}")
         result = subprocess.run(list_command, check=True, capture_output=True, text=True)
         
         lines = result.stdout.splitlines()
-        rules_to_delete = []
+        rules_to_delete_args = []
 
         for line in lines:
-            if f"--comment \"{comment_prefix}" in line:
-                # Reconstruct the delete command from the list command output
-                # iptables -S outputs rules in '-A CHAIN ...' format.
-                # We need to change -A to -D and remove -C for delete.
-                # Remove '-t TABLE' if it's there, as it's part of _run_iptables.
-                # Also remove the comment module part if it outputs with it (-m comment --comment "ID_...")
-                
-                # Split the line by spaces, but carefully handle quoted comments
-                parts = []
-                in_quote = False
-                current_part = []
-                for char in line:
-                    if char == '"':
-                        in_quote = not in_quote
-                    if char == ' ' and not in_quote:
-                        if current_part:
-                            parts.append("".join(current_part))
-                        current_part = []
-                    else:
-                        current_part.append(char)
-                if current_part:
-                    parts.append("".join(current_part))
+            # The comment format can be --comment "ID_..." or --comment ID_...
+            # We check for the prefix without quotes to be more robust.
+            if f'--comment {comment_prefix}' in line:
+                logger.debug(f"Found rule to delete: {line}")
 
-                # Reconstruct args for deletion
-                delete_args = []
-                skip_next = False
-                for i, part in enumerate(parts):
-                    if skip_next:
-                        skip_next = False
-                        continue
-                    if part == "-A": # Change -A (append) to -D (delete)
-                        delete_args.append("-D")
-                    elif part == "-C": # If -C check, ignore for deletion
-                        continue
-                    elif part == "-t" and i + 1 < len(parts) and parts[i+1] == table:
-                        # Skip -t table if it's explicitly for the table we're cleaning,
-                        # as _run_iptables will add it.
-                        skip_next = True
-                    elif part == "-m" and i + 1 < len(parts) and parts[i+1] == "comment":
-                        # Skip -m comment and its argument
-                        skip_next = True
-                    elif part.startswith("--comment"):
-                        # Skip --comment argument directly
-                        continue
-                    else:
-                        delete_args.append(part)
+                # To delete a rule, we must specify it exactly as it was created,
+                # including the comment. We just switch -A to -D.
+                parts = line.split()
                 
-                if delete_args:
-                    rules_to_delete.append(delete_args)
+                if parts and parts[0] == '-A':
+                    parts[0] = '-D' # Change -A (Append) to -D (Delete)
+                    logger.debug(f"Constructed delete args: {parts}")
+                    rules_to_delete_args.append(parts)
+                else:
+                    logger.warning(f"Could not parse rule for deletion: {line}")
 
-        # Delete rules in reverse order of listing to avoid issues with line numbers
-        # If rules are added to the beginning, deleting by spec is safer.
-        for rule_args in rules_to_delete:
-            rule_delete_success, rule_delete_error = _run_iptables(table, rule_args)
+        # Delete rules in reverse order to avoid index shifting issues if rules were ever deleted by line number
+        for args in reversed(rules_to_delete_args):
+            rule_delete_success, rule_delete_error = _run_iptables(table, args)
             if not rule_delete_success:
-                logger.error(f"Failed to delete rule: {' '.join(rule_args)} - {rule_delete_error}")
+                logger.error(f"Failed to delete rule: {' '.join(args)} - {rule_delete_error}")
                 success = False
-                error_message = rule_delete_error
+                error_message = rule_delete_error # Keep the first error encountered
         
     except subprocess.CalledProcessError as e:
-        # If the table doesn't exist, it's not a fatal error.
         if "does not exist" in e.stderr:
-            logger.warning(f"Table '{table}' does not exist, skipping rule clearance. This is normal if the table is not in use.")
+            logger.warning(f"Table '{table}' does not exist, skipping rule clearance.")
             return True, None
-            
         logger.error(f"Error listing iptables rules for table {table}: {e.stderr.strip()}")
-        success = False
-        error_message = e.stderr.strip()
+        return False, e.stderr.strip()
     except Exception as e:
         logger.error(f"Unexpected error in clear_machine_firewall_rules_by_comment_prefix: {e}")
-        success = False
-        error_message = str(e)
+        return False, str(e)
 
     return success, error_message
 
@@ -287,10 +244,11 @@ def apply_machine_firewall_rules(rules: List[MachineFirewallRule]):
     if not success:
         return False, error_message
 
-    # Apply new rules, sorted by order
+    # Apply new rules, sorted by order, in reverse.
+    # By using -I (insert at top) in reverse order, the final list is in the correct order.
     rules.sort(key=lambda r: r.order)
 
-    for rule in rules:
+    for rule in reversed(rules):
         rule_add_success, rule_add_error = add_machine_firewall_rule(rule)
         if not rule_add_success:
             logger.error(f"Failed to apply rule {rule.id}: {rule_add_error}")

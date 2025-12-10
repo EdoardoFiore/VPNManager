@@ -293,6 +293,18 @@ switch ($action) {
         echo json_encode($response);
         break;
 
+    case 'update_machine_firewall_rule':
+        $rule_id = $_GET['rule_id'] ?? '';
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+        if (empty($rule_id) || !$data) {
+            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti per aggiornare la regola.']]);
+            exit;
+        }
+        $response = update_machine_firewall_rule($rule_id, $data);
+        echo json_encode($response);
+        break;
+
     case 'apply_machine_firewall_rules':
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);

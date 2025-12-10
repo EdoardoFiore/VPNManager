@@ -20,6 +20,117 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load initial data for the active tab (Firewall is active by default)
     loadMachineFirewallRules();
+
+    // --- Popover and Preview for Add Machine Rule Modal ---
+    const addRuleModal = document.getElementById('modal-add-machine-rule');
+    if (addRuleModal) {
+        // Initialize popovers
+        const popoverTriggerList = [].slice.call(addRuleModal.querySelectorAll('[data-bs-toggle="popover"]'));
+        popoverTriggerList.map(function (popoverTriggerEl) {
+            return new bootstrap.Popover(popoverTriggerEl);
+        });
+
+        const form = document.getElementById('addMachineRuleForm');
+        const previewCode = document.getElementById('iptables-preview-add');
+
+        const chainOptionsMap = {
+            filter: ['INPUT', 'OUTPUT', 'FORWARD'],
+            nat: ['PREROUTING', 'POSTROUTING', 'OUTPUT'],
+            mangle: ['PREROUTING', 'INPUT', 'FORWARD', 'OUTPUT', 'POSTROUTING'],
+            raw: ['PREROUTING', 'OUTPUT']
+        };
+
+        const updateChainOptions = () => {
+            const tableSelect = form.elements['table'];
+            const chainSelect = form.elements['chain'];
+            const selectedTable = tableSelect.value;
+            
+            // Clear current options
+            chainSelect.innerHTML = '';
+
+            // Populate with new options
+            const options = chainOptionsMap[selectedTable] || [];
+            options.forEach(optionValue => {
+                const option = document.createElement('option');
+                option.value = optionValue;
+                option.textContent = optionValue;
+                chainSelect.appendChild(option);
+            });
+
+            // Trigger preview update
+            updateIptablesPreviewAddModal();
+        };
+
+        const updateIptablesPreviewAddModal = () => {
+            if (!form || !previewCode) return;
+
+            const table = form.elements['table'].value;
+            const chain = form.elements['chain'].value || (chainOptionsMap[table][0] || 'CHAIN');
+            const action = form.elements['action'].value.toUpperCase();
+            const protocol = form.elements['protocol'].value;
+            const source = form.elements['source'].value;
+            const destination = form.elements['destination'].value;
+            const port = form.elements['port'].value;
+            const inInterface = form.elements['in_interface'].value;
+            const outInterface = form.elements['out_interface'].value;
+            const state = form.elements['state'].value;
+            const comment = form.elements['comment'].value;
+
+            let command = ['iptables'];
+            if (table !== 'filter') {
+                command.push('-t', table);
+            }
+            command.push('-A', chain);
+
+            if (inInterface) command.push('-i', inInterface);
+            if (outInterface) command.push('-o', outInterface);
+            if (source) command.push('-s', source);
+            if (destination && !['SNAT', 'DNAT'].includes(action)) command.push('-d', destination);
+            
+            if (protocol) {
+                command.push('-p', protocol);
+                if (port && (protocol === 'tcp' || protocol === 'udp')) {
+                    command.push('--dport', port);
+                }
+            }
+
+            if (state) {
+                command.push('-m', 'state', '--state', state);
+            }
+            
+            if (comment) {
+                command.push('-m', 'comment', '--comment', `"${comment}"`);
+            }
+
+            command.push('-j', action);
+
+            if (action === 'SNAT' && destination) {
+                command.push('--to-source', destination);
+            }
+            if (action === 'DNAT' && destination) {
+                command.push('--to-destination', destination);
+            }
+
+            previewCode.textContent = command.join(' ');
+        };
+
+        // Attach event listeners to all inputs within the form
+        form.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', updateIptablesPreviewAddModal);
+            input.addEventListener('change', updateIptablesPreviewAddModal);
+        });
+
+        // Add specific listener for table to update chain options
+        form.elements['table'].addEventListener('change', updateChainOptions);
+
+        // Set initial state on modal show
+        addRuleModal.addEventListener('shown.bs.modal', () => {
+             // Reset form, then update chains and preview
+            document.getElementById('addMachineRuleForm').reset();
+            toggleMachinePortInput(''); // Reset port visibility
+            updateChainOptions(); // Populate chain options for the default table
+        });
+    }
 });
 
 
@@ -96,6 +207,9 @@ function renderMachineFirewallRules() {
             <td>${rule.in_interface || '*'}</td>
             <td>${rule.out_interface || '*'}</td>
             <td class="text-end">
+                <button class="btn btn-sm btn-ghost-primary" onclick="openEditMachineRuleModal('${rule.id}')">
+                    <i class="ti ti-edit"></i>
+                </button>
                 <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteMachineRule('${rule.id}')">
                     <i class="ti ti-trash"></i>
                 </button>
@@ -462,3 +576,185 @@ async function saveNetworkInterfaceConfig() {
 
 // Global notification function (assuming it's defined in header or a common utils)
 // function showNotification(type, message) { ... }
+
+function openEditMachineRuleModal(ruleId) {
+    const rule = machineFirewallRules.find(r => r.id === ruleId);
+    if (!rule) {
+        showNotification('danger', 'Regola non trovata per la modifica.');
+        return;
+    }
+
+    const form = document.getElementById('editMachineRuleForm');
+    form.elements['id'].value = rule.id;
+    form.elements['table'].value = rule.table;
+    form.elements['action'].value = rule.action;
+    form.elements['protocol'].value = rule.protocol || '';
+    form.elements['source'].value = rule.source || '';
+    form.elements['destination'].value = rule.destination || '';
+    form.elements['port'].value = rule.port || '';
+    form.elements['in_interface'].value = rule.in_interface || '';
+    form.elements['out_interface'].value = rule.out_interface || '';
+    form.elements['state'].value = rule.state || '';
+    form.elements['comment'].value = rule.comment || '';
+
+    // Update chain options for the specific table and select the correct one
+    const chainSelect = form.elements['chain'];
+    const selectedTable = rule.table;
+    chainSelect.innerHTML = '';
+    const options = chainOptionsMap[selectedTable] || [];
+    options.forEach(optionValue => {
+        const option = document.createElement('option');
+        option.value = optionValue;
+        option.textContent = optionValue;
+        if (optionValue === rule.chain) {
+            option.selected = true;
+        }
+        chainSelect.appendChild(option);
+    });
+
+    toggleMachinePortInput(rule.protocol, 'edit');
+    updateIptablesPreviewEditModal(); // Set initial preview
+
+    new bootstrap.Modal(document.getElementById('modal-edit-machine-rule')).show();
+}
+
+async function updateMachineFirewallRule() {
+    const form = document.getElementById('editMachineRuleForm');
+    const ruleId = form.elements['id'].value;
+
+    const ruleData = {
+        id: ruleId,
+        chain: form.elements['chain'].value,
+        action: form.elements['action'].value,
+        protocol: form.elements['protocol'].value || null,
+        source: form.elements['source'].value || null,
+        destination: form.elements['destination'].value || null,
+        port: form.elements['port'].value || null,
+        in_interface: form.elements['in_interface'].value || null,
+        out_interface: form.elements['out_interface'].value || null,
+        state: form.elements['state'].value || null,
+        comment: form.elements['comment'].value || null,
+        table: form.elements['table'].value
+    };
+
+    if (!ruleData.chain || !ruleData.action) {
+        showNotification('danger', 'Chain e Azione sono campi obbligatori.');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}?action=update_machine_firewall_rule&rule_id=${encodeURIComponent(ruleId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ruleData)
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification('success', 'Regola firewall aggiornata con successo.');
+            bootstrap.Modal.getInstance(document.getElementById('modal-edit-machine-rule')).hide();
+            loadMachineFirewallRules();
+        } else {
+            showNotification('danger', 'Errore aggiornamento regola: ' + (result.body.detail || 'Sconosciuto'));
+        }
+    } catch (e) {
+        showNotification('danger', 'Errore di connessione: ' + e.message);
+    }
+}
+
+// --- Preview and dynamic inputs for Edit Modal ---
+document.addEventListener('DOMContentLoaded', () => {
+    const editRuleModal = document.getElementById('modal-edit-machine-rule');
+    if (editRuleModal) {
+        const form = document.getElementById('editMachineRuleForm');
+        form.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', updateIptablesPreviewEditModal);
+            input.addEventListener('change', updateIptablesPreviewEditModal);
+        });
+        form.elements['table'].addEventListener('change', () => {
+            // Get the correct chain dropdown for the edit modal
+            const chainSelect = form.elements['chain'];
+            const selectedTable = form.elements['table'].value;
+            
+            chainSelect.innerHTML = '';
+            const options = chainOptionsMap[selectedTable] || [];
+            options.forEach(optionValue => {
+                const option = document.createElement('option');
+                option.value = optionValue;
+                option.textContent = optionValue;
+                chainSelect.appendChild(option);
+            });
+            updateIptablesPreviewEditModal();
+        });
+    }
+});
+
+function updateIptablesPreviewEditModal() {
+    const form = document.getElementById('editMachineRuleForm');
+    const previewCode = document.getElementById('iptables-preview-edit');
+    if (!form || !previewCode) return;
+
+    const table = form.elements['table'].value;
+    const chain = form.elements['chain'].value || 'CHAIN';
+    const action = form.elements['action'].value.toUpperCase();
+    const protocol = form.elements['protocol'].value;
+    const source = form.elements['source'].value;
+    const destination = form.elements['destination'].value;
+    const port = form.elements['port'].value;
+    const inInterface = form.elements['in_interface'].value;
+    const outInterface = form.elements['out_interface'].value;
+    const state = form.elements['state'].value;
+    const comment = form.elements['comment'].value;
+
+    let command = ['iptables'];
+    if (table !== 'filter') {
+        command.push('-t', table);
+    }
+    // For preview, we show -A, but the backend will use -I for ordering
+    command.push('-A', chain);
+
+    if (inInterface) command.push('-i', inInterface);
+    if (outInterface) command.push('-o', outInterface);
+    if (source) command.push('-s', source);
+    if (destination && !['SNAT', 'DNAT'].includes(action)) command.push('-d', destination);
+    
+    if (protocol) {
+        command.push('-p', protocol);
+        if (port && (protocol === 'tcp' || protocol === 'udp')) {
+            command.push('--dport', port);
+        }
+    }
+
+    if (state) {
+        command.push('-m', 'state', '--state', state);
+    }
+    
+    if (comment) {
+        command.push('-m', 'comment', '--comment', `"${comment}"`);
+    }
+
+    command.push('-j', action);
+
+    if (action === 'SNAT' && destination) {
+        command.push('--to-source', destination);
+    }
+    if (action === 'DNAT' && destination) {
+        command.push('--to-destination', destination);
+    }
+
+    previewCode.textContent = command.join(' ');
+}
+
+// Override original toggle function to handle both modals
+function toggleMachinePortInput(protocol, modalType) {
+    const portContainer = document.getElementById(`machine-port-container-${modalType}`);
+    if (!portContainer) return;
+    
+    if (protocol === 'tcp' || protocol === 'udp') {
+        portContainer.style.display = 'block';
+    } else {
+        portContainer.style.display = 'none';
+        portContainer.querySelector('input[name="port"]').value = ''; // Clear value when hidden
+    }
+}
+

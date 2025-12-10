@@ -94,7 +94,15 @@ class MachineFirewallManager:
         new_rule = MachineFirewallRule.from_dict(rule_data)
         self.rules.append(new_rule)
         self._save_rules()
-        self.apply_all_rules() # Apply changes immediately
+        
+        success, error = self.apply_all_rules() # Apply changes immediately
+        if not success:
+            # If applying rules fails, we should ideally roll back the add,
+            # but for now, raising an exception is crucial for feedback.
+            # We reload from the saved state to ensure consistency.
+            self._load_rules() 
+            raise Exception(f"Failed to apply rules after adding new rule: {error}")
+
         logger.info(f"Added new machine firewall rule: {new_rule.id}")
         return new_rule.to_dict()
 
@@ -108,8 +116,47 @@ class MachineFirewallManager:
         
         self._reorder_rules_consecutively()
         self._save_rules()
-        self.apply_all_rules() # Apply changes immediately
+
+        success, error = self.apply_all_rules() # Apply changes immediately
+        if not success:
+            # Reload from saved state to roll back the deletion in memory
+            self._load_rules()
+            raise Exception(f"Failed to apply rules after deleting rule: {error}")
+
         logger.info(f"Deleted machine firewall rule: {rule_id}")
+
+    def update_rule(self, rule_id: str, rule_data: Dict):
+        """Updates an existing machine firewall rule and applies changes."""
+        rule_to_update = next((r for r in self.rules if r.id == rule_id), None)
+        if not rule_to_update:
+            raise ValueError("Rule not found for update")
+
+        # Update rule attributes from the provided data
+        rule_to_update.chain = rule_data.get('chain', rule_to_update.chain).upper()
+        rule_to_update.action = rule_data.get('action', rule_to_update.action).upper()
+        rule_to_update.protocol = rule_data.get('protocol', rule_to_update.protocol)
+        if rule_to_update.protocol:
+            rule_to_update.protocol = rule_to_update.protocol.lower()
+        rule_to_update.source = rule_data.get('source', rule_to_update.source)
+        rule_to_update.destination = rule_data.get('destination', rule_to_update.destination)
+        rule_to_update.port = rule_data.get('port', rule_to_update.port)
+        rule_to_update.in_interface = rule_data.get('in_interface', rule_to_update.in_interface)
+        rule_to_update.out_interface = rule_data.get('out_interface', rule_to_update.out_interface)
+        rule_to_update.state = rule_data.get('state', rule_to_update.state)
+        rule_to_update.comment = rule_data.get('comment', rule_to_update.comment)
+        rule_to_update.table = rule_data.get('table', rule_to_update.table).lower()
+        # Order is managed separately by update_rule_order
+
+        self._save_rules()
+
+        success, error = self.apply_all_rules()
+        if not success:
+            # Reload from saved state to roll back the update in memory
+            self._load_rules()
+            raise Exception(f"Failed to apply rules after updating rule: {error}")
+        
+        logger.info(f"Updated machine firewall rule: {rule_id}")
+        return rule_to_update.to_dict()
 
     def update_rule_order(self, orders: List[Dict]):
         """
@@ -123,7 +170,13 @@ class MachineFirewallManager:
         
         self.rules.sort(key=lambda r: r.order)
         self._save_rules()
-        self.apply_all_rules() # Apply changes immediately
+
+        success, error = self.apply_all_rules() # Apply changes immediately
+        if not success:
+            # Reload from saved state to roll back reordering
+            self._load_rules()
+            raise Exception(f"Failed to apply reordered rules: {error}")
+            
         logger.info("Updated order of machine firewall rules.")
 
     def _reorder_rules_consecutively(self):

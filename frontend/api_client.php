@@ -220,6 +220,10 @@ function delete_machine_firewall_rule($rule_id) {
     return api_request('/machine-firewall/rules/' . urlencode($rule_id), 'DELETE');
 }
 
+function update_machine_firewall_rule($rule_id, $rule_data) {
+    return api_request('/machine-firewall/rules/' . urlencode($rule_id), 'PUT', $rule_data);
+}
+
 function apply_machine_firewall_rules($orders) {
     return api_request('/machine-firewall/rules/apply', 'PATCH', $orders);
 }
