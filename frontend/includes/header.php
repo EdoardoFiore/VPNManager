@@ -9,6 +9,7 @@
     <!-- CSS files -->
     <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
         .card-actions {
             margin-left: auto;
@@ -21,6 +22,16 @@
 
         .cursor-pointer {
             cursor: pointer;
+        }
+
+        /* SortableJS Ghost Class for drag-and-drop preview */
+        .sortable-ghost {
+            background-color: #f0f8ff; /* Light blue background */
+            opacity: 0.6;
+        }
+
+        .sortable-chosen {
+            cursor: grabbing;
         }
 
         /* 1. Card Hover Effect */
