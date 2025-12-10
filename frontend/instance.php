@@ -247,7 +247,7 @@ require_once 'includes/header.php';
                             <table class="table table-vcenter">
                                 <thead>
                                     <tr>
-                                        <th class="w-1">Ordin.</th>
+                                        <th class="w-1"><i class="ti ti-grip-vertical"></i></th>
                                         <th>Azione</th>
                                         <th>Proto</th>
                                         <th>Dest.</th>

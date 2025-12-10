@@ -2,6 +2,7 @@
 let allGroups = [];
 let currentGroupId = null;
 let availableClientData = []; // Store client info for selector
+let sortableGroupRulesInstance = null; // To hold the SortableJS instance for group rules
 
 // Unlike standalone, we wait for the main instance logic to initialize us or checking tab
 // But for simplicity, we can just expose loadGroups and call it when tab is shown, 
@@ -312,12 +313,34 @@ async function loadRules(groupId) {
         const result = await response.json();
 
         if (result.success) {
-            renderRules(result.body);
+            window.currentRules = result.body; // Store rules globally for this context
+            renderRules(window.currentRules);
+
+            // Initialize SortableJS
+            if (sortableGroupRulesInstance) {
+                sortableGroupRulesInstance.destroy();
+            }
+            sortableGroupRulesInstance = new Sortable(tbody, {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                handle: '.ti-grip-vertical',
+                onEnd: function(evt) {
+                    // Get the moved item
+                    const movedItem = window.currentRules.splice(evt.oldIndex, 1)[0];
+                    // Insert it at the new index
+                    window.currentRules.splice(evt.newIndex, 0, movedItem);
+                    
+                    // The UI is already updated by SortableJS, we just need to save the new order.
+                    applyRuleOrder();
+                }
+            });
+            
         } else {
             tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Errore caricamento regole.</td></tr>';
         }
     } catch (e) {
         console.error(e);
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Errore di connessione.</td></tr>';
     }
 }
 
@@ -334,21 +357,15 @@ function renderRules(rules) {
 
     rules.forEach((rule, index) => {
         const tr = document.createElement('tr');
+        tr.dataset.id = rule.id;
 
         let badgeClass = 'bg-secondary';
         if (rule.action === 'ACCEPT') badgeClass = 'bg-success';
         if (rule.action === 'DROP') badgeClass = 'bg-danger';
 
         tr.innerHTML = `
-            <td>
-                <div class="btn-group-vertical btn-group-sm">
-                    <button class="btn btn-icon" onclick="moveRule('${rule.id}', -1)" ${index === 0 ? 'disabled' : ''}>
-                        <i class="ti ti-chevron-up"></i>
-                    </button>
-                    <button class="btn btn-icon" onclick="moveRule('${rule.id}', 1)" ${index === rules.length - 1 ? 'disabled' : ''}>
-                        <i class="ti ti-chevron-down"></i>
-                    </button>
-                </div>
+            <td class="w-1" style="cursor: grab;">
+                <i class="ti ti-grip-vertical"></i>
             </td>
             <td><span class="badge ${badgeClass}">${rule.action}</span></td>
             <td>${rule.protocol.toUpperCase()}</td>
@@ -518,36 +535,37 @@ async function performDeleteRule(ruleId) {
     }
 }
 
-async function moveRule(ruleId, direction) {
-    // Find current index
-    const index = window.currentRules.findIndex(r => r.id === ruleId);
-    if (index === -1) return;
+async function applyRuleOrder() {
+    if (!window.currentRules) return;
 
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= window.currentRules.length) return;
-
-    // Swap order values
-    // Actually we just swap positions in array and reassign order = index
-    const rules = [...window.currentRules];
-    [rules[index], rules[newIndex]] = [rules[newIndex], rules[index]];
-
-    // Prepare update payload
-    const updates = rules.map((r, i) => ({
-        id: r.id,
-        order: i
+    const updates = window.currentRules.map((rule, index) => ({
+        id: rule.id,
+        order: index
     }));
 
-    const response = await fetch(`${API_AJAX_HANDLER}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'reorder_rules',
-            orders: updates
-        })
-    });
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'reorder_rules',
+                orders: updates
+            })
+        });
 
-    if ((await response.json()).success) {
-        loadRules(currentGroupId); // Reload to reflect changes
+        const result = await response.json();
+        if (result.success) {
+            showNotification('success', 'Ordinamento delle regole salvato.');
+            // We can optionally reload to be safe, but the local state should be correct.
+            loadRules(currentGroupId); 
+        } else {
+            showNotification('danger', `Errore durante il salvataggio dell'ordine: ${result.body.detail || 'Sconosciuto'}`);
+            // Fallback to reload from server on error
+            loadRules(currentGroupId);
+        }
+    } catch (e) {
+        showNotification('danger', `Errore di connessione: ${e.message}`);
+        loadRules(currentGroupId);
     }
 }
 
@@ -556,34 +574,3 @@ async function saveInstanceFirewallPolicy() {
         showNotification("danger", "Errore: Istanza non selezionata.");
         return;
     }
-
-    const defaultPolicy = document.getElementById("instance-firewall-default-policy").value;
-
-    try {
-        const response = await fetch(`${API_AJAX_HANDLER}`, { // Use API_AJAX_HANDLER
-            method: "POST", // ajax_handler.php expects POST for actions with body
-            headers: { 
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                action: "update_instance_firewall_policy", // Specify the action
-                instance_id: currentInstance.id,
-                default_policy: defaultPolicy
-            })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            showNotification("success", "Policy firewall istanza salvata con successo.");
-            // Update the currentInstance object with the new policy
-            currentInstance.firewall_default_policy = defaultPolicy;
-        } else {
-            showNotification("danger", "Errore salvataggio policy: " + (result.body.detail || "Sconosciuto"));
-        }
-    } catch (e) {
-        console.error("Error saving instance firewall policy:", e);
-        showNotification("danger", "Errore di rete durante il salvataggio della policy.");
-    }
-}
-
