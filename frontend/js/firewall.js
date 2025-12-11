@@ -2,6 +2,7 @@
 let allGroups = [];
 let currentGroupId = null;
 let availableClientData = []; // Store client info for selector
+let sortableGroupRulesInstance = null; // To hold the SortableJS instance for group rules
 
 // Unlike standalone, we wait for the main instance logic to initialize us or checking tab
 // But for simplicity, we can just expose loadGroups and call it when tab is shown, 
@@ -312,12 +313,46 @@ async function loadRules(groupId) {
         const result = await response.json();
 
         if (result.success) {
-            renderRules(result.body);
+            window.currentRules = result.body; // Store rules globally for this context
+            renderRules(window.currentRules);
+
+            // Initialize SortableJS
+            if (sortableGroupRulesInstance) {
+                sortableGroupRulesInstance.destroy();
+            }
+            sortableGroupRulesInstance = new Sortable(tbody, {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                handle: '.ti-grip-vertical',
+                filter: '.non-draggable-rule', // Add this line
+                onMove: function (evt) {
+                    // Prevent any item from being moved if the related element (the one it's trying to move over/next to) is the non-draggable rule
+                    if (evt.related.classList.contains('non-draggable-rule')) {
+                        return false;
+                    }
+                    // Also prevent the non-draggable rule itself from being moved if it somehow gets initiated
+                    if (evt.dragged.classList.contains('non-draggable-rule')) {
+                        return false;
+                    }
+                    return true; // Allow move otherwise
+                },
+                onEnd: function(evt) {
+                    // Get the moved item
+                    const movedItem = window.currentRules.splice(evt.oldIndex, 1)[0];
+                    // Insert it at the new index
+                    window.currentRules.splice(evt.newIndex, 0, movedItem);
+                    
+                    // The UI is already updated by SortableJS, we just need to save the new order.
+                    applyRuleOrder();
+                }
+            });
+            
         } else {
             tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Errore caricamento regole.</td></tr>';
         }
     } catch (e) {
         console.error(e);
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Errore di connessione.</td></tr>';
     }
 }
 
@@ -327,54 +362,98 @@ function renderRules(rules) {
 
     if (rules.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nessuna regola definita.</td></tr>';
-        return;
+        // DO NOT RETURN HERE - allow default policy row to be appended
+    } else {
+        rules.sort((a, b) => a.order - b.order);
+
+        rules.forEach((rule, index) => {
+            const tr = document.createElement('tr');
+            tr.dataset.id = rule.id;
+
+            let badgeClass = 'bg-secondary';
+            if (rule.action === 'ACCEPT') badgeClass = 'bg-success';
+            if (rule.action === 'DROP') badgeClass = 'bg-danger';
+
+            tr.innerHTML = `
+                <td class="w-1" style="cursor: grab;">
+                    <i class="ti ti-grip-vertical"></i>
+                </td>
+                <td><span class="badge ${badgeClass}">${rule.action}</span></td>
+                <td>${rule.protocol.toUpperCase()}</td>
+                <td><code>${rule.destination}</code></td>
+                <td>${rule.port || '*'}</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-ghost-primary" onclick="openEditRuleModal('${rule.id}')" title="Modifica">
+                        <i class="ti ti-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteRule('${rule.id}')" title="Elimina">
+                        <i class="ti ti-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
     }
 
-    rules.sort((a, b) => a.order - b.order);
+    // Always add a virtual rule for the instance's default firewall policy at the end
+    const trDefault = document.createElement('tr');
+    trDefault.className = 'table-secondary non-draggable-rule'; // Style to distinguish it and make non-draggable
+    
+    let defaultPolicyDisplay = 'N/A';
+    let defaultPolicyBadgeClass = 'bg-secondary';
+    let defaultPolicyTitle = 'Policy di default dell\'istanza (caricamento...)';
 
-    rules.forEach((rule, index) => {
-        const tr = document.createElement('tr');
+    if (currentInstance && currentInstance.firewall_default_policy) {
+        const defaultPolicy = currentInstance.firewall_default_policy.toUpperCase();
+        defaultPolicyDisplay = defaultPolicy;
+        if (defaultPolicy === 'ACCEPT') defaultPolicyBadgeClass = 'bg-success';
+        if (defaultPolicy === 'DROP') defaultPolicyBadgeClass = 'bg-danger';
+        defaultPolicyTitle = 'Regola di default dell\'istanza. Non modificabile qui.';
+    }
 
-        let badgeClass = 'bg-secondary';
-        if (rule.action === 'ACCEPT') badgeClass = 'bg-success';
-        if (rule.action === 'DROP') badgeClass = 'bg-danger';
-
-        tr.innerHTML = `
-            <td>
-                <div class="btn-group-vertical btn-group-sm">
-                    <button class="btn btn-icon" onclick="moveRule('${rule.id}', -1)" ${index === 0 ? 'disabled' : ''}>
-                        <i class="ti ti-chevron-up"></i>
-                    </button>
-                    <button class="btn btn-icon" onclick="moveRule('${rule.id}', 1)" ${index === rules.length - 1 ? 'disabled' : ''}>
-                        <i class="ti ti-chevron-down"></i>
-                    </button>
-                </div>
-            </td>
-            <td><span class="badge ${badgeClass}">${rule.action}</span></td>
-            <td>${rule.protocol.toUpperCase()}</td>
-            <td><code>${rule.destination}</code></td>
-            <td>${rule.port || '*'}</td>
-            <td class="text-end">
-                <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteRule('${rule.id}')">
-                    <i class="ti ti-trash"></i>
-                </button>
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
+    trDefault.innerHTML = `
+        <td></td>
+        <td><span class="badge ${defaultPolicyBadgeClass}">${defaultPolicyDisplay}</span></td>
+        <td>ANY</td>
+        <td><code>ANY</code></td>
+        <td>*</td>
+        <td class="text-end">
+            <span class="text-muted" title="${defaultPolicyTitle}">Default Instance Policy</span>
+        </td>
+    `;
+    tbody.appendChild(trDefault);
 
     // Store current rules to handle reordering logic locally before saving
+    // This needs to be after appending trDefault if trDefault is not part of sortable rules
+    // If trDefault is meant to be non-sortable, its append position is fine here.
     window.currentRules = rules;
 }
 
-function togglePortInput() {
-    const proto = document.getElementById('rule-proto').value;
-    const portContainer = document.getElementById('port-container');
-    if (proto === 'tcp' || proto === 'udp') {
+// Modified `togglePortInput` to accept a modalType
+function togglePortInput(protocol, modalType = 'add') {
+    let portContainerId;
+    let portInputId;
+
+    if (modalType === 'add') {
+        portContainerId = 'port-container';
+        portInputId = 'rule-port';
+    } else if (modalType === 'edit') {
+        portContainerId = 'edit-port-container';
+        portInputId = 'edit-rule-port';
+    } else {
+        return; // Invalid modalType
+    }
+
+    const portContainer = document.getElementById(portContainerId);
+    const portInput = document.getElementById(portInputId);
+
+    if (!portContainer) return;
+    
+    if (protocol === 'tcp' || protocol === 'udp') {
         portContainer.style.display = 'block';
     } else {
         portContainer.style.display = 'none';
-        document.getElementById('rule-port').value = '';
+        if (portInput) portInput.value = ''; // Clear value when hidden
     }
 }
 
@@ -469,9 +548,18 @@ async function createRule() {
     }
 }
 
-function openAddRuleModal() {
-    const modal = new bootstrap.Modal(document.getElementById('modal-add-rule'));
-    modal.show();
+// Renamed and modified `openAddRuleModal` for creating new rules
+function openCreateRuleModal() {
+    // Reset the form fields for a new rule
+    document.getElementById('rule-action').value = 'ACCEPT';
+    document.getElementById('rule-proto').value = 'tcp';
+    document.getElementById('rule-dest').value = '';
+    document.getElementById('rule-port').value = '';
+    document.getElementById('rule-desc').value = '';
+    // Ensure port input visibility is correct for default protocol
+    togglePortInput('tcp', 'add'); 
+
+    new bootstrap.Modal(document.getElementById('modal-add-rule')).show();
 }
 
 // New function to show the confirmation modal
@@ -518,36 +606,150 @@ async function performDeleteRule(ruleId) {
     }
 }
 
-async function moveRule(ruleId, direction) {
-    // Find current index
-    const index = window.currentRules.findIndex(r => r.id === ruleId);
-    if (index === -1) return;
+// Function to open the Edit Rule Modal and populate it
+function openEditRuleModal(ruleId) {
+    const rule = window.currentRules.find(r => r.id === ruleId);
+    if (!rule) {
+        showNotification('danger', 'Regola non trovata per la modifica.');
+        return;
+    }
+    
+    window.currentEditingRule = rule; // Store the rule being edited
 
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= window.currentRules.length) return;
+    // Populate the form fields
+    document.getElementById('rule-id').value = rule.id;
+    document.getElementById('edit-rule-action').value = rule.action;
+    document.getElementById('edit-rule-proto').value = rule.protocol;
+    document.getElementById('edit-rule-dest').value = rule.destination;
+    document.getElementById('edit-rule-port').value = rule.port || '';
+    document.getElementById('edit-rule-desc').value = rule.description || '';
 
-    // Swap order values
-    // Actually we just swap positions in array and reassign order = index
-    const rules = [...window.currentRules];
-    [rules[index], rules[newIndex]] = [rules[newIndex], rules[index]];
+    // Adjust port input visibility based on protocol
+    togglePortInput(rule.protocol, 'edit');
 
-    // Prepare update payload
-    const updates = rules.map((r, i) => ({
-        id: r.id,
-        order: i
+    new bootstrap.Modal(document.getElementById('modal-edit-rule')).show();
+}
+
+async function updateRule() {
+    const ruleId = document.getElementById('rule-id').value;
+    const action = document.getElementById('edit-rule-action').value;
+    const proto = document.getElementById('edit-rule-proto').value;
+    const destInput = document.getElementById('edit-rule-dest');
+    const portInput = document.getElementById('edit-rule-port');
+    const descInput = document.getElementById('rule-desc');
+
+    // --- VALIDATION ---
+    let isValid = true;
+    const dest = destInput.value.trim();
+    let port = portInput.value.trim(); // Use let to allow modification
+
+    // Reset validation
+    destInput.classList.remove('is-invalid');
+    portInput.classList.remove('is-invalid');
+
+    const cidrRegex = /^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$/;
+    const portRegex = /^\d{1,5}$/;
+    const portRangeRegex = /^\d{1,5}:\d{1,5}$/;
+
+    if (dest === '' || (!cidrRegex.test(dest) && dest.toLowerCase() !== 'any')) {
+        isValid = false;
+        destInput.classList.add('is-invalid');
+    }
+
+    if (port !== '' && (proto === 'tcp' || proto === 'udp')) {
+        if (portRegex.test(port)) {
+            const portNum = parseInt(port, 10);
+            if (portNum < 1 || portNum > 65535) {
+                isValid = false;
+                portInput.classList.add('is-invalid');
+            }
+        } else if (portRangeRegex.test(port)) {
+            const [start, end] = port.split(':').map(p => parseInt(p, 10));
+            if (start < 1 || start > 65535 || end < 1 || end > 65535 || start >= end) {
+                isValid = false;
+                portInput.classList.add('is-invalid');
+            }
+        } else {
+            isValid = false;
+            portInput.classList.add('is-invalid');
+        }
+    } else if (port !== '' && (proto !== 'tcp' && proto !== 'udp')) {
+        isValid = false;
+        portInput.classList.add('is-invalid');
+    }
+
+    if (!isValid) {
+        showNotification('danger', 'Uno o più campi della regola non sono validi.');
+        return;
+    }
+    // --- END VALIDATION ---
+
+    // Sanitize payload: ensure port is null for non-TCP/UDP protocols
+    if (proto !== 'tcp' && proto !== 'udp') {
+        port = null;
+    }
+
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'update_rule',
+                rule_id: ruleId,
+                group_id: currentGroupId, // Ensure group_id is sent
+                action_type: action, // Changed from 'action' to 'action_type' to avoid conflict with 'action' for API call
+                protocol: proto,
+                destination: dest,
+                port: port,
+                description: descInput.value
+            })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showNotification('success', 'Regola firewall aggiornata con successo.');
+            bootstrap.Modal.getInstance(document.getElementById('modal-edit-rule')).hide();
+            loadRules(currentGroupId);
+        } else {
+            showNotification('danger', 'Errore aggiornamento regola: ' + (result.body.detail || 'Sconosciuto'));
+        }
+    } catch (e) {
+        showNotification('danger', 'Errore di connessione: ' + e.message);
+    }
+}
+
+
+async function applyRuleOrder() {
+    if (!window.currentRules) return;
+
+    const updates = window.currentRules.map((rule, index) => ({
+        id: rule.id,
+        order: index
     }));
 
-    const response = await fetch(`${API_AJAX_HANDLER}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'reorder_rules',
-            orders: updates
-        })
-    });
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'reorder_rules',
+                orders: updates
+            })
+        });
 
-    if ((await response.json()).success) {
-        loadRules(currentGroupId); // Reload to reflect changes
+        const result = await response.json();
+        if (result.success) {
+            showNotification('success', 'Ordinamento delle regole salvato.');
+            // We can optionally reload to be safe, but the local state should be correct.
+            loadRules(currentGroupId); 
+        } else {
+            showNotification('danger', `Errore durante il salvataggio dell'ordine: ${result.body.detail || 'Sconosciuto'}`);
+            // Fallback to reload from server on error
+            loadRules(currentGroupId);
+        }
+    } catch (e) {
+        showNotification('danger', `Errore di connessione: ${e.message}`);
+        loadRules(currentGroupId);
     }
 }
 
@@ -557,33 +759,34 @@ async function saveInstanceFirewallPolicy() {
         return;
     }
 
-    const defaultPolicy = document.getElementById("instance-firewall-default-policy").value;
+    const policy = document.getElementById('instance-firewall-default-policy').value;
 
     try {
-        const response = await fetch(`${API_AJAX_HANDLER}`, { // Use API_AJAX_HANDLER
-            method: "POST", // ajax_handler.php expects POST for actions with body
-            headers: { 
-                "Content-Type": "application/json"
+        const response = await fetch(`${API_AJAX_HANDLER}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                action: "update_instance_firewall_policy", // Specify the action
+                action: 'update_instance_firewall_policy', // Action for ajax_handler.php
                 instance_id: currentInstance.id,
-                default_policy: defaultPolicy
+                default_policy: policy // Parameter name expected by backend
             })
         });
-
         const result = await response.json();
 
-        if (result.success) {
-            showNotification("success", "Policy firewall istanza salvata con successo.");
-            // Update the currentInstance object with the new policy
-            currentInstance.firewall_default_policy = defaultPolicy;
+        if (result.success) { // Check result.success from ajax_handler.php
+            showNotification('success', 'Policy firewall predefinita aggiornata con successo.');
+            // Update currentInstance object in JS to reflect the new policy
+            currentInstance.firewall_default_policy = policy;
+            // Re-render rules to reflect the change in default policy (especially the "virtual" default rule)
+            if (currentGroupId) { // Only reload if a group is currently selected
+                loadRules(currentGroupId);
+            }
         } else {
-            showNotification("danger", "Errore salvataggio policy: " + (result.body.detail || "Sconosciuto"));
+            showNotification('danger', 'Errore salvataggio policy: ' + (result.body.detail || 'Sconosciuto'));
         }
     } catch (e) {
-        console.error("Error saving instance firewall policy:", e);
-        showNotification("danger", "Errore di rete durante il salvataggio della policy.");
+        showNotification('danger', 'Errore di connessione: ' + e.message);
     }
 }
-

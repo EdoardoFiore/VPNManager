@@ -1,9 +1,8 @@
-// machine_settings.js
-
 // State variables
 let machineFirewallRules = [];
 let networkInterfaces = [];
 let currentEditingInterface = null; // Stores the interface being edited
+let sortableInstance = null; // To hold the SortableJS instance
 
 const chainOptionsMap = {
     filter: ['INPUT', 'OUTPUT', 'FORWARD'],
@@ -153,6 +152,34 @@ async function loadMachineFirewallRules() {
         if (result.success) {
             machineFirewallRules = result.body;
             renderMachineFirewallRules();
+            
+            // Initialize SortableJS after rendering the table
+            if (sortableInstance) {
+                sortableInstance.destroy();
+            }
+            sortableInstance = new Sortable(tbody, {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                handle: '.ti-grip-vertical',
+                onEnd: function(evt) {
+                    // Get the moved item
+                    const movedItem = machineFirewallRules.splice(evt.oldIndex, 1)[0];
+                    // Insert it at the new index
+                    machineFirewallRules.splice(evt.newIndex, 0, movedItem);
+
+                    // Re-assign order based on the new array index
+                    machineFirewallRules.forEach((rule, index) => {
+                        rule.order = index;
+                    });
+                    
+                    // The UI is already updated by SortableJS, but we can re-render to be safe
+                    renderMachineFirewallRules();
+                    
+                    // Save the new order to the backend
+                    applyMachineFirewallRules();
+                }
+            });
+
         } else {
             showNotification('danger', 'Errore caricamento regole firewall macchina: ' + (result.body.detail || 'Sconosciuto'));
             tbody.innerHTML = '<tr><td colspan="12" class="text-center text-danger">Errore caricamento regole.</td></tr>';
@@ -176,6 +203,7 @@ function renderMachineFirewallRules() {
 
     machineFirewallRules.forEach((rule, index) => {
         const tr = document.createElement('tr');
+        tr.setAttribute('data-id', rule.id); // Add data-id for SortableJS
 
         let badgeClass = 'bg-secondary';
         if (rule.action === 'ACCEPT') badgeClass = 'bg-success';
@@ -184,15 +212,8 @@ function renderMachineFirewallRules() {
         if (rule.action === 'MASQUERADE') badgeClass = 'bg-info';
 
         tr.innerHTML = `
-            <td>
-                <div class="btn-group-vertical btn-group-sm">
-                    <button class="btn btn-icon" onclick="moveMachineRule('${rule.id}', -1)" ${index === 0 ? 'disabled' : ''}>
-                        <i class="ti ti-chevron-up"></i>
-                    </button>
-                    <button class="btn btn-icon" onclick="moveMachineRule('${rule.id}', 1)" ${index === machineFirewallRules.length - 1 ? 'disabled' : ''}>
-                        <i class="ti ti-chevron-down"></i>
-                    </button>
-                </div>
+            <td class="w-1" style="cursor: grab;">
+                <i class="ti ti-grip-vertical"></i>
             </td>
             <td><span class="badge ${badgeClass}">${rule.action}</span></td>
             <td>${rule.table}</td>
@@ -302,26 +323,6 @@ async function performDeleteMachineRule(ruleId) {
     } catch (e) {
         showNotification('danger', 'Errore di connessione: ' + e.message);
     }
-}
-
-async function moveMachineRule(ruleId, direction) {
-    const index = machineFirewallRules.findIndex(r => r.id === ruleId);
-    if (index === -1) return;
-
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= machineFirewallRules.length) return;
-
-    // Swap the actual elements in the array
-    [machineFirewallRules[index], machineFirewallRules[newIndex]] = [machineFirewallRules[newIndex], machineFirewallRules[index]];
-
-    // Re-assign all order numbers based on the new array positions
-    machineFirewallRules.forEach((rule, i) => {
-        rule.order = i;
-    });
-
-    // Now the local state is correct. Re-render and tell the backend.
-    renderMachineFirewallRules();
-    await applyMachineFirewallRules();
 }
 
 async function applyMachineFirewallRules() {

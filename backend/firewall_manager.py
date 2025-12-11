@@ -249,6 +249,31 @@ def update_rule_order(rule_orders: List[Dict[str, int]]):
     _save_rules(rules)
     apply_firewall_rules()
 
+def update_rule(rule_id: str, group_id: str, action: str, protocol: str, destination: str, port: Optional[str] = None, description: str = "") -> Rule:
+    rules = _load_rules()
+    rule_to_update = next((r for r in rules if r.id == rule_id and r.group_id == group_id), None)
+
+    if not rule_to_update:
+        raise ValueError(f"Rule with ID {rule_id} not found in group {group_id}")
+
+    # Update fields
+    rule_to_update.action = action
+    rule_to_update.protocol = protocol
+    rule_to_update.destination = destination
+    rule_to_update.port = port
+    rule_to_update.description = description
+    
+    # Re-validate the updated rule (especially port based on protocol)
+    try:
+        updated_rule_data = rule_to_update.dict()
+        validated_rule = Rule(**updated_rule_data) # This will run validators
+    except ValueError as e:
+        raise ValueError(f"Invalid rule data after update: {e}")
+
+    _save_rules(rules)
+    apply_firewall_rules()
+    return validated_rule
+
 def get_rules(group_id: Optional[str] = None) -> List[Rule]:
     rules = _load_rules()
     if group_id:
@@ -298,7 +323,7 @@ def apply_firewall_rules():
     # 4. Re-create all chains
     logger.info("Creating new chains...")
     for chain in all_chains:
-        _run_iptables(["iptables", "-N", chain])
+        _run_iptables(["iptables", "-N", chain], suppress_errors=True)
         
     # 5. Ensure main jump from FORWARD chain exists and is at the top
     # Check if rule exists
@@ -334,14 +359,15 @@ def apply_firewall_rules():
         group_chain_name = f"VIG_{group.id}"
         group_rules = sorted([r for r in rules if r.group_id == group.id], key=lambda x: x.order)
         
-        for rule in group_rules:
+        # Insert rules in reverse order with -I to maintain the correct sequence
+        for rule in reversed(group_rules):
             # A member's packet only reaches this chain if it's from that member.
             # So, we only need to specify destination, proto, port.
             proto_arg = f"-p {rule.protocol}" if rule.protocol != "all" else ""
             port_arg = f"--dport {rule.port}" if rule.port and rule.protocol in ["tcp", "udp"] else ""
             dest_arg = f"-d {rule.destination}" if rule.destination and rule.destination != "0.0.0.0/0" else ""
             
-            cmd = ["iptables", "-A", group_chain_name]
+            cmd = ["iptables", "-I", group_chain_name] # Use -I to insert at the top
             if proto_arg: cmd.extend(proto_arg.split())
             if port_arg: cmd.extend(port_arg.split())
             if dest_arg: cmd.extend(dest_arg.split())
