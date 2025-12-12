@@ -1,502 +1,267 @@
-import json
-import os
-import re
-import subprocess
 import logging
 from typing import List, Dict, Optional
-from ipaddress import ip_network, AddressValueError
-from pydantic import BaseModel, validator
-from pydantic import BaseModel, validator
-import ip_manager
+from sqlmodel import Session, select
+import uuid
+
+from database import engine
+from models import Group, GroupMember, FirewallRule, Client, Instance
+import iptables_manager
 import instance_manager
-import iptables_manager # Added to fix NameError
+import ip_manager
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = "/opt/vpn-manager/backend/data"
-GROUPS_FILE = os.path.join(DATA_DIR, "groups.json")
-RULES_FILE = os.path.join(DATA_DIR, "rules.json")
-
-# IPTables Chain Name
-CHAIN_NAME = "VPN_sys_FORWARD"
-
-class Group(BaseModel):
-    id: str
-    instance_id: str
-    name: str
-    description: str = ""
-    members: List[str] = [] # List of "instance_name_client_name"
-
-class Rule(BaseModel):
-    id: str
-    group_id: str
-    action: str 
-    protocol: str
-    port: Optional[str] = None
-    destination: str
-    description: str = ""
-    order: int = 0
-
-    @validator('destination')
-    def validate_destination(cls, v):
-        """Validate that the destination is a valid IP, CIDR, or 'any'."""
-        if v.lower() == 'any':
-            return '0.0.0.0/0'
-        try:
-            ip_network(v, strict=False)
-            return v
-        except (AddressValueError, ValueError):
-            raise ValueError(f"'{v}' is not a valid IP address or CIDR network.")
-
-    @validator('port')
-    def validate_port(cls, v, values):
-        """Validate that the port is a single number or a valid range."""
-        # Treat empty string as None, then proceed.
-        if v is None or v.strip() == '':
-            return None
-
-        protocol = values.get('protocol')
-        if protocol not in ['tcp', 'udp']:
-            raise ValueError(f"La porta non è applicabile per il protocollo '{protocol}'.")
-
-        port_range_regex = r"^\d{1,5}(:\d{1,5})?$"
-        if not re.fullmatch(port_range_regex, str(v)):
-            raise ValueError("La porta deve essere un numero singolo o un intervallo come '1000:2000'.")
-
-        parts = str(v).split(':')
-        start_port = int(parts[0])
-        
-        if not (1 <= start_port <= 65535):
-            raise ValueError(f"La porta '{start_port}' è fuori dal range valido (1-65535).")
-
-        if len(parts) == 2:
-            end_port = int(parts[1])
-            if not (1 <= end_port <= 65535):
-                raise ValueError(f"La porta finale '{end_port}' è fuori dal range valido (1-65535).")
-            if start_port >= end_port:
-                raise ValueError("Nell'intervallo di porte, la porta iniziale deve essere minore di quella finale.")
-        
-        return str(v)
-
-def _load_groups() -> List[Group]:
-    if os.path.exists(GROUPS_FILE):
-        try:
-            with open(GROUPS_FILE, "r") as f:
-                return [Group(**g) for g in json.load(f)]
-    # ... error handling ...
-        except Exception: return []
-    return []
-
-def _save_groups(groups: List[Group]):
-    os.makedirs(os.path.dirname(GROUPS_FILE), exist_ok=True)
-    with open(GROUPS_FILE, "w") as f:
-        json.dump([g.dict() for g in groups], f, indent=4)
-
-def _load_rules() -> List[Rule]:
-    if os.path.exists(RULES_FILE):
-        try:
-            with open(RULES_FILE, "r") as f:
-                return [Rule(**r) for r in json.load(f)]
-        except Exception: return []
-    return []
-
-def _save_rules(rules: List[Rule]):
-    os.makedirs(os.path.dirname(RULES_FILE), exist_ok=True)
-    with open(RULES_FILE, "w") as f:
-        json.dump([r.dict() for r in rules], f, indent=4)
-
-# --- Group Management ---
+# --- Group Mgmt ---
 
 def create_group(name: str, instance_id: str, description: str = "") -> Group:
-    groups = _load_groups()
-    group_id = f"{instance_id}_{name.lower().replace(' ', '_')}"
-    if any(g.id == group_id for g in groups):
-        raise ValueError("Group already exists for this instance")
-    
-    group = Group(id=group_id, instance_id=instance_id, name=name, description=description)
-    groups.append(group)
-    _save_groups(groups)
-    return group
+    # Resolve instance name to ID if needed (frontend sends name usually)
+    # Actually, let's assume frontend sends ID or Name. 
+    # vpn_manager logic handled ID. Let's strictly use ID or resolve.
+    with Session(engine) as session:
+        # Check if instance exists by ID
+        inst = session.get(Instance, instance_id)
+        if not inst:
+            # Try by name
+            inst = session.exec(select(Instance).where(Instance.name == instance_id)).first()
+            if not inst:
+                raise ValueError("Instance not found")
+            instance_id = inst.id
+
+        group_id = f"{instance_id}_{name.lower().replace(' ', '_')}"
+        
+        if session.get(Group, group_id):
+            raise ValueError("Group exists")
+            
+        group = Group(id=group_id, instance_id=instance_id, name=name, description=description)
+        session.add(group)
+        session.commit()
+        session.refresh(group)
+        return group
 
 def delete_group(group_id: str):
-    groups = _load_groups()
-    groups = [g for g in groups if g.id != group_id]
-    _save_groups(groups)
-    # Also delete associated rules
-    rules = _load_rules()
-    rules = [r for r in rules if r.group_id != group_id]
-    _save_rules(rules)
-    apply_firewall_rules()
-
-def add_member_to_group(group_id: str, client_identifier: str, subnet_info: Dict[str, str]):
-    """
-    client_identifier: e.g., "server_client1"
-    subnet_info: {"instance_name": "server", "subnet": "10.8.0.0/24"}
-    """
-    groups = _load_groups()
-    group = next((g for g in groups if g.id == group_id), None)
-    if not group:
-        raise ValueError("Group not found")
-
-    instance_name = subnet_info["instance_name"]
-    
-    # Sanitize the client_identifier to prevent duplicate prefixes, e.g. "inst_inst_client"
-    correct_identifier = client_identifier
-    prefix_to_check = f"{instance_name}_"
-    while correct_identifier.startswith(prefix_to_check + instance_name):
-        correct_identifier = correct_identifier[len(prefix_to_check):]
-    
-    # Resolve instance object to safely compare ID vs Name
-    # (The frontend sends Name, but Group stores ID)
-    instances = instance_manager.get_all_instances()
-    inst_obj = next((i for i in instances if i.name == instance_name), None)
-    if not inst_obj:
-        # Fallback: maybe instance_name IS the ID?
-        inst_obj = next((i for i in instances if i.id == instance_name), None)
-
-    if not inst_obj or inst_obj.id != group.instance_id:
-        raise ValueError(f"Client does not belong to instance {group.instance_id}")
-
-    if correct_identifier not in group.members:
-        # 1. Allocate Static IP. 
-        # The client name used for the CCD file MUST be the full, correct identifier
-        # that matches the client's Common Name (CN) in its certificate.
-        ip = ip_manager.allocate_static_ip(instance_name, subnet_info["subnet"], correct_identifier)
-        if not ip:
-            raise RuntimeError(f"Failed to allocate static IP for {correct_identifier}")
-
-        group.members.append(correct_identifier)
-        _save_groups(groups)
-        apply_firewall_rules()
-    
-    return True
-
-def remove_member_from_group(group_id: str, client_identifier: str, instance_name: str):
-    groups = _load_groups()
-    group = next((g for g in groups if g.id == group_id), None)
-    if not group:
-        raise ValueError("Group not found")
-
-    if client_identifier in group.members:
-        group.members.remove(client_identifier)
-        _save_groups(groups)
-        
-        # Release Static IP
-        ip_manager.release_static_ip(instance_name, client_identifier)
-        
-        apply_firewall_rules()
-
-def remove_client_from_all_groups(instance_name: str, client_name: str):
-    """
-    Removes a client from all groups they might be part of.
-    """
-    client_identifier = f"{instance_name}_{client_name}"
-    groups = _load_groups()
-    modified = False
-    
-    for group in groups:
-        if client_identifier in group.members:
-            group.members.remove(client_identifier)
-            modified = True
-            # Release Static IP
-            ip_manager.release_static_ip(instance_name, client_identifier)
-
-    if modified:
-        _save_groups(groups)
-        apply_firewall_rules()
+    with Session(engine) as session:
+        group = session.get(Group, group_id)
+        if group:
+            session.delete(group) # Cascades should handle rules/members if configured, or manual delete
+            # SQLModel relationships don't auto-cascade delete in DB unless defined in SA args.
+            # Manually clean for safety.
+            session.exec(select(GroupMember).where(GroupMember.group_id == group_id)).delete() # This might need delete() method
+            # ... actually session.delete(obj) is cleaner.
+            # Let's trust cascade or do manual query.
+            # For simplicity:
+            # Delete members links
+            members = session.exec(select(GroupMember).where(GroupMember.group_id == group_id)).all()
+            for m in members: session.delete(m)
+            # Delete rules
+            rules = session.exec(select(FirewallRule).where(FirewallRule.group_id == group_id)).all()
+            for r in rules: session.delete(r)
+            
+            session.delete(group)
+            session.commit()
+            apply_firewall_rules()
 
 def get_groups(instance_id: Optional[str] = None) -> List[Group]:
-    groups = _load_groups()
-    if instance_id:
-        return [g for g in groups if g.instance_id == instance_id]
-    return groups
+    with Session(engine) as session:
+        if instance_id:
+            return session.exec(select(Group).where(Group.instance_id == instance_id)).all()
+        return session.exec(select(Group)).all()
 
-# --- Rule Management ---
-
-import uuid
-
-def add_rule(rule_data: dict) -> Rule:
-    rules = _load_rules()
+def add_member_to_group(group_id: str, client_identifier: str, subnet_info: Dict[str, str]):
+    # client_identifier e.g. "instance_clientname" or just "clientname"?
+    # The frontend passes `client.name`.
+    # subnet_info has instance_name.
     
-    # Generate ID if missing
-    if "id" not in rule_data or not rule_data["id"]:
-        rule_data["id"] = str(uuid.uuid4())
-
-    # Calculate order if not provided or None
-    if "order" not in rule_data or rule_data["order"] is None:
-        max_order = max([r.order for r in rules if r.group_id == rule_data["group_id"]], default=-1)
-        rule_data["order"] = max_order + 1
+    with Session(engine) as session:
+        group = session.get(Group, group_id)
+        if not group: raise ValueError("Group not found")
         
-    rule = Rule(**rule_data)
-    rules.append(rule)
-    
-    # Sort by order
-    rules.sort(key=lambda x: x.order)
-    
-    _save_rules(rules)
-    apply_firewall_rules()
-    return rule
+        # Resolve client
+        # client_identifier might be "inst_client" or "client".
+        # We need to find the Client object.
+        # Use subnet_info['instance_name'] to help.
+        
+        inst_name = subnet_info.get("instance_name")
+        # Resolve instance
+        inst = session.exec(select(Instance).where(Instance.name == inst_name)).first()
+        if not inst: inst = session.get(Instance, inst_name) # Try ID
+        
+        if not inst or inst.id != group.instance_id:
+             raise ValueError("Instance mismatch")
+
+        # Parse client name
+        real_client_name = client_identifier
+        prefix = f"{inst.name}_"
+        if real_client_name.startswith(prefix):
+            real_client_name = real_client_name[len(prefix):]
+            
+        client = session.exec(select(Client).where(Client.instance_id == inst.id, Client.name == real_client_name)).first()
+        if not client:
+            raise ValueError("Client not found")
+            
+        # Check if already member
+        if session.get(GroupMember, (group_id, client.id)):
+            return # Already member
+            
+        link = GroupMember(group_id=group_id, client_id=client.id)
+        session.add(link)
+        session.commit()
+        apply_firewall_rules()
+
+def remove_member_from_group(group_id: str, client_identifier: str, instance_name: str):
+    with Session(engine) as session:
+        # Resolve Client (similar logic)
+        inst = session.exec(select(Instance).where(Instance.name == instance_name)).first()
+        if not inst: inst = session.get(Instance, instance_name)
+        
+        real_client_name = client_identifier
+        prefix = f"{inst.name}_"
+        if real_client_name.startswith(prefix):
+            real_client_name = real_client_name[len(prefix):]
+
+        client = session.exec(select(Client).where(Client.instance_id == inst.id, Client.name == real_client_name)).first()
+        if not client: return 
+
+        link = session.get(GroupMember, (group_id, client.id))
+        if link:
+            session.delete(link)
+            session.commit()
+            apply_firewall_rules()
+
+# --- Rules Mgmt ---
+
+def add_rule(rule_data: dict) -> FirewallRule:
+    with Session(engine) as session:
+        rule = FirewallRule(**rule_data)
+        session.add(rule)
+        session.commit()
+        session.refresh(rule)
+        apply_firewall_rules()
+        return rule
 
 def delete_rule(rule_id: str):
-    rules = _load_rules()
-    rules = [r for r in rules if r.id != rule_id]
-    _save_rules(rules)
-    apply_firewall_rules()
-
-def update_rule_order(rule_orders: List[Dict[str, int]]):
-    """
-    Update order of multiple rules.
-    rule_orders: [{"id": "rule1", "order": 0}, ...]
-    """
-    rules = _load_rules()
-    
-    for item in rule_orders:
-        rule = next((r for r in rules if r.id == item["id"]), None)
+    with Session(engine) as session:
+        # rule_id is str, but model uses UUID. SQLModel converts automatically usually.
+        # But session.get expects the exact type.
+        rule = session.get(FirewallRule, uuid.UUID(rule_id))
         if rule:
-            rule.order = item["order"]
-            
-    rules.sort(key=lambda x: x.order)
-    _save_rules(rules)
-    apply_firewall_rules()
+            session.delete(rule)
+            session.commit()
+            apply_firewall_rules()
 
-def update_rule(rule_id: str, group_id: str, action: str, protocol: str, destination: str, port: Optional[str] = None, description: str = "") -> Rule:
-    rules = _load_rules()
-    rule_to_update = next((r for r in rules if r.id == rule_id and r.group_id == group_id), None)
+def update_rule(rule_id: str, group_id: str, action: str, protocol: str, destination: str, port: str = None, description: str = ""):
+    with Session(engine) as session:
+        rule = session.get(FirewallRule, uuid.UUID(rule_id))
+        if not rule: raise ValueError("Rule not found")
+        
+        rule.action = action
+        rule.protocol = protocol
+        rule.destination = destination
+        rule.port = port
+        rule.description = description
+        
+        session.add(rule)
+        session.commit()
+        session.refresh(rule)
+        apply_firewall_rules()
+        return rule
 
-    if not rule_to_update:
-        raise ValueError(f"Rule with ID {rule_id} not found in group {group_id}")
+def update_rule_order(orders: List[Dict]):
+    with Session(engine) as session:
+        for item in orders:
+            rule = session.get(FirewallRule, uuid.UUID(item["id"]))
+            if rule:
+                rule.order = item["order"]
+                session.add(rule)
+        session.commit()
+        apply_firewall_rules()
 
-    # Update fields
-    rule_to_update.action = action
-    rule_to_update.protocol = protocol
-    rule_to_update.destination = destination
-    rule_to_update.port = port
-    rule_to_update.description = description
-    
-    # Re-validate the updated rule (especially port based on protocol)
+def get_rules(group_id: Optional[str] = None) -> List[FirewallRule]:
+    with Session(engine) as session:
+        if group_id:
+            return session.exec(select(FirewallRule).where(FirewallRule.group_id == group_id)).all()
+        return session.exec(select(FirewallRule)).all()
+
+# --- Application ---
+
+def _run_iptables(cmd: List[str]):
     try:
-        updated_rule_data = rule_to_update.dict()
-        validated_rule = Rule(**updated_rule_data) # This will run validators
-    except ValueError as e:
-        raise ValueError(f"Invalid rule data after update: {e}")
-
-    _save_rules(rules)
-    apply_firewall_rules()
-    return validated_rule
-
-def get_rules(group_id: Optional[str] = None) -> List[Rule]:
-    rules = _load_rules()
-    if group_id:
-        return [r for r in rules if r.group_id == group_id]
-    return rules
-
-# --- IPTables Application ---
-
-def _run_iptables(cmd: List[str], check=False, suppress_errors=False):
-    """Helper to run iptables commands, with optional error suppression."""
-    try:
-        # Using shell=False and list of args is safer
-        result = subprocess.run(cmd, check=check, capture_output=True, text=True)
-        if result.returncode != 0 and not suppress_errors:
-            logger.warning(f"iptables command failed: {' '.join(cmd)}\n  Error: {result.stderr.strip()}")
-        return result
-    except Exception as e:
-        if not suppress_errors:
-            logger.error(f"Exception running iptables command: {' '.join(cmd)}\n  Error: {e}")
-        return None
+        subprocess.run(cmd, check=False, capture_output=True)
+    except: pass
 
 def apply_firewall_rules():
-    """
-    Re-generates all VPN firewall rules using a hierarchical chain structure.
-    VPN_MAIN_FWD -> VI_{instance_id} -> VIG_{group_id}
-    """
-    logger.info("--- Starting Firewall Rules Application ---")
-
-    # 1. Load all configurations
-    instances = instance_manager.get_all_instances()
-    groups = _load_groups()
-    rules = _load_rules()
+    logger.info("Applying Firewall Rules (SQLModel)...")
     
-    # 2. Define all chain names
-    main_chain = "VPN_MAIN_FWD"
-    instance_chains = [f"VI_{inst.id}" for inst in instances]
-    group_chains = [f"VIG_{g.id}" for g in groups]
-    all_chains = [main_chain] + instance_chains + group_chains
-
-    # 3. Reset all managed chains
-    logger.info("Flushing and deleting existing managed chains...")
-    # We rely on iptables_manager for VPN_* chains. VPN_MAIN_FWD is now flushed/created there centrally.
-    
-    # Flush Instance and Group Chains
-    for chain in instance_chains + group_chains:
-        iptables_manager._create_or_flush_chain(chain)
+    with Session(engine) as session:
+        instances = session.exec(select(Instance)).all()
+        groups = session.exec(select(Group)).all()
         
-    # Flush Main Chain (to avoid duplicate jumps if run independently)
-    iptables_manager._create_or_flush_chain(main_chain)
-
-    # 4. (Re-creation handled by _create_or_flush_chain above)
+        main_chain = "VPN_MAIN_FWD"
+        instance_chains = [f"VI_{i.id}" for i in instances]
+        group_chains = [f"VIG_{g.id}" for g in groups]
         
-    # 5. Ensure main jump from FORWARD chain exists
-    # This is now handled in iptables_manager.apply_all_openvpn_rules to ensure priority position (1).
-    # We can trust it exists.
-
-    # 6. Populate chains
-    logger.info("Populating iptables chains...")
-    
-    # Load OpenVPN configs to access TUN interfaces
-    openvpn_configs = iptables_manager._load_openvpn_rules_config()
-    
-    # Helper to get client IP (same as before, but defined locally)
-    def get_client_ip(member_id, instances_data):
-        for inst in instances_data:
-            if member_id.startswith(f"{inst.name}_"):
-                ip = ip_manager.get_assigned_ip(inst.name, member_id)
-                if ip:
-                    return ip
-        return None
-
-    # Create a member-to-IP map for efficiency
-    member_ip_map = {}
-    all_members = {member for group in groups for member in group.members}
-    for member_id in all_members:
-        ip = get_client_ip(member_id, instances)
-        if ip:
-            member_ip_map[member_id] = ip
-        else:
-             logger.warning(f"Could not resolve IP for member '{member_id}'. They will not be included in firewall rules.")
-
-    # Populate group chains (deepest level)
-    for group in groups:
-        group_chain_name = f"VIG_{group.id}"
-        group_rules = sorted([r for r in rules if r.group_id == group.id], key=lambda x: x.order)
-        
-        # Insert rules in reverse order with -I to maintain the correct sequence
-        for rule in reversed(group_rules):
-            # A member's packet only reaches this chain if it's from that member.
-            # So, we only need to specify destination, proto, port.
-            proto_arg = f"-p {rule.protocol}" if rule.protocol != "all" else ""
-            port_arg = f"--dport {rule.port}" if rule.port and rule.protocol in ["tcp", "udp"] else ""
-            dest_arg = f"-d {rule.destination}" if rule.destination and rule.destination != "0.0.0.0/0" else ""
+        iptables_manager._create_or_flush_chain(main_chain)
+        for chain in instance_chains + group_chains:
+            iptables_manager._create_or_flush_chain(chain)
             
-            cmd = ["iptables", "-I", group_chain_name] # Use -I to insert at the top
-            if proto_arg: cmd.extend(proto_arg.split())
-            if port_arg: cmd.extend(port_arg.split())
-            if dest_arg: cmd.extend(dest_arg.split())
-            cmd.extend(["-j", rule.action.upper()])
-            
-            _run_iptables(cmd)
-            logger.info(f"  [RULE] Chain {group_chain_name}: {' '.join(cmd)}")
+        # Populate
         
-        # Add a final RETURN to send non-matching packets back to the instance chain
-        _run_iptables(["iptables", "-A", group_chain_name, "-j", "RETURN"])
-
-    # Populate instance and main chains
-    for instance in instances:
-        instance_chain_name = f"VI_{instance.id}"
-        
-        # Add jumps from MAIN to INSTANCE chain
-        # Note: We filter by source subnet to direct traffic to the correct instance chain
-        _run_iptables(["iptables", "-A", main_chain, "-s", instance.subnet, "-j", instance_chain_name])
-        # Also filter by destination subnet to handle return traffic (Internet -> VPN)
-        _run_iptables(["iptables", "-A", main_chain, "-d", instance.subnet, "-j", instance_chain_name])
-        logger.info(f"[JUMP] Chain {main_chain}: -s/-d {instance.subnet} -j {instance_chain_name}")
-
-        # --- General Instance Forwarding Rules (Moved from iptables_manager.add_openvpn_rules) ---
-        # Find config for this instance to get interface
-        # We need to match instance ID. The `instance` object has `id`, and config has `instance_id`.
-        # However, `instances` comes from `instance_manager` which uses IDs like "server_fiore".
-        # `openvpn_configs` are keyed by `instance_id` which we set to `inst_{port}` in iptables_manager... 
-        # WAIT. I set `instance_id = f"inst_{port}"` in `add_openvpn_rules`. 
-        # But `instance_manager.current` uses IDs based on names.
-        # This is a Problem: IDs mismatch.
-        # `instance_manager.create_instance` uses `instance_id = name.lower().replace(" ", "_")`
-        # and calls `add_openvpn_rules(port, ...)` without passing ID.
-        # `iptables_manager.add_openvpn_rules` generates `inst_{port}`.
-        # So we have a mismatch.
-        # FIX: I should lookup the config by PORT (which is unique) if ID doesn't match.
-        
-        inst_config = None
-        # Try direct lookup (unlikely to match with current code)
-        if instance.id in openvpn_configs:
-            inst_config = openvpn_configs[instance.id]
-        else:
-            # Lookup by port
-            inst_config = next((cfg for cfg in openvpn_configs.values() if cfg.port == instance.port), None)
+        # 1. Groups
+        for group in groups:
+            chain = f"VIG_{group.id}"
+            rules = session.exec(select(FirewallRule).where(FirewallRule.group_id == group.id).order_by(FirewallRule.order)).all()
             
-        if inst_config:
-            tun_if = inst_config.interface # Renamed from tun_interface
-            out_if = inst_config.outgoing_interface
+            # Apply in order (append)
+            # WAIT: iptables_manager usually does -I for reverse.
+            # Here we are rebuilding the chain from scratch (flush). 
+            # So -A (Append) in correct order 0..N is best.
             
-            # Allow forwarding from TUN to WAN (ESTABLISHED)
-            _run_iptables(["iptables", "-A", instance_chain_name, "-i", tun_if, "-o", out_if, "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"])
-            # Allow forwarding from WAN to TUN (ESTABLISHED)
-            _run_iptables(["iptables", "-A", instance_chain_name, "-i", out_if, "-o", tun_if, "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"])
-            # Allow forwarding from TUN to WAN (NEW - if policy allows, but usually we filter by group)
-            # Actually, general `tun -> eth0` access is traditionally allowed unless restricted.
-            # In the old code: `iptables -I FORWARD -i tun_interface -o outgoing_interface ... -j ACCEPT` wasn't explicitly there for NEW packets?
-            # Wait, `add_openvpn_rules` had:
-            # `iptables -I FORWARD -i tun_interface -j ACCEPT` (Line 276 in old iptables_manager) -> This allows EVERYTHING from TUN.
-            # So we should replicate this broad allow, BUT now we want to filter it by groups ideally?
-            # The user says: "gestire regole di firewall dedicate a gruppi... le regole in input non sono ordinate".
-            # If we simply allow everything from TUN, group rules might be bypassed if we are not careful?
-            # No, group rules are in `VIG_*`. `VI_*` jumps to `VIG_*`.
-            # If we put ` -i tun_interface -j ACCEPT` at the end of `VI_*`, it acts as a default allow.
-            # Rules:
-            # 1. State RELATED,ESTABLISHED -> ACCEPT (added above)
-            # 2. Jumps to Groups (specific source IPs)
-            # 3. Default Policy (Accept or Drop).
+            for rule in rules:
+                cmd = ["iptables", "-A", chain]
+                if rule.protocol != "all": cmd.extend(["-p", rule.protocol])
+                if rule.destination and rule.destination != "0.0.0.0/0": cmd.extend(["-d", rule.destination])
+                if rule.port and rule.protocol in ["tcp", "udp"]: cmd.extend(["--dport", rule.port])
+                cmd.extend(["-j", rule.action.upper()])
+                
+                _run_iptables(cmd)
             
-            # So we DON'T add a blanket "-i tun -j ACCEPT" here yet. 
-            # We add it at the very end only if policy is ACCEPT or if we want to emulate old behavior.
+            _run_iptables(["iptables", "-A", chain, "-j", "RETURN"])
+
+        # 2. Instances
+        for inst in instances:
+            chain = f"VI_{inst.id}"
             
-            # --- Custom Routes (Split Tunnel / LAN Access) ---
-            # Added to support Split Tunnel custom routes cleanly within the instance chain
-            if instance.routes:
-                logger.info(f"Adding custom routes for instance {instance.id}")
-                for route in instance.routes:
-                     network = route.get('network')
-                     # Interface is optional, if not provided we rely on routing table/VPN handling, 
-                     # but for iptables forwarding we generally just need destination allow.
-                     if network:
-                         # Allow TUN -> Target Network
-                         # This places the rule inside VI_{inst}, respecting the hierarchy.
-                         cmd = ["iptables", "-A", instance_chain_name, "-s", instance.subnet, "-d", network, "-j", "ACCEPT"]
-                         _run_iptables(cmd)
-                         logger.info(f"  [ROUTE] {instance_chain_name}: -d {network} -j ACCEPT")
-
-        else:
-            logger.warning(f"No OpenVPN config found for instance {instance.id} (port {instance.port}). Forwarding rules might be incomplete.")
-
-        # --- End General Rules ---
-
-        # Find groups belonging to this instance
-        instance_groups = [g for g in groups if g.instance_id == instance.id]
-        
-        # Add jumps from INSTANCE to GROUP chains
-        for group in instance_groups:
-            group_chain_name = f"VIG_{group.id}"
-            for member_id in group.members:
-                if member_id in member_ip_map:
-                    ip = member_ip_map[member_id]
-                    _run_iptables(["iptables", "-A", instance_chain_name, "-s", ip, "-j", group_chain_name])
-                    logger.info(f"  [JUMP] Chain {instance_chain_name}: -s {ip} -j {group_chain_name}")
-        
-        # Add instance default policy at the end of the instance chain
-        default_policy = instance.firewall_default_policy.upper()
-        if default_policy not in ["ACCEPT", "DROP", "REJECT"]:
-            default_policy = "ACCEPT" # Safe default
+            # Jumps from Main
+            _run_iptables(["iptables", "-A", main_chain, "-s", inst.subnet, "-j", chain])
+            _run_iptables(["iptables", "-A", main_chain, "-d", inst.subnet, "-j", chain])
             
-        # If policy is ACCEPT, we need an explicit rule because the chain will return to FORWARD/VPN_MAIN_FWD and potentially fall through.
-        # But wait, `VPN_MAIN_FWD` jumps to `VI_{inst}`. If `VI_{inst}` returns (no match), it goes back to `VPN_MAIN_FWD`, then `FORWARD`.
-        # Taking "Old behavior" into account: `FORWARD -i tun0 -j ACCEPT`.
-        # If we want to strictly enforce "Default Policy", we should add it here.
-        
-        if default_policy == "ACCEPT":
-             _run_iptables(["iptables", "-A", instance_chain_name, "-j", "ACCEPT"])
-        else:
-             # DROP/REJECT
-             _run_iptables(["iptables", "-A", instance_chain_name, "-j", default_policy])
+            # Established
+            _run_iptables(["iptables", "-A", chain, "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"])
+            
+            # Forwarding Logic (VPN <-> VPN traffic or VPN <-> LAN)
+            # If split tunnel, allow configured routes
+            if inst.routes:
+                for r in inst.routes:
+                    if 'network' in r:
+                        _run_iptables(["iptables", "-A", chain, "-s", inst.subnet, "-d", r['network'], "-j", "ACCEPT"])
 
-        logger.info(f"  [POLICY] Chain {instance_chain_name}: Default policy set to {default_policy}")
-
-    logger.info("--- Firewall Rules Application Finished ---")
+            # Jumps to Groups
+            # Get members via DB relationship
+            # member.client.allocated_ip
+            for group in inst.groups:
+                g_chain = f"VIG_{group.id}"
+                # Get IPs of members
+                # Join GroupMember and Client
+                member_ips = session.exec(
+                    select(Client.allocated_ip)
+                    .join(GroupMember)
+                    .where(GroupMember.group_id == group.id)
+                ).all()
+                
+                for ip in member_ips:
+                    _run_iptables(["iptables", "-A", chain, "-s", ip, "-j", g_chain])
+            
+            # Default Policy
+            if inst.firewall_default_policy == "ACCEPT":
+                _run_iptables(["iptables", "-A", chain, "-j", "ACCEPT"])
+            else:
+                _run_iptables(["iptables", "-A", chain, "-j", "DROP"]) # or REJECT

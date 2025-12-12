@@ -1,261 +1,155 @@
-import json
-import os
-import uuid
 import logging
-from typing import List, Dict, Optional, Union
+import uuid
+from typing import List, Dict, Optional
+from sqlmodel import Session, select
 
-# Assuming iptables_manager.py is in the same directory and contains MachineFirewallRule
-from iptables_manager import MachineFirewallRule, apply_machine_firewall_rules
-import iptables_manager # Added to fix NameError in apply_all_rules
+from database import engine
+from models import MachineFirewallRule
+import iptables_manager
 
 logger = logging.getLogger(__name__)
 
-# Directory where configuration files are stored
-CONFIG_DIR = "/opt/vpn-manager/config"
-MACHINE_FIREWALL_RULES_FILE = os.path.join(CONFIG_DIR, "machine_firewall_rules.json")
-
 class MachineFirewallManager:
     def __init__(self):
-        try:
-            self.rules: List[MachineFirewallRule] = []
-            load_success = self._load_rules()
-            # Apply rules on startup ONLY if loading was successful
-            if load_success:
-                self.apply_all_rules()
-        except Exception as e:
-            logger.error(f"FATAL: Error during MachineFirewallManager initialization: {e}", exc_info=True)
-            # Re-raise to crash early and show full traceback
-            raise 
-
-    def _load_rules(self) -> bool: # Added return type for clarity
-        """Loads machine firewall rules from a JSON file."""
-        if not os.path.exists(CONFIG_DIR):
-            logger.info(f"Creating config directory: {CONFIG_DIR}")
-            os.makedirs(CONFIG_DIR)
-        
-        if os.path.exists(MACHINE_FIREWALL_RULES_FILE):
-            try:
-                logger.debug(f"Attempting to read rules from {MACHINE_FIREWALL_RULES_FILE}")
-                with open(MACHINE_FIREWALL_RULES_FILE, 'r') as f:
-                    rules_data = json.load(f)
-                
-                # Add logging for the raw loaded data
-                logger.debug(f"Raw rules data loaded: {rules_data}")
-
-                # Detailed error checking during deserialization
-                loaded_rules = []
-                for r_data in rules_data:
-                    try:
-                        loaded_rules.append(MachineFirewallRule.from_dict(r_data))
-                    except Exception as rule_e:
-                        logger.error(f"Error deserializing rule data '{r_data}': {rule_e}")
-                        # Decide how to handle this: skip the rule, fail entirely, etc.
-                        # For now, we'll log and continue if possible, but it implies a corrupt file.
-                        pass # Continue processing other rules
-                self.rules = loaded_rules
-                
-                logger.info(f"Loaded {len(self.rules)} machine firewall rules successfully.")
-                return True
-            except json.JSONDecodeError as json_e:
-                logger.error(f"JSON decoding error in {MACHINE_FIREWALL_RULES_FILE}: {json_e}")
-                self.rules = []
-                return False
-            except Exception as e:
-                logger.error(f"Generic error loading machine firewall rules from {MACHINE_FIREWALL_RULES_FILE}: {e}")
-                self.rules = []
-                return False
-        else:
-            self.rules = []
-            logger.info("No existing machine firewall rules file found. Initializing with empty rules.")
-            return True # No file is not an error
-
-    def _save_rules(self):
-        """Saves current machine firewall rules to a JSON file."""
-        try:
-            with open(MACHINE_FIREWALL_RULES_FILE, 'w') as f:
-                json.dump([r.to_dict() for r in self.rules], f, indent=4)
-            logger.info(f"Saved {len(self.rules)} machine firewall rules.")
-        except Exception as e:
-            logger.error(f"Error saving machine firewall rules to {MACHINE_FIREWALL_RULES_FILE}: {e}")
+        # We don't load into memory anymore, we query DB.
+        # But we might want to apply rules on init.
+        # The startup event calls apply_all_rules, so we can skip here or keep safety check.
+        pass
 
     def get_all_rules(self) -> List[Dict]:
-        """Returns all machine firewall rules as dictionaries, sorted by order."""
-        self.rules.sort(key=lambda r: r.order)
-        return [r.to_dict() for r in self.rules]
+        with Session(engine) as session:
+            rules = session.exec(select(MachineFirewallRule).order_by(MachineFirewallRule.order)).all()
+            return [r.dict() for r in rules]
 
     def add_rule(self, rule_data: Dict) -> Dict:
-        """Adds a new machine firewall rule and applies it."""
-        if not rule_data.get("id"):
-            rule_data["id"] = str(uuid.uuid4())
-        
-        # Assign an order if not provided
-        if rule_data.get("order") is None:
-            # Find the current maximum order.
-            # We don't just use len(self.rules) because if rules were deleted or reordered, 
-            # the order numbers might not be contiguous or match the length perfectly if not normalized.
-            # However, _reorder_rules_consecutively normalizes them on delete.
-            # But just to be safe and explicit:
-            max_order = -1
-            if self.rules:
-                max_order = max(r.order for r in self.rules)
-            rule_data["order"] = max_order + 1
-        
-        new_rule = MachineFirewallRule.from_dict(rule_data)
-        self.rules.append(new_rule)
-        self._save_rules()
-        
-        success, error = self.apply_all_rules() # Apply changes immediately
-        if not success:
-            # If applying rules fails, we should ideally roll back the add,
-            # but for now, raising an exception is crucial for feedback.
-            # We reload from the saved state to ensure consistency.
-            self._load_rules() 
-            raise Exception(f"Failed to apply rules after adding new rule: {error}")
-
-        logger.info(f"Added new machine firewall rule: {new_rule.id}")
-        return new_rule.to_dict()
+        with Session(engine) as session:
+            if not rule_data.get("id"):
+                rule_data["id"] = uuid.uuid4()
+            
+            # Determine order
+            if rule_data.get("order") is None:
+                max_order = -1
+                existing = session.exec(select(MachineFirewallRule)).all()
+                if existing:
+                    max_order = max(r.order for r in existing)
+                rule_data["order"] = max_order + 1
+            
+            # Alias 'table' -> 'table_name' for model if needed, but model handles alias
+            # Pydantic input dict might have 'table'. Model expects 'table_name' OR alias.
+            # SQLModel/Pydantic should parse 'table' into 'table_name' if alias is set.
+            
+            rule = MachineFirewallRule(**rule_data)
+            session.add(rule)
+            session.commit()
+            session.refresh(rule)
+            
+            self.apply_all_rules()
+            return rule.dict()
 
     def delete_rule(self, rule_id: str):
-        """Deletes a machine firewall rule by ID and applies changes."""
-        original_len = len(self.rules)
-        self.rules = [r for r in self.rules if r.id != rule_id]
-        if len(self.rules) == original_len:
-            logger.warning(f"Attempted to delete non-existent rule: {rule_id}")
-            raise ValueError("Rule not found")
-        
-        self._reorder_rules_consecutively()
-        self._save_rules()
+        with Session(engine) as session:
+            rule = session.get(MachineFirewallRule, uuid.UUID(rule_id))
+            if not rule: raise ValueError("Rule not found")
+            
+            session.delete(rule)
+            session.commit()
+            
+            # Reorder
+            rules = session.exec(select(MachineFirewallRule).order_by(MachineFirewallRule.order)).all()
+            for i, r in enumerate(rules):
+                r.order = i
+                session.add(r)
+            session.commit()
+            
+            self.apply_all_rules()
 
-        success, error = self.apply_all_rules() # Apply changes immediately
-        if not success:
-            # Reload from saved state to roll back the deletion in memory
-            self._load_rules()
-            raise Exception(f"Failed to apply rules after deleting rule: {error}")
-
-        logger.info(f"Deleted machine firewall rule: {rule_id}")
-
-    def update_rule(self, rule_id: str, rule_data: Dict):
-        """Updates an existing machine firewall rule and applies changes."""
-        rule_to_update = next((r for r in self.rules if r.id == rule_id), None)
-        if not rule_to_update:
-            raise ValueError("Rule not found for update")
-
-        # Update rule attributes from the provided data
-        rule_to_update.chain = rule_data.get('chain', rule_to_update.chain).upper()
-        rule_to_update.action = rule_data.get('action', rule_to_update.action).upper()
-        rule_to_update.protocol = rule_data.get('protocol', rule_to_update.protocol)
-        if rule_to_update.protocol:
-            rule_to_update.protocol = rule_to_update.protocol.lower()
-        rule_to_update.source = rule_data.get('source', rule_to_update.source)
-        rule_to_update.destination = rule_data.get('destination', rule_to_update.destination)
-        rule_to_update.port = rule_data.get('port', rule_to_update.port)
-        rule_to_update.in_interface = rule_data.get('in_interface', rule_to_update.in_interface)
-        rule_to_update.out_interface = rule_data.get('out_interface', rule_to_update.out_interface)
-        rule_to_update.state = rule_data.get('state', rule_to_update.state)
-        rule_to_update.comment = rule_data.get('comment', rule_to_update.comment)
-        rule_to_update.table = rule_data.get('table', rule_to_update.table).lower()
-        # Order is managed separately by update_rule_order
-
-        self._save_rules()
-
-        success, error = self.apply_all_rules()
-        if not success:
-            # Reload from saved state to roll back the update in memory
-            self._load_rules()
-            raise Exception(f"Failed to apply rules after updating rule: {error}")
-        
-        logger.info(f"Updated machine firewall rule: {rule_id}")
-        return rule_to_update.to_dict()
+    def update_rule(self, rule_id: str, rule_data: Dict) -> Dict:
+        with Session(engine) as session:
+            rule = session.get(MachineFirewallRule, uuid.UUID(rule_id))
+            if not rule: raise ValueError("Rule not found")
+            
+            # Update fields manually or via loop
+            for k, v in rule_data.items():
+                if k != "id" and hasattr(rule, k):
+                    setattr(rule, k, v)
+                elif k == "table": # Handle alias manually if Pydantic doesn't
+                    rule.table_name = v
+            
+            session.add(rule)
+            session.commit()
+            session.refresh(rule)
+            self.apply_all_rules()
+            return rule.dict()
 
     def update_rule_order(self, orders: List[Dict]):
-        """
-        Updates the order of rules based on a list of {"id": "...", "order": N} objects.
-        Then reapplies all rules.
-        """
-        id_to_order_map = {item["id"]: item["order"] for item in orders}
-        for rule in self.rules:
-            if rule.id in id_to_order_map:
-                rule.order = id_to_order_map[rule.id]
-        
-        self.rules.sort(key=lambda r: r.order)
-        self._save_rules()
+        with Session(engine) as session:
+            for item in orders:
+                rule = session.get(MachineFirewallRule, uuid.UUID(item["id"]))
+                if rule:
+                    rule.order = item["order"]
+                    session.add(rule)
+            session.commit()
+            self.apply_all_rules()
 
-        success, error = self.apply_all_rules() # Apply changes immediately
-        if not success:
-            # Reload from saved state to roll back reordering
-            self._load_rules()
-            raise Exception(f"Failed to apply reordered rules: {error}")
-            
-        logger.info("Updated order of machine firewall rules.")
-
-    def _reorder_rules_consecutively(self):
-        """Ensures rule orders are consecutive after deletion/reordering."""
-        self.rules.sort(key=lambda r: r.order)
-        for i, rule in enumerate(self.rules):
-            rule.order = i
-            
-    def apply_all_rules(self) -> (bool, Optional[str]):
-        """Applies all currently managed machine firewall rules using dedicated FW_* chains."""
-        success = True
-        error_message = None
+    def apply_all_rules(self):
+        logger.info("Applying Machine Firewall Rules (SQLModel)...")
         
-        # 1. Define Chains
-        # Use constants from iptables_manager
+        # 1. Clean Chains
         fw_chains = {
             "INPUT": iptables_manager.FW_INPUT_CHAIN,
             "OUTPUT": iptables_manager.FW_OUTPUT_CHAIN,
             "FORWARD": iptables_manager.FW_FORWARD_CHAIN
         }
-        
-        # 2. Create/Flush Chains
         for chain in fw_chains.values():
-            iptables_manager._create_or_flush_chain(chain, "filter")
+            iptables_manager._create_or_flush_chain(chain)
             
-        # 3. Ensure Jumps (Position 2, after VPN chains)
-        # We assume VPN jumps are at Position 1.
         iptables_manager._ensure_jump_rule("INPUT", fw_chains["INPUT"], "filter", 2)
         iptables_manager._ensure_jump_rule("OUTPUT", fw_chains["OUTPUT"], "filter", 2)
         iptables_manager._ensure_jump_rule("FORWARD", fw_chains["FORWARD"], "filter", 2)
 
-        # 4. Apply Rules
-        # Optimization: We now use `-A` (Append) instead of `-I`.
-        # This is more efficient (no shifting rules) and cleaner.
-        # Since we use append, we iterate rules in their NORMAL stored order (Ascending).
-        
-        self.rules.sort(key=lambda r: r.order) # Ensure rules are sorted by order 0..N
-        
-        for rule in self.rules:
-            # We need to map the rule.chain (INPUT/OUTPUT/FORWARD) to FW_...
-            # We create a copy of the rule to avoid modifying the stored object
-            import copy
-            rule_copy = copy.deepcopy(rule)
+        # 2. Apply Rules
+        with Session(engine) as session:
+            rules = session.exec(select(MachineFirewallRule).order_by(MachineFirewallRule.order)).all()
             
-            if rule_copy.chain in fw_chains:
-                rule_copy.chain = fw_chains[rule_copy.chain]
+            for rule in rules:
+                target_chain = fw_chains.get(rule.chain)
+                if not target_chain: continue
                 
-                # Use iptables_manager to add the rule
-                # NOTE: add_machine_firewall_rule defaults to -I. We need to override or use generic helper.
-                # Let's check iptables_manager.
-                # It has `add_machine_firewall_rule` which hardcodes `operation="-I"`.
-                # We should use `_build_iptables_args_from_rule` + `_run_iptables` directly OR update the helper.
-                # Updating `add_machine_firewall_rule` signature might break other callers?
-                # No, only used here essentially.
-                # Let's call the lower-level helpers to be explicit about "-A".
+                # Build args using the helper from iptables_manager, but adapting object
+                # iptables_manager expects a specific object or we can manually build.
+                # Let's adapt our SQLModel object to what _build_iptables_args expects, 
+                # or just use dict.
+                # Actually _build_iptables_args expects 'MachineFirewallRule' class from iptables_manager (old).
+                # We should update iptables_manager to be more flexible or map it.
+                # Easiest: Map fields manually here to a list of args.
                 
-                args = iptables_manager._build_iptables_args_from_rule(rule_copy, operation="-A")
-                rule_add_success, rule_add_error = iptables_manager._run_iptables(rule_copy.table, args)
+                cmd = ["iptables", "-A", target_chain] # Append order
+                if rule.table_name != "filter":
+                    cmd = ["iptables", "-t", rule.table_name, "-A", target_chain]
                 
-                if not rule_add_success:
-                    logger.error(f"Failed to apply rule {rule.id}: {rule_add_error}")
-                    success = False
-                    error_message = rule_add_error
-                    break # Stop on first failure
-            else:
-                logger.warning(f"Rule {rule.id} has unknown chain '{rule.chain}', skipping.")
-        
-        if success:
-            logger.info("Machine firewall rules successfully applied to system (FW_* chains).")
-        return success, error_message
+                if rule.protocol: cmd.extend(["-p", rule.protocol])
+                if rule.source: cmd.extend(["-s", rule.source])
+                if rule.destination: cmd.extend(["-d", rule.destination])
+                if rule.in_interface: cmd.extend(["-i", rule.in_interface])
+                if rule.out_interface: cmd.extend(["-o", rule.out_interface])
+                if rule.state: cmd.extend(["-m", "state", "--state", rule.state])
+                
+                if rule.port and rule.action not in ["MASQUERADE", "SNAT", "DNAT"]:
+                    cmd.extend(["--dport", rule.port])
+                
+                cmd.extend(["-m", "comment", "--comment", f"ID_{rule.id}"])
+                
+                if rule.action == "MASQUERADE":
+                    cmd.extend(["-j", "MASQUERADE"])
+                elif rule.action == "SNAT":
+                    cmd.extend(["-j", "SNAT", "--to-source", rule.destination]) # Re-using field
+                else:
+                    cmd.extend(["-j", rule.action])
+                
+                iptables_manager._run_iptables(rule.table_name, cmd[2:]) # Pass only args, helper adds 'iptables -t ...' logic?
+                # _run_iptables helper logic: command = ["/usr/sbin/iptables"]; if table!=filter add -t. extend(args).
+                # So we just pass the args list starting from "-A".
+                
+                iptables_manager._run_iptables(rule.table_name, cmd[cmd.index("-A"):])
 
-# Initialize the manager
 machine_firewall_manager = MachineFirewallManager()

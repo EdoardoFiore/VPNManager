@@ -17,6 +17,7 @@ import network_utils
 import firewall_manager as instance_firewall_manager
 import iptables_manager # Added to initialize rules on startup
 from machine_firewall_manager import machine_firewall_manager
+from database import create_db_and_tables
 
 # --- Modelli Pydantic ---
 class ClientRequest(BaseModel):
@@ -117,8 +118,12 @@ app = FastAPI(
 async def startup_event():
     """
     Initialize system components on startup.
+    - Setup DB.
     - Setup IP tables chains and rules.
     """
+    # Create DB tables
+    create_db_and_tables()
+    
     # Verify/Execute OpenVPN rules application
     try:
         iptables_manager.apply_all_openvpn_rules()
