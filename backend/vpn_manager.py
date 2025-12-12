@@ -1,277 +1,239 @@
+import json
 import os
-import subprocess
 import logging
-from datetime import datetime
-from typing import List, Dict, Tuple, Optional
-from dotenv import load_dotenv
+from typing import List, Dict, Optional, Tuple
+from pydantic import BaseModel
+import ip_manager
 import instance_manager
-import firewall_manager as instance_firewall_manager
+import wireguard_manager
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
-# --- Percorsi e Costanti ---
-EASYRSA_DIR = os.getenv("EASYRSA_DIR", "/etc/openvpn/easy-rsa")
-CLIENT_CONFIG_DIR = os.getenv("CLIENT_CONFIG_DIR", "/root")
+CLIENTS_DATA_DIR = "/opt/vpn-manager/backend/data/clients"
 
-# --- Funzioni Helper ---
+class WireGuardClient(BaseModel):
+    name: str
+    instance_id: str
+    private_key: str
+    public_key: str
+    preshared_key: str
+    allocated_ip: str
+    created_at: str = "" # ISO timestamp ideally
 
-def _run_command(command, env_vars=None):
-    """Esegue un comando shell."""
-    effective_env = dict(os.environ, **(env_vars or {}))
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            check=True,
-            env=effective_env
-        )
-        return result.stdout.strip(), 0
-    except subprocess.CalledProcessError as e:
-        return e.stderr.strip(), e.returncode
+def _get_clients_file(instance_id: str) -> str:
+    return os.path.join(CLIENTS_DATA_DIR, f"{instance_id}.json")
 
-def _read_file(path):
+def _load_clients(instance_id: str) -> List[WireGuardClient]:
+    path = _get_clients_file(instance_id)
     if os.path.exists(path):
-        with open(path, "r") as f:
-            return f.read().strip()
-    return ""
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+                return [WireGuardClient(**item) for item in data]
+        except Exception as e:
+            logger.error(f"Error loading clients for {instance_id}: {e}")
+            return []
+    return []
 
-# --- Gestione Client ---
+def _save_clients(instance_id: str, clients: List[WireGuardClient]):
+    os.makedirs(CLIENTS_DATA_DIR, exist_ok=True)
+    path = _get_clients_file(instance_id)
+    with open(path, "w") as f:
+        json.dump([c.dict() for c in clients], f, indent=4)
 
 def list_clients(instance_id: str) -> List[Dict]:
+    """Returns a list of clients for the instance."""
+    clients = _load_clients(instance_id)
+    # We can add status info here if we parse 'wg show' dump
+    # For now, return static data
+    return [c.dict() for c in clients]
+
+def get_connected_clients(instance_name: str) -> Dict:
     """
-    Restituisce la lista dei client per una specifica istanza.
-    I client sono filtrati in base all'istanza specifica usando il prefisso del nome.
+    Parses 'wg show <interface> dump' to get real-time stats.
+    instance_name is usually the interface name or ID.
+    But 'instance_manager' usually passes ID.
+    We need to resolve to Interface Name.
     """
-    instance = instance_manager.get_instance(instance_id)
-    if not instance:
-        raise ValueError("Instance not found")
-
-    # Get clients associated with this instance
-    instance_client_names = instance_manager.get_instance_clients(instance_id)
+    # Assuming instance_name passed here is the ID.
+    inst = instance_manager.get_instance_by_id(instance_name)
+    if not inst: return {}
     
-    all_clients_from_pki = _get_all_clients_from_pki()
-    connected_clients = get_connected_clients(instance.name)
-
-    # Filter to only show clients belonging to this instance
-    filtered_clients = []
-    for client in all_clients_from_pki:
-        client_name = client["name"]
-        # Check if this client belongs to this instance
-        if client_name in instance_client_names:
-            if client_name in connected_clients:
-                client["status"] = "connected"
-                client.update(connected_clients[client_name])
-            else:
-                client["status"] = "disconnected"
-            filtered_clients.append(client)
-            
-    return filtered_clients
-
-def _get_all_clients_from_pki():
-    clients = []
-    index_path = os.path.join(EASYRSA_DIR, "pki/index.txt")
-    if not os.path.exists(index_path):
-        return clients
-
-    with open(index_path, "r") as f:
-        for line in f:
-            parts = line.strip().split()
-            if parts[0] == "V":
-                client_name = parts[-1].split("=")[-1]
-                if not client_name.startswith("server"):
-                    clients.append({"name": client_name})
-    return clients
-
-def get_connected_clients(instance_name: str):
-    connected_clients = {}
-    status_log_path = f"/var/log/openvpn/status_{instance_name}.log"
-    
-    if not os.path.exists(status_log_path):
-        return connected_clients
-
+    interface = inst.interface
     try:
-        with open(status_log_path, "r") as f:
-            lines = f.readlines()
-            
-        for line in lines:
-            line = line.strip()
-            if line.startswith("CLIENT_LIST,"):
-                parts = line.split(',')
-                # status-version 2 format:
-                # CLIENT_LIST,Common Name,Real Address,Virtual Address,Bytes Received,Bytes Sent,Connected Since,...
-                if len(parts) > 7:
-                    client_name = parts[1]
-                    real_address = parts[2]
-                    virtual_address = parts[3]
-                    # Index 7 is "Connected Since" in the user's log version (due to IPv6 field at 4)
-                    connected_since = parts[7]
-                    bytes_received = parts[5]
-                    bytes_sent = parts[6]
-
-                    # Handle case where real address has port
-                    if ":" in real_address:
-                        real_address = real_address.split(":")[0]
-
-                    connected_clients[client_name] = {
-                        "virtual_ip": virtual_address,
-                        "real_ip": real_address,
-                        "connected_since": connected_since,
-                        "bytes_received": bytes_received,
-                        "bytes_sent": bytes_sent
+        # wg show wg0 dump
+        # Output: public-key, preshared-key, endpoint, allowed-ips, latest-handshake, transfer-rx, transfer-tx, persistent-keepalive
+        output = wireguard_manager.WireGuardManager._run_wg_command(['show', interface, 'dump'])
+        lines = output.splitlines()
+        connected = {}
+        
+        # Load known clients to map Public Key -> Name
+        known_clients = _load_clients(instance_name)
+        pubkey_to_name = {c.public_key: c.name for c in known_clients}
+        
+        for line in lines[1:]: # Skip header if present (dump usually has no header, but let's be safe)
+            parts = line.split('\t')
+            if len(parts) >= 7:
+                pub_key = parts[0]
+                endpoint = parts[2]
+                handshake = int(parts[4])
+                rx = int(parts[5])
+                tx = int(parts[6])
+                
+                # Check if active (handshake < 3 mins ago is a good heuristic for "connected")
+                import time
+                now = int(time.time())
+                is_active = (now - handshake) < 180 if handshake > 0 else False
+                
+                if is_active:
+                    name = pubkey_to_name.get(pub_key, "Unknown")
+                    connected[name] = {
+                        "virtual_ip": endpoint.split(':')[0] if ':' in endpoint else endpoint,
+                        "bytes_received": rx,
+                        "bytes_sent": tx,
+                        "connected_since": handshake # Timestamp
                     }
-    except Exception as e:
-        logger.error(f"Error reading status log for {instance_name}: {e}")
+        return connected
 
-    return connected_clients
+    except Exception as e:
+        logger.error(f"Error getting connected clients: {e}")
+        return {}
 
 def create_client(instance_id: str, client_name: str) -> Tuple[bool, Optional[str]]:
-    instance = instance_manager.get_instance(instance_id)
-    if not instance:
+    inst = instance_manager.get_instance_by_id(instance_id)
+    if not inst:
         return False, "Instance not found"
+        
+    clients = _load_clients(instance_id)
+    if any(c.name == client_name for c in clients):
+        return False, "Client name already exists"
 
-    # Use instance-specific prefix for client name
-    prefixed_client_name = f"{instance.name}_{client_name}"
+    # 1. Generate Keys
+    priv, pub = wireguard_manager.WireGuardManager.generate_keypair()
+    psk = wireguard_manager.WireGuardManager.generate_psk()
     
-    # 1. Check if client exists
-    existing_clients = _get_all_clients_from_pki()
-    if any(c["name"] == prefixed_client_name for c in existing_clients):
-        return False, f"Client '{client_name}' already exists for this instance."
-
-    # 2. Create Certificate
-    cmd = f"cd {EASYRSA_DIR} && ./easyrsa --batch build-client-full {prefixed_client_name} nopass"
-    out, code = _run_command(cmd, env_vars={"EASYRSA_CERT_EXPIRE": "3650"})
-    if code != 0:
-        return False, f"Easy-RSA Error: {out}"
-
-    # 3. Generate .ovpn content
-    try:
-        ovpn_content = _generate_ovpn_content(instance, prefixed_client_name)
-    except Exception as e:
-        return False, f"Error generating config: {e}"
-
-    # 4. Save .ovpn file (using original client name for file)
-    config_path = os.path.join(CLIENT_CONFIG_DIR, f"{prefixed_client_name}.ovpn")
-    with open(config_path, "w") as f:
-        f.write(ovpn_content)
+    # 2. Allocate IP
+    ip = ip_manager.allocate_static_ip(instance_id, inst.subnet, client_name)
+    if not ip:
+        return False, "No IP addresses available"
+        
+    # 3. Add to Server Config
+    config_path = f"/etc/wireguard/{inst.interface}.conf"
+    allowed_ips_server_side = f"{ip}/32" # Strict IP binding
     
-    # 5. Add client to instance's client list
     try:
-        instance_manager.add_client_to_instance(instance_id, prefixed_client_name)
+        wireguard_manager.WireGuardManager.add_peer_to_interface_config(
+            config_path, pub, psk, allowed_ips_server_side, comment=client_name
+        )
+        wireguard_manager.WireGuardManager.hot_reload_interface(inst.interface)
     except Exception as e:
-        logger.error(f"Failed to add client to instance: {e}")
-        # Certificate already created, so we continue
+        ip_manager.release_static_ip(instance_id, client_name)
+        return False, f"Failed to update server config: {e}"
 
+    # 4. Save Client Data
+    new_client = WireGuardClient(
+        name=client_name,
+        instance_id=instance_id,
+        private_key=priv,
+        public_key=pub,
+        preshared_key=psk,
+        allocated_ip=ip
+    )
+    clients.append(new_client)
+    _save_clients(instance_id, clients)
+    
     return True, None
 
-def get_client_config(client_name: str) -> Tuple[Optional[str], Optional[str]]:
-    config_path = os.path.join(CLIENT_CONFIG_DIR, f"{client_name}.ovpn")
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            return f.read(), None
-    return None, "Config not found"
-
 def revoke_client(instance_id: str, client_name: str) -> Tuple[bool, str]:
-    instance = instance_manager.get_instance(instance_id)
-    if not instance:
+    inst = instance_manager.get_instance_by_id(instance_id)
+    if not inst:
         return False, "Instance not found"
 
-    # 1. Revoke (client_name is already prefixed)
-    cmd = f"cd {EASYRSA_DIR} && ./easyrsa --batch revoke {client_name}"
-    out, code = _run_command(cmd)
-    if code != 0 and "already revoked" not in out:
-        return False, f"Revoke Error: {out}"
-
-    # 2. Gen CRL
-    cmd = f"cd {EASYRSA_DIR} && ./easyrsa gen-crl"
-    out, code = _run_command(cmd, env_vars={"EASYRSA_CRL_DAYS": "3650"})
-    if code != 0:
-        return False, f"CRL Gen Error: {out}"
-
-    # Copy CRL to OpenVPN directory
-    try:
-        crl_src = os.path.join(EASYRSA_DIR, "pki/crl.pem")
-        crl_dest = "/etc/openvpn/crl.pem"
-        subprocess.run(["cp", crl_src, crl_dest], check=True)
-        os.chmod(crl_dest, 0o644)
-    except Exception as e:
-         return False, f"Error copying CRL: {e}"
-    
-    # 3. Remove client from instance's client list
-    try:
-        instance_manager.remove_client_from_instance(instance_id, client_name)
-    except Exception as e:
-        logger.error(f"Failed to remove client from instance: {e}")
+    clients = _load_clients(instance_id)
+    client = next((c for c in clients if c.name == client_name), None)
+    if not client:
+        return False, "Client not found"
         
-    # 4. Remove from firewall groups
+    # 1. Remove from Server Config
+    config_path = f"/etc/wireguard/{inst.interface}.conf"
     try:
-        instance_firewall_manager.remove_client_from_all_groups(instance.name, client_name)
+        wireguard_manager.WireGuardManager.remove_peer_from_interface_config(config_path, client.public_key)
+        wireguard_manager.WireGuardManager.hot_reload_interface(inst.interface)
     except Exception as e:
-        logger.error(f"Failed to remove client from firewall groups: {e}")
+        return False, f"Failed to update server config: {e}"
+        
+    # 2. Release IP
+    ip_manager.release_static_ip(instance_id, client_name)
     
-    # 5. Restart Service to reload CRL
-    service_name = f"openvpn@server_{instance.name}"
-    subprocess.run(["/usr/bin/systemctl", "restart", service_name], check=False)
+    # 3. Remove from JSON
+    clients = [c for c in clients if c.name != client_name]
+    _save_clients(instance_id, clients)
+    
+    return True, "Client revoked successfully"
 
-    return True, f"Client {client_name} revoked."
-
-def _generate_ovpn_content(instance: instance_manager.Instance, client_name: str) -> str:
-    # Get Public IP
-    public_ip = _get_public_ip()
+def get_client_config(client_name: str, instance_id: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+    found_client = None
+    found_inst_id = None
     
-    # Read Certs
-    ca = _read_file(os.path.join(EASYRSA_DIR, "pki/ca.crt"))
-    cert = _read_file(os.path.join(EASYRSA_DIR, f"pki/issued/{client_name}.crt"))
-    key = _read_file(os.path.join(EASYRSA_DIR, f"pki/private/{client_name}.key"))
+    if instance_id:
+        clients = _load_clients(instance_id)
+        for c in clients:
+            if c.name == client_name:
+                found_client = c
+                found_inst_id = instance_id
+                break
+    else:
+        # Inefficient search, but works if instance_id is missing
+        for inst in instance_manager.get_all_instances():        clients = _load_clients(inst.id)
+        for c in clients:
+            if c.name == client_name:
+                found_client = c
+                found_inst_id = inst.id
+                break
+        if found_client: break
     
-    # Extract cert body
-    if "-----BEGIN CERTIFICATE-----" in cert:
-        cert = cert[cert.find("-----BEGIN CERTIFICATE-----") : cert.find("-----END CERTIFICATE-----") + 25]
-
-    # TLS Crypt/Auth
-    tls_crypt = ""
-    tls_auth = ""
+    if not found_client:
+        return None, "Client not found"
+        
+    inst = instance_manager.get_instance_by_id(found_inst_id)
     
-    # Check for tls-crypt key
-    tls_crypt_path = "/etc/openvpn/tls-crypt.key"
-    if os.path.exists(tls_crypt_path):
-        tls_crypt = _read_file(tls_crypt_path)
+    # Build Configuration
     
-    # Template
-    config = f"""client
-dev tun
-proto {instance.protocol}
-remote {public_ip} {instance.port}
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-remote-cert-tls server
-auth SHA512
-cipher AES-256-GCM
-ignore-unknown-option block-outside-dns
-block-outside-dns
-verb 3
-<ca>
-{ca}
-</ca>
-<cert>
-{cert}
-</cert>
-<key>
-{key}
-</key>
-"""
-    if tls_crypt:
-        config += f"<tls-crypt>\n{tls_crypt}\n</tls-crypt>\n"
+    # 1. Routing (AllowedIPs)
+    allowed_ips = "0.0.0.0/0, ::/0" # Default Full Tunnel
+    if inst.tunnel_mode == "split":
+        # Base subnet + custom routes
+        routes = [inst.subnet]
+        if inst.routes:
+            for r in inst.routes:
+                if 'network' in r: routes.append(r['network'])
+        allowed_ips = ", ".join(routes)
     
-    return config
-
-def _get_public_ip():
+    # 2. DNS
+    dns_str = ", ".join(inst.dns_servers)
+    
+    # 3. Server Endpoint
+    # We need Public IP. instance_manager doesn't store it yet (setup script got it).
+    # We can detect it or use a placeholder.
+    # Ideally, store it in Instance or global config.
+    # Fallback: Detect external IP
+    public_ip = "YOUR_SERVER_IP"
     try:
-        return subprocess.check_output(["curl", "-s", "https://ifconfig.me"]).decode().strip()
+        public_ip = subprocess.run(["curl", "-s", "https://ifconfig.me"], capture_output=True, text=True).stdout.strip()
     except:
-        return "YOUR_SERVER_IP"
+        pass
+    
+    # Construct INI
+    config = f"""[Interface]
+PrivateKey = {found_client.private_key}
+Address = {found_client.allocated_ip}/32
+DNS = {dns_str}
 
+[Peer]
+PublicKey = {inst.public_key}
+PresharedKey = {found_client.preshared_key}
+Endpoint = {public_ip}:{inst.port}
+AllowedIPs = {allowed_ips}
+PersistentKeepalive = 25
+"""
+    return config, None

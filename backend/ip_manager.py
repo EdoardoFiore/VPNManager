@@ -1,96 +1,83 @@
 import os
 import logging
+import json
 import ipaddress
-from typing import Optional, List
+from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
 
-# Directory where CCD files are stored (OpenVPN Client Config Directory)
-# Structure: /etc/openvpn/ccd/<instance_name>/<client_name>
-CCD_BASE_DIR = "/etc/openvpn/ccd"
+# New data directory for IP allocations
+DATA_DIR = "/opt/vpn-manager/backend/data/allocations"
 
-def _get_ccd_dir(instance_name: str) -> str:
-    return os.path.join(CCD_BASE_DIR, instance_name)
+def _get_allocation_file(instance_id: str) -> str:
+    return os.path.join(DATA_DIR, f"{instance_id}.json")
 
-def _get_ccd_path(instance_name: str, client_name: str) -> str:
-    return os.path.join(_get_ccd_dir(instance_name), client_name)
-
-def get_assigned_ip(instance_name: str, client_name: str) -> Optional[str]:
-    """Reads the CCD file to find the assigned static IP."""
-    path = _get_ccd_path(instance_name, client_name)
+def _load_allocations(instance_id: str) -> Dict[str, str]:
+    """Returns a dict {client_name: ip_address}."""
+    path = _get_allocation_file(instance_id)
     if os.path.exists(path):
         try:
             with open(path, "r") as f:
-                content = f.read()
-                # format: ifconfig-push <ip> <netmask>
-                parts = content.strip().split()
-                if len(parts) >= 2 and parts[0] == "ifconfig-push":
-                    return parts[1]
+                return json.load(f)
         except Exception as e:
-            logger.error(f"Error reading CCD file for {client_name}: {e}")
-    return None
+            logger.error(f"Error loading IP allocations for {instance_id}: {e}")
+            return {}
+    return {}
 
-def allocate_static_ip(instance_name: str, subnet: str, client_name: str) -> Optional[str]:
+def _save_allocations(instance_id: str, allocations: Dict[str, str]):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    path = _get_allocation_file(instance_id)
+    try:
+        with open(path, "w") as f:
+            json.dump(allocations, f, indent=4)
+    except Exception as e:
+        logger.error(f"Error saving IP allocations for {instance_id}: {e}")
+
+def get_assigned_ip(instance_id: str, client_name: str) -> Optional[str]:
+    """Finds the assigned static IP for a client."""
+    allocs = _load_allocations(instance_id)
+    return allocs.get(client_name)
+
+def allocate_static_ip(instance_id: str, subnet: str, client_name: str) -> Optional[str]:
     """
-    Allocates the next available static IP from the subnet and writes it to the CCD file.
-    Returns the allocated IP or None if subnet is full.
+    Allocates the next available static IP from the subnet.
     """
-    ccd_dir = _get_ccd_dir(instance_name)
-    os.makedirs(ccd_dir, exist_ok=True)
+    allocs = _load_allocations(instance_id)
     
-    # 1. Parse Subnet
+    # Check if already allocated
+    if client_name in allocs:
+        return allocs[client_name]
+
     try:
         network = ipaddress.ip_network(subnet, strict=False)
     except ValueError:
         logger.error(f"Invalid subnet: {subnet}")
         return None
 
-    # 2. Find used IPs
-    used_ips = set()
-    used_ips.add(str(network.network_address)) # .0
-    used_ips.add(str(network.broadcast_address)) # .255 (or similar)
-    # OpenVPN server usually takes the first usable IP (.1)
-    # We assume server uses the first IP of the network. 
-    # TODO: Pass server IP explicitly if different.
+    used_ips = set(allocs.values())
+    
+    # Reserve Server IP (usually .1) and Network/Broadcast
+    used_ips.add(str(network.network_address))
+    used_ips.add(str(network.broadcast_address))
     server_ip = list(network.hosts())[0]
     used_ips.add(str(server_ip))
-
-    # Scan existing CCD files
-    if os.path.exists(ccd_dir):
-        for fname in os.listdir(ccd_dir):
-            ip = get_assigned_ip(instance_name, fname)
-            if ip:
-                used_ips.add(ip)
-
-    # 3. Find next free IP
-    # We skip the first one (.1) as it is likely the server
+    
+    # Find free IP
     for ip in network.hosts():
         ip_str = str(ip)
         if ip_str not in used_ips:
-            # Found one!
-            netmask = str(network.netmask)
+            allocs[client_name] = ip_str
+            _save_allocations(instance_id, allocs)
+            logger.info(f"Allocated {ip_str} to {client_name} in {instance_id}")
+            return ip_str
             
-            # Write CCD
-            content = f"ifconfig-push {ip_str} {netmask}\n"
-            ccd_path = _get_ccd_path(instance_name, client_name)
-            try:
-                with open(ccd_path, "w") as f:
-                    f.write(content)
-                logger.info(f"Allocated static IP {ip_str} to {client_name} in {instance_name}")
-                return ip_str
-            except Exception as e:
-                logger.error(f"Failed to write CCD file for {client_name}: {e}")
-                return None
-    
-    logger.error(f"No available IPs in subnet {subnet} for instance {instance_name}")
+    logger.error(f"No available IPs in subnet {subnet}")
     return None
 
-def release_static_ip(instance_name: str, client_name: str):
-    """Removes the CCD file, effectively releasing the IP."""
-    path = _get_ccd_path(instance_name, client_name)
-    if os.path.exists(path):
-        try:
-            os.remove(path)
-            logger.info(f"Released static IP for {client_name} in {instance_name}")
-        except Exception as e:
-            logger.error(f"Failed to remove CCD file for {client_name}: {e}")
+def release_static_ip(instance_id: str, client_name: str):
+    """Releases the allocated IP."""
+    allocs = _load_allocations(instance_id)
+    if client_name in allocs:
+        del allocs[client_name]
+        _save_allocations(instance_id, allocs)
+        logger.info(f"Released IP for {client_name}")

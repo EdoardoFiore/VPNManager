@@ -303,14 +303,14 @@ async def download_client_config(instance_id: str, client_name: str):
     if not client_name or not re.fullmatch(CLIENT_NAME_PATTERN, client_name):
         raise HTTPException(status_code=400, detail="Nome client non valido.")
     
-    config_content, error = vpn_manager.get_client_config(client_name)
+    config_content, error = vpn_manager.get_client_config(client_name, instance_id)
     if error:
         raise HTTPException(status_code=404, detail=error)
 
     return PlainTextResponse(
         content=config_content,
-        media_type="application/x-openvpn-profile",
-        headers={"Content-Disposition": f"attachment; filename={client_name}.ovpn"}
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={client_name}.conf"}
     )
 
 @app.delete("/api/instances/{instance_id}/clients/{client_name}", dependencies=[Depends(get_api_key)])

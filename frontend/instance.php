@@ -487,7 +487,23 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+<!-- Modal QR Code -->
+<div class="modal modal-blur fade" id="modal-qrcode" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">QR Code Configurazione</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="qrcode-container" class="mb-3 d-flex justify-content-center"></div>
+                <p class="text-muted">Scansiona con l'app WireGuard</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php
-$extra_scripts = ['js/instance.js', 'js/firewall.js']; // Reusing firewall.js logic adapted
+$extra_scripts = ['js/qrcode.min.js', 'js/instance.js', 'js/firewall.js'];
 require_once 'includes/footer.php';
 ?>

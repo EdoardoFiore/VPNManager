@@ -7,39 +7,40 @@ from ipaddress import ip_network, ip_address, AddressValueError
 from typing import List, Optional, Dict
 from pydantic import BaseModel
 import iptables_manager
+import wireguard_manager
 
 logger = logging.getLogger(__name__)
 
 DATA_FILE = "/opt/vpn-manager/backend/data/instances.json"
-OPENVPN_CONFIG_DIR = "/etc/openvpn"
-DEFAULT_CONFIG_FILE = os.path.join(OPENVPN_CONFIG_DIR, "server.conf")
-IPTABLES_SAVE_SCRIPT = "/opt/vpn-manager/scripts/save-iptables.sh"
+WIREGUARD_CONFIG_DIR = "/etc/wireguard"
 
 class Instance(BaseModel):
     id: str
     name: str
     port: int
-    protocol: str
     subnet: str  # e.g., "10.8.0.0/24"
-    tun_interface: str # e.g., "tun0", "tun1"
+    interface: str # e.g., "wg0", "wg1"
+    private_key: str # Server Private Key
+    public_key: str # Server Public Key
     tunnel_mode: str = "full"  # "full" or "split"
-    routes: List[Dict[str, str]] = []  # List of {"network": "192.168.1.0/24", "interface": "eth1"}
-    dns_servers: List[str] = [] # List of DNS servers to push
+    routes: List[Dict[str, str]] = []  # List of {"network": "192.168.1.0/24"} for split tunnel default
+    dns_servers: List[str] = ["1.1.1.1", "1.0.0.1"] # Default DNS
     firewall_default_policy: str = "ACCEPT"  # Can be "ACCEPT" or "DROP"
     clients: List[str] = []  # List of client names associated with this instance
     connected_clients: int = 0
     status: str = "stopped" # stopped, running
+    type: str = "wireguard" # Explicit type
 
 def _save_iptables_rules():
     """Save current iptables rules to persist across reboots."""
-    if os.path.exists(IPTABLES_SAVE_SCRIPT):
+    # We rely on iptables-persistent or our own save script
+    save_script = "/opt/vpn-manager/scripts/save-iptables.sh"
+    if os.path.exists(save_script):
         try:
-            subprocess.run(["bash", IPTABLES_SAVE_SCRIPT], check=True)
+            subprocess.run(["bash", save_script], check=True)
             logger.info("iptables rules saved successfully")
         except subprocess.CalledProcessError as e:
             logger.warning(f"Failed to save iptables rules: {e}")
-    else:
-        logger.warning(f"iptables save script not found: {IPTABLES_SAVE_SCRIPT}")
 
 def _load_instances() -> List[Instance]:
     instances = []
@@ -47,20 +48,16 @@ def _load_instances() -> List[Instance]:
         try:
             with open(DATA_FILE, "r") as f:
                 data = json.load(f)
-                instances = [Instance(**item) for item in data]
+                # Filter/Migrate old data if necessary, or just load
+                for item in data:
+                    try:
+                        instances.append(Instance(**item))
+                    except Exception as e:
+                         logger.warning(f"Skipping invalid instance data: {item} - {e}")
         except json.JSONDecodeError:
             pass
     
-    # Try to import default instance if not present
-    default_instance = _import_default_instance()
-    if default_instance:
-        # Check if already in instances (by id or port)
-        if not any(i.id == default_instance.id for i in instances) and \
-           not any(i.port == default_instance.port for i in instances):
-            instances.insert(0, default_instance)
-            _save_instances(instances)
-    
-    # Sync firewall rules for all instances (ensures iptables_manager knows about them)
+    # Sync firewall rules for all instances
     for inst in instances:
         _sync_instance_firewall_rules(inst)
             
@@ -71,89 +68,21 @@ def _save_instances(instances: List[Instance]):
     with open(DATA_FILE, "w") as f:
         json.dump([inst.dict() for inst in instances], f, indent=4)
 
-def _import_default_instance() -> Optional[Instance]:
-    """
-    Parses /etc/openvpn/server.conf to create a default Instance object.
-    """
-    if not os.path.exists(DEFAULT_CONFIG_FILE):
-        return None
-
-    try:
-        with open(DEFAULT_CONFIG_FILE, "r") as f:
-            content = f.read()
-        
-        port_match = re.search(r'^port\s+(\d+)', content, re.MULTILINE)
-        proto_match = re.search(r'^proto\s+(\w+)', content, re.MULTILINE)
-        dev_match = re.search(r'^dev\s+(\w+)', content, re.MULTILINE)
-        server_match = re.search(r'^server\s+([\d\.]+)\s+([\d\.]+)', content, re.MULTILINE)
-
-        if port_match and proto_match and dev_match and server_match:
-            port = int(port_match.group(1))
-            protocol = proto_match.group(1)
-            tun_interface = dev_match.group(1)
-            network = server_match.group(1)
-            netmask = server_match.group(2)
-            
-            # Convert netmask to CIDR (simple lookup or calculation)
-            cidr = 24 # Default fallback
-            if netmask == "255.255.255.0": cidr = 24
-            elif netmask == "255.255.0.0": cidr = 16
-            elif netmask == "255.0.0.0": cidr = 8
-            # TODO: Add more robust netmask to CIDR conversion if needed
-
-            # Extract tun interface - default config uses "dev tun" which becomes tun0
-            tun_match = re.search(r'^dev\s+(\S+)', content, re.MULTILINE)
-            tun_interface = "tun0"  # Default value
-            if tun_match:
-                tun_dev = tun_match.group(1)
-                # If it's just "tun" without a number, it becomes tun0
-                if tun_dev == "tun":
-                    tun_interface = "tun0"
-                else:
-                    tun_interface = tun_dev
-            
-            
-            subnet = f"{network}/{cidr}"
-
-            return Instance(
-                id="default",
-                name="Default",
-                port=port,
-                protocol=protocol,
-                subnet=subnet,
-                tun_interface=tun_interface,
-                tunnel_mode="full",
-                routes=[],
-                status="stopped"
-            )
-    except Exception as e:
-        logger.error(f"Failed to parse default config: {e}")
-        return None
-    return None
-
 def _sync_instance_firewall_rules(instance: Instance):
     """
     Ensures that the instance's firewall rules are registered in iptables_manager.
-    This is useful for the default instance or instances imported from disk.
     """
     try:
-        # Check if rules exist
         configs = iptables_manager._load_openvpn_rules_config()
-        
-        # We need to construct the ID that iptables_manager uses.
-        # Currently iptables_manager uses f"inst_{port}".
-        # We should unify this ID generation or handle the discrepancy.
-        # For now, we replicate iptables_manager's logic:
-        rule_id = f"inst_{instance.port}"
+        # We use a consistent ID format based on port or ID
+        rule_id = instance.id 
         
         if rule_id not in configs:
             logger.info(f"Syncing firewall rules for instance {instance.name} (ID: {rule_id})")
-            # Default outgoing interface detection is internal to iptables_manager if not passed, 
-            # but we can pass None to let it decide.
-            iptables_manager.add_openvpn_rules(
+            iptables_manager.add_openvpn_rules( # Function name to be renamed later to add_vpn_rules
                 port=instance.port,
-                proto=instance.protocol,
-                tun_interface=instance.tun_interface,
+                proto="udp", # WireGuard is always UDP
+                tun_interface=instance.interface,
                 subnet=instance.subnet,
                 outgoing_interface=None 
             )
@@ -161,7 +90,6 @@ def _sync_instance_firewall_rules(instance: Instance):
         logger.error(f"Failed to sync firewall rules for instance {instance.name}: {e}")
 
 def get_instance_by_id(instance_id: str) -> Optional[Instance]:
-    """Retrieve a single instance by ID."""
     instances = get_all_instances()
     for inst in instances:
         if inst.id == instance_id:
@@ -179,18 +107,11 @@ def get_all_instances() -> List[Instance]:
     return instances
 
 def get_instance(instance_id: str) -> Optional[Instance]:
-    instances = get_all_instances()
-    for inst in instances:
-        if inst.id == instance_id:
-            return inst
-    return None
+    return get_instance_by_id(instance_id)
 
 def _get_service_name(instance: Instance) -> str:
-    # systemd openvpn instances use openvpn@<config-name>
-    # where config-name is the filename without .conf
-    if instance.id == "default":
-        return "openvpn@server"
-    return f"openvpn@server_{instance.name}"
+    # WireGuard uses wg-quick@<interface>
+    return f"wg-quick@{instance.interface}"
 
 def _is_service_active(instance: Instance) -> bool:
     service_name = _get_service_name(instance)
@@ -200,25 +121,23 @@ def _is_service_active(instance: Instance) -> bool:
     except subprocess.CalledProcessError:
         return False
 
-def create_instance(name: str, port: int, subnet: str, protocol: str = "udp", 
+def create_instance(name: str, port: int, subnet: str, 
                    tunnel_mode: str = "full", routes: List[Dict[str, str]] = None, dns_servers: List[str] = None) -> Instance:
     """
-    Creates a new OpenVPN instance.
+    Creates a new WireGuard instance.
     """
     # --- Validation ---
     logger.info(f"Validating instance creation request: name={name}, port={port}, subnet={subnet}")
-    name_regex = r"^[a-zA-Z0-9-]+$"
+    name_regex = r"^[a-zA-Z0-9_]+$" # Removed hyphen to be safer with interface names sometimes
     if not re.fullmatch(name_regex, name):
-        raise ValueError("Il nome dell'istanza può contenere solo lettere, numeri e trattini.")
+        raise ValueError("Il nome dell'istanza può contenere solo lettere, numeri e underscore.")
 
     try:
         new_subnet = ip_network(subnet, strict=False)
         if not new_subnet.is_private:
             raise ValueError(f"La subnet '{subnet}' deve appartenere a un range di IP privati (RFC 1918).")
     except (AddressValueError, ValueError) as e:
-        if "must belong to a private IP range" in str(e):
-             raise e
-        raise ValueError(f"Formato subnet non valido: '{subnet}'. Usare la notazione CIDR (es. 10.8.0.0/24).")
+         raise ValueError(f"Formato subnet non valido: '{subnet}'. Usare la notazione CIDR (es. 10.8.0.0/24).")
 
     instances = get_all_instances()
     
@@ -227,102 +146,102 @@ def create_instance(name: str, port: int, subnet: str, protocol: str = "udp",
     
     if any(inst.port == port for inst in instances):
         raise ValueError(f"Porta {port} già in uso.")
-
+        
+    # Check subnet overlap
     for inst in instances:
         try:
             existing_subnet = ip_network(inst.subnet, strict=False)
             if new_subnet.overlaps(existing_subnet):
                 raise ValueError(f"La subnet '{subnet}' è in conflitto con la subnet '{inst.subnet}' (istanza '{inst.name}').")
-        except (AddressValueError, ValueError):
-            logger.warning(f"Could not parse existing subnet '{inst.subnet}' for instance '{inst.name}' during validation. Skipping.")
-            continue
-    # --- End Validation ---
+        except: continue
+
+    # Determine Interface Name (wg0, wg1, ...)
+    used_interfaces = [inst.interface for inst in instances]
+    next_id = 0
+    while f"wg{next_id}" in used_interfaces:
+        next_id += 1
+    interface_name = f"wg{next_id}"
     
-    logger.info("Validation passed, determining TUN interface...")
-    
-    # Determine next available TUN interface
-    used_tuns = []
-    for inst in instances:
-        match = re.search(r'tun(\d+)', inst.tun_interface)
-        if match:
-            used_tuns.append(int(match.group(1)))
-            
-    next_tun_id = 0
-    while next_tun_id in used_tuns:
-        next_tun_id += 1
-    tun_interface = f"tun{next_tun_id}"
-    
-    logger.info(f"Assigned TUN interface: {tun_interface}")
+    logger.info(f"Assigned Interface: {interface_name}")
 
     instance_id = name.lower().replace(" ", "_")
     
-    if routes is None:
-        routes = []
-    if dns_servers is None:
-        dns_servers = []
-    
-    logger.info(f"Creating Instance object with id={instance_id}")
+    if routes is None: routes = []
+    if dns_servers is None: dns_servers = ["1.1.1.1", "1.0.0.1"]
+
+    # --- WireGuard Key Generation ---
+    priv_key, pub_key = wireguard_manager.WireGuardManager.generate_keypair()
 
     new_instance = Instance(
         id=instance_id,
         name=name,
         port=port,
-        protocol=protocol,
         subnet=subnet,
-        tun_interface=tun_interface,
+        interface=interface_name,
+        private_key=priv_key,
+        public_key=pub_key,
         tunnel_mode=tunnel_mode,
         routes=routes,
         dns_servers=dns_servers,
         status="stopped"
     )
+
+    # --- Config Generation ---
+    # IP Address for Server Interface is usually .1 of the subnet
+    # e.g. 10.8.0.0/24 -> 10.8.0.1/24
+    server_ip = str(list(new_subnet.hosts())[0]) + "/" + str(new_subnet.prefixlen)
     
-    logger.info("Instance object created, generating OpenVPN config...")
-
-    # Generate Config
+    config_content = wireguard_manager.WireGuardManager.create_interface_config(
+        instance_name=interface_name,
+        listen_port=port,
+        private_key=priv_key,
+        address=server_ip
+    )
+    
+    config_path = os.path.join(WIREGUARD_CONFIG_DIR, f"{interface_name}.conf")
+    
     try:
-        _generate_openvpn_config(new_instance)
-        logger.info("Config generation completed successfully")
+        os.makedirs(WIREGUARD_CONFIG_DIR, exist_ok=True)
+        # Set permission strict for folder if needed, but file definitely needs 600
+        with open(config_path, "w") as f:
+            f.write(config_content)
+        os.chmod(config_path, 0o600)
+        logger.info(f"Created WireGuard config at {config_path}")
     except Exception as e:
-        logger.error(f"Config generation failed: {e}", exc_info=True)
-        raise RuntimeError(f"Failed to generate config: {e}")
+        raise RuntimeError(f"Failed to write WireGuard config: {e}")
 
-    # Enable and Start Service
+    # --- Service Startup ---
     service_name = _get_service_name(new_instance)
     try:
-        logger.info(f"Enabling and starting systemd service: {service_name}")
-        subprocess.run(["/usr/bin/systemctl", "enable", service_name], check=True)
-        subprocess.run(["/usr/bin/systemctl", "start", service_name], check=True)
+        logger.info(f"Enabling and starting service: {service_name}")
+        subprocess.run(["systemctl", "enable", service_name], check=True)
+        subprocess.run(["systemctl", "start", service_name], check=True)
         new_instance.status = "running"
     except subprocess.CalledProcessError as e:
-        # Clean up if start fails
-        try:
-             os.remove(os.path.join(OPENVPN_CONFIG_DIR, f"server_{name}.conf"))
+        # Cleanup
+        try: os.remove(config_path) 
         except: pass
-        raise RuntimeError(f"Failed to start OpenVPN service: {e}")
+        raise RuntimeError(f"Failed to start WireGuard service: {e}")
 
-    # Apply iptables for VPN subnet on default WAN interface
-    iptables_manager.add_openvpn_rules(port, protocol, tun_interface, subnet)
+    # --- Firewall Rules ---
+    # Register with iptables manager
+    iptables_manager.add_openvpn_rules( # Rename later
+        port=port,
+        proto="udp",
+        tun_interface=interface_name,
+        subnet=subnet
+    )
     
-    # Remove legacy direct forwarding rule insertion
-    # iptables_manager.add_forwarding_rule(subnet, route_network)
-    # This is now handled by firewall_manager.apply_firewall_rules() iterating instance.routes
-    
-    # Persist iptables rules
-    # We should trigger firewall_manager to apply the new routes immediately
-    # Since we are adding it to instances list below, we might need to save first or inject.
-    # The firewall_manager reads from `_load_instances` typically or `instance_manager.get_all_instances`.
-    # Let's save instance first then apply.
-    pass
-
-    # Save
+    # Save Instance
     instances.append(new_instance)
     _save_instances(instances)
     
-    # Trigger Firewall Update (Includes Custom Routes in VI chain)
+    # Trigger Firewall Refresh (to apply rules to chains)
     try:
+        import firewall_manager as instance_firewall_manager
         instance_firewall_manager.apply_firewall_rules()
     except Exception as e:
-        logger.error(f"Failed to apply firewall rules after instance creation: {e}")
+        logger.error(f"Failed to apply firewall rules: {e}")
 
     return new_instance
 
@@ -334,71 +253,42 @@ def delete_instance(instance_id: str):
 
     # Stop Service
     service_name = _get_service_name(inst)
-    subprocess.run(["/usr/bin/systemctl", "stop", service_name], check=False)
-    subprocess.run(["/usr/bin/systemctl", "disable", service_name], check=False)
+    subprocess.run(["systemctl", "stop", service_name], check=False)
+    subprocess.run(["systemctl", "disable", service_name], check=False)
 
-    # Remove iptables
-    iptables_manager.remove_openvpn_rules(inst.port, inst.protocol, inst.tun_interface, inst.subnet)
-    
-    # Remove custom route forwarding rules  
-    # Legacy cleanup - if we used the old method they might be there.
-    # But clean_legacy_rules should handle them or fw flush.
-    # For now, we can comment this out as firewall refresh will clear VI chains.
-    pass
-    
-    # Persist iptables rules
+    # Remove iptables rules
+    iptables_manager.remove_openvpn_rules(inst.port, "udp", inst.interface, inst.subnet)
     _save_iptables_rules()
 
-    # Remove Config
-    config_path = os.path.join(OPENVPN_CONFIG_DIR, f"server_{inst.name}.conf")
+    # Remove Config File
+    config_path = os.path.join(WIREGUARD_CONFIG_DIR, f"{inst.interface}.conf")
     if os.path.exists(config_path):
         os.remove(config_path)
 
-    # Remove from registry
+    # Remove from DB
     instances = [i for i in instances if i.id != instance_id]
     _save_instances(instances)
 
 def update_instance_routes(instance_id: str, tunnel_mode: str, routes: List[Dict[str, str]], dns_servers: List[str] = None) -> Instance:
     """
-    Updates the routes and DNS for an existing instance.
-    Regenerates config and restarts the service.
+    Updates instance routing preferences. 
+    Note: In WireGuard, this mostly affects Client Config generation, 
+    but we might want to update DNS pushed to clients if we were using a DNS forwarder (not yet).
+    Ideally, we just update the DB object so future client configs get new settings.
     """
-    logger.info(f"Updating routes for instance '{instance_id}'")
-
-    # --- Validation ---
-    if dns_servers:
-        for ip in dns_servers:
-            try:
-                ip_address(ip)
-            except ValueError:
-                raise ValueError(f"Indirizzo IP per DNS non valido: '{ip}'")
-
-    if tunnel_mode == "split" and routes:
-        for route in routes:
-            network = route.get("network")
-            if not network:
-                raise ValueError("Ogni rotta deve avere una 'network' definita.")
-            try:
-                ip_network(network, strict=False)
-            except (AddressValueError, ValueError):
-                raise ValueError(f"Formato subnet per rotta non valido: '{network}'")
-    # --- End Validation ---
-    
     instances = get_all_instances()
-    instance = None
-    for inst in instances:
-        if inst.id == instance_id:
-            instance = inst
-            break
+    instance = next((i for i in instances if i.id == instance_id), None)
     
     if not instance:
         raise ValueError(f"Instance '{instance_id}' not found")
     
-    # Update routes, tunnel mode, and DNS servers
-    old_routes = instance.routes.copy() or [] # Ensure it's not None
+    # Validation
+    if dns_servers:
+        for ip in dns_servers:
+            try: ip_address(ip)
+            except ValueError: raise ValueError(f"Invalid DNS IP: {ip}")
+
     instance.tunnel_mode = tunnel_mode
-    
-    # If switching to Full Tunnel, clear custom routes to ensure data consistency
     if tunnel_mode == "full":
         instance.routes = []
     else:
@@ -407,288 +297,37 @@ def update_instance_routes(instance_id: str, tunnel_mode: str, routes: List[Dict
     if dns_servers is not None:
         instance.dns_servers = dns_servers
     
-    logger.info(f"Updated instance {instance_id}: Mode={tunnel_mode}, Routes={len(instance.routes)}, DNS={len(instance.dns_servers)}")
-    
-    # Regenerate config file
-    try:
-        _generate_openvpn_config(instance)
-        logger.info("Config regenerated successfully")
-    except Exception as e:
-        logger.error(f"Failed to regenerate config:  {e}")
-        raise RuntimeError(f"Failed to regenerate config: {e}")
-    
-    # Update iptables rules for routes
-    # Remove old route forwarding rules
-    # Legacy code removed: iptables_manager.remove_forwarding_rule
-    pass
-    
-    # Adding new route forwarding rules
-    # Legacy code removed: iptables_manager.add_forwarding_rule
-    # Current Handling: Handled in firewall_manager.apply_firewall_rules() which reads instance.routes
-    pass
-    
-    # Persist iptables
-    _save_iptables_rules()
-    
-    # Restart OpenVPN service to apply changes
-    service_name = _get_service_name(instance)
-    try:
-        logger.info(f"Restarting service: {service_name}")
-        subprocess.run(["/usr/bin/systemctl", "restart", service_name], check=True)
-        logger.info("Service restarted successfully")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to restart service: {e}")
-        raise RuntimeError(f"Failed to restart OpenVPN service: {e}")
-    
-    # Save updated instance
     _save_instances(instances)
     
-    return instance
-    
-    # Trigger Firewall Update (Includes Custom Routes in VI chain)
-    # We do this AFTER saving instance above in `_save_instances(instances)`
+    # Trigger firewall update just in case routes affect server-side firewalling (VIG chains)
     try:
+        import firewall_manager as instance_firewall_manager
         instance_firewall_manager.apply_firewall_rules()
     except Exception as e:
-        logger.error(f"Failed to apply firewall rules after route update: {e}")
+        logger.error(f"Failed to apply firewall rules: {e}")
 
-def _generate_openvpn_config(instance: Instance):
-    """
-    Generates a server configuration file based on a template or defaults.
-    """
-    logger.info(f"Generating config for instance '{instance.name}'")
-    
-    # Use relative paths like the default server.conf
-    # Files are in /etc/openvpn/ directly
-    ca_path = "ca.crt"
-    
-    # Find the actual server cert/key names (they have random names from Angristan script)
-    server_cert = None
-    server_key = None
-    try:
-        for f in os.listdir("/etc/openvpn"):
-            if f.startswith("server_") and f.endswith(".crt"):
-                server_cert = f
-            if f.startswith("server_") and f.endswith(".key"):
-                server_key = f
-        
-        if not server_cert or not server_key:
-            logger.warning("Server cert/key not found with server_ prefix, using generic names")
-            server_cert = "server.crt"
-            server_key = "server.key"
-    except Exception as e:
-        logger.warning(f"Error finding server cert/key: {e}")
-        server_cert = "server.crt"
-        server_key = "server.key"
-    
-    cert_path = server_cert
-    key_path = server_key
-    crl_path = "crl.pem"
-    tls_crypt_path = "tls-crypt.key"
-    
-    logger.info(f"Using certificates: ca={ca_path}, cert={cert_path}, key={key_path}")
-    
-    # Handle subnet mask
-    network = instance.subnet.split('/')[0]
-    cidr = instance.subnet.split('/')[1] if '/' in instance.subnet else '24'
-    
-    # Simple CIDR to Netmask conversion
-    netmask = "255.255.255.0"
-    if cidr == '8': netmask = "255.0.0.0"
-    elif cidr == '16': netmask = "255.255.0.0"
-    elif cidr == '24': netmask = "255.255.255.0"
-    
-    # Ensure log directory exists
-    log_dir = "/var/log/openvpn"
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # Ensure client-config-dir exists
-    ccd_dir = f"/etc/openvpn/ccd/{instance.name}"
-    os.makedirs(ccd_dir, exist_ok=True)
-    
-    # Base config (matching Angristan style)
-    config_lines = [
-        f"port {instance.port}",
-        f"proto {instance.protocol}",
-        f"dev {instance.tun_interface}",
-        f"ca {ca_path}",
-        f"cert {cert_path}",
-        f"key {key_path}",
-        "dh none",  # Use ECDH like Angristan
-        "ecdh-curve prime256v1",
-        "topology subnet",
-        f"server {network} {netmask}",
-        f"ifconfig-pool-persist ipp_{instance.name}.txt",
-        "",
-        "# Security",
-        "user nobody",
-        "group nogroup",
-        "persist-key",
-        "persist-tun",
-        "",
-        "# Keepalive and timeouts",
-        "keepalive 10 120",
-        "",
-        "# Cryptography",
-        "cipher AES-128-GCM",  # Match Angristan default
-        "auth SHA256",
-        "ncp-ciphers AES-128-GCM",
-        "tls-server",
-        "tls-version-min 1.2",
-        "tls-cipher TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256",
-    ]
-    
-    # Add tls-crypt if available
-    if os.path.exists(f"/etc/openvpn/{tls_crypt_path}"):
-        config_lines.append(f"tls-crypt {tls_crypt_path}")
-    
-    # Client configuration directory
-    config_lines.extend([
-        "",
-        "# Client-specific configurations",
-        f"client-config-dir {ccd_dir}",
-    ])
-    
-    # Add routing based on tunnel mode
-    config_lines.append("")
-    config_lines.append("# Routing configuration")
-    
-    if instance.tunnel_mode == "full":
-        config_lines.append('push "redirect-gateway def1 bypass-dhcp"')
-    
-    # DNS Configuration
-    if instance.dns_servers and len(instance.dns_servers) > 0:
-        for dns in instance.dns_servers:
-            config_lines.append(f'push "dhcp-option DNS {dns.strip()}"')
-    elif instance.tunnel_mode == "full":
-        # Fallback to Google DNS only for Full Tunnel if no custom DNS provided
-        config_lines.append('push "dhcp-option DNS 8.8.8.8"')
-        config_lines.append('push "dhcp-option DNS 8.8.4.4"')
-
-    if instance.tunnel_mode == "split":
-        # Add custom routes
-        if instance.routes and len(instance.routes) > 0:
-            for route in instance.routes:
-                route_network = route.get('network', '')
-                if route_network:
-                    # Convert CIDR to network + netmask for push route command
-                    if '/' in route_network:
-                        net_parts = route_network.split('/')
-                        route_net = net_parts[0]
-                        route_cidr = net_parts[1]
-                        # Convert CIDR to netmask
-                        route_mask = "255.255.255.0"
-                        if route_cidr == '8': route_mask = "255.0.0.0"
-                        elif route_cidr == '16': route_mask = "255.255.0.0"
-                        elif route_cidr == '24': route_mask = "255.255.255.0"
-                        elif route_cidr == '32': route_mask = "255.255.255.255"
-                        config_lines.append(f'push "route {route_net} {route_mask}"')
-                    else:
-                        config_lines.append(f'push "route {route_network} 255.255.255.0"')
-        else:
-            logger.warning(f"Split tunnel mode enabled but no routes defined for instance '{instance.name}'")
-    
-    # Logging and monitoring
-    config_lines.extend([
-        "",
-        "# Logging",
-        f"status {log_dir}/status_{instance.name}.log",
-        "status-version 2",
-        "verb 3",
-    ])
-    
-    # Certificate revocation list
-    config_lines.extend([
-        "",
-        "# Certificate revocation",
-        f"crl-verify {crl_path}",
-    ])
-    
-    config_content = "\n".join(config_lines) + "\n"
-    
-    # Ensure directory exists
-    os.makedirs(OPENVPN_CONFIG_DIR, exist_ok=True)
-    
-    # Determine config filename
-    conf_filename = f"server_{instance.name}.conf"
-    if instance.id == "default":
-        conf_filename = "server.conf"
-
-    config_path = os.path.join(OPENVPN_CONFIG_DIR, conf_filename)
-    logger.info(f"Writing config to: {config_path}")
-    
-    try:
-        with open(config_path, "w") as f:
-            f.write(config_content)
-        logger.info(f"Config file created successfully: {config_path}")
-        # Set proper permissions
-        os.chmod(config_path, 0o644)
-        
-        # Ensure CRL has correct permissions (using absolute path)
-        crl_absolute = f"/etc/openvpn/{crl_path}"
-        if os.path.exists(crl_absolute):
-            os.chmod(crl_absolute, 0o644)
-            logger.info(f"Set CRL permissions: {crl_absolute}")
-            
-    except Exception as e:
-        logger.error(f"Failed to write config file {config_path}: {e}")
-        raise
-
-def add_client_to_instance(instance_id: str, client_name: str):
-    """Add a client to an instance's client list."""
-    instances = _load_instances()
-    for inst in instances:
-        if inst.id == instance_id:
-            if client_name not in inst.clients:
-                inst.clients.append(client_name)
-                _save_instances(instances)
-                logger.info(f"Added client '{client_name}' to instance '{instance_id}'")
-            return
-    raise ValueError(f"Instance '{instance_id}' not found")
-
-def remove_client_from_instance(instance_id: str, client_name: str):
-    """Remove a client from an instance's client list."""
-    instances = _load_instances()
-    for inst in instances:
-        if inst.id == instance_id:
-            if client_name in inst.clients:
-                inst.clients.remove(client_name)
-                _save_instances(instances)
-                logger.info(f"Removed client '{client_name}' from instance '{instance_id}'")
-            return
-    raise ValueError(f"Instance '{instance_id}' not found")
-
-def get_instance_clients(instance_id: str) -> List[str]:
-    """Get list of clients associated with an instance."""
-    instance = get_instance(instance_id)
-    if not instance:
-        raise ValueError(f"Instance '{instance_id}' not found")
-    return instance.clients
+    return instance
 
 def update_instance_firewall_policy(instance_id: str, new_policy: str) -> Instance:
-    """
-    Updates the default firewall policy for a specific instance.
-    """
     if new_policy.upper() not in ["ACCEPT", "DROP"]:
-        raise ValueError("La policy deve essere 'ACCEPT' o 'DROP'.")
+        raise ValueError("Policy must be ACCEPT or DROP")
 
     instances = _load_instances()
-    found_instance = None
-    for i, inst in enumerate(instances):
+    found = False
+    for inst in instances:
         if inst.id == instance_id:
             inst.firewall_default_policy = new_policy.upper()
-            found_instance = inst
-            instances[i] = inst # Update in list
+            found = True
             break
     
-    if not found_instance:
-        raise ValueError(f"Instance '{instance_id}' not found")
+    if not found:
+        raise ValueError("Instance not found")
 
     _save_instances(instances)
     import firewall_manager as instance_firewall_manager
-    instance_firewall_manager.apply_firewall_rules() # Apply changes immediately
-    logger.info(f"Updated firewall policy for instance '{instance_id}' to '{new_policy}'.")
-    return found_instance
+    instance_firewall_manager.apply_firewall_rules()
+    return inst
 
-
-
+# Stub for client management functions required by main.py but moved to vpn_manager logic usually
+# but for now main.py calls vpn_manager for clients. 
+# instance_manager handles Instance object CRUD.

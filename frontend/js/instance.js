@@ -72,6 +72,9 @@ async function fetchAndRenderClients() {
                         </td>
                         <td>
                             <div class="d-flex gap-2 justify-content-end">
+                                <button class="btn btn-secondary btn-sm btn-icon" onclick="showQRCode('${fullName}')" title="Mostra QR Code">
+                                    <i class="ti ti-qrcode"></i>
+                                </button>
                                 <button class="btn btn-primary btn-sm btn-icon" onclick="downloadClient('${fullName}')" title="Scarica Configurazione">
                                     <i class="ti ti-download"></i>
                                 </button>
@@ -99,7 +102,7 @@ async function fetchAndRenderClients() {
                             </td>
                             <td>
                                 <div>${client.real_ip || '-'}</div>
-                                <div class="small text-muted">VPN: ${client.virtual_ip || '-'}</div>
+                                <div class="small text-muted">VPN: ${client.allocated_ip || '-'}</div>
                             </td>
                             <td class="text-muted">
                                 <div><i class="ti ti-arrow-down icon-sm text-green"></i> ${formatBytes(client.bytes_received)}</div>
@@ -128,6 +131,39 @@ async function fetchAndRenderClients() {
         }
     } catch (e) {
         showNotification('danger', 'Errore di connessione: ' + e.message);
+    }
+}
+
+async function showQRCode(clientName) {
+    if (!currentInstance) return;
+    
+    // Clear previous QR
+    const container = document.getElementById('qrcode-container');
+    container.innerHTML = 'Caricamento...';
+    new bootstrap.Modal(document.getElementById('modal-qrcode')).show();
+
+    try {
+        // Fetch raw config text
+        // Note: The AJAX handler might need adjustment to return raw text for a specific action,
+        // or we use the download link and fetch it as text.
+        const url = `${API_AJAX_HANDLER}?action=download_client&instance_id=${currentInstance.id}&client_name=${clientName}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) throw new Error("Impossibile recuperare la configurazione.");
+        
+        const configText = await response.text();
+        
+        // Render QR
+        container.innerHTML = '';
+        new QRCode(container, {
+            text: configText,
+            width: 256,
+            height: 256,
+            correctLevel: QRCode.CorrectLevel.M
+        });
+
+    } catch (e) {
+        container.innerHTML = `<span class="text-danger">Errore: ${e.message}</span>`;
     }
 }
 

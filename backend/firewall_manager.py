@@ -424,7 +424,7 @@ def apply_firewall_rules():
             inst_config = next((cfg for cfg in openvpn_configs.values() if cfg.port == instance.port), None)
             
         if inst_config:
-            tun_if = inst_config.tun_interface
+            tun_if = inst_config.interface # Renamed from tun_interface
             out_if = inst_config.outgoing_interface
             
             # Allow forwarding from TUN to WAN (ESTABLISHED)
