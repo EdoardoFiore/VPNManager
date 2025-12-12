@@ -410,6 +410,12 @@ def _clean_legacy_rules():
     _run_iptables("filter", ["-D", "INPUT", "-p", "udp", "--dport", "1194", "-j", "ACCEPT"], suppress_errors=True)
     _run_iptables("filter", ["-D", "INPUT", "-p", "tcp", "--dport", "1194", "-j", "ACCEPT"], suppress_errors=True)
     
+    # Also clean up rules specifying the interface (common in some setups)
+    def_if = DEFAULT_INTERFACE
+    if def_if:
+        _run_iptables("filter", ["-D", "INPUT", "-i", def_if, "-p", "udp", "--dport", "1194", "-j", "ACCEPT"], suppress_errors=True)
+        _run_iptables("filter", ["-D", "INPUT", "-i", def_if, "-p", "tcp", "--dport", "1194", "-j", "ACCEPT"], suppress_errors=True)
+    
     # FORWARD Legacy
     # -i tun0 -o eth0 -j ACCEPT (and variants)
     _run_iptables("filter", ["-D", "FORWARD", "-i", "tun+", "-j", "ACCEPT"], suppress_errors=True)

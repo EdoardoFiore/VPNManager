@@ -7,7 +7,6 @@ from ipaddress import ip_network, ip_address, AddressValueError
 from typing import List, Optional, Dict
 from pydantic import BaseModel
 import iptables_manager
-import firewall_manager as instance_firewall_manager
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +59,10 @@ def _load_instances() -> List[Instance]:
            not any(i.port == default_instance.port for i in instances):
             instances.insert(0, default_instance)
             _save_instances(instances)
+    
+    # Sync firewall rules for all instances (ensures iptables_manager knows about them)
+    for inst in instances:
+        _sync_instance_firewall_rules(inst)
             
     return instances
 
@@ -127,6 +130,35 @@ def _import_default_instance() -> Optional[Instance]:
         logger.error(f"Failed to parse default config: {e}")
         return None
     return None
+
+def _sync_instance_firewall_rules(instance: Instance):
+    """
+    Ensures that the instance's firewall rules are registered in iptables_manager.
+    This is useful for the default instance or instances imported from disk.
+    """
+    try:
+        # Check if rules exist
+        configs = iptables_manager._load_openvpn_rules_config()
+        
+        # We need to construct the ID that iptables_manager uses.
+        # Currently iptables_manager uses f"inst_{port}".
+        # We should unify this ID generation or handle the discrepancy.
+        # For now, we replicate iptables_manager's logic:
+        rule_id = f"inst_{instance.port}"
+        
+        if rule_id not in configs:
+            logger.info(f"Syncing firewall rules for instance {instance.name} (ID: {rule_id})")
+            # Default outgoing interface detection is internal to iptables_manager if not passed, 
+            # but we can pass None to let it decide.
+            iptables_manager.add_openvpn_rules(
+                port=instance.port,
+                proto=instance.protocol,
+                tun_interface=instance.tun_interface,
+                subnet=instance.subnet,
+                outgoing_interface=None 
+            )
+    except Exception as e:
+        logger.error(f"Failed to sync firewall rules for instance {instance.name}: {e}")
 
 def get_instance_by_id(instance_id: str) -> Optional[Instance]:
     """Retrieve a single instance by ID."""
@@ -653,6 +685,7 @@ def update_instance_firewall_policy(instance_id: str, new_policy: str) -> Instan
         raise ValueError(f"Instance '{instance_id}' not found")
 
     _save_instances(instances)
+    import firewall_manager as instance_firewall_manager
     instance_firewall_manager.apply_firewall_rules() # Apply changes immediately
     logger.info(f"Updated firewall policy for instance '{instance_id}' to '{new_policy}'.")
     return found_instance

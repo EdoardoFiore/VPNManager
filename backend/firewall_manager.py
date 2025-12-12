@@ -322,6 +322,9 @@ def apply_firewall_rules():
     # Flush Instance and Group Chains
     for chain in instance_chains + group_chains:
         iptables_manager._create_or_flush_chain(chain)
+        
+    # Flush Main Chain (to avoid duplicate jumps if run independently)
+    iptables_manager._create_or_flush_chain(main_chain)
 
     # 4. (Re-creation handled by _create_or_flush_chain above)
         
