@@ -194,6 +194,12 @@ log_info "Fase 5/5: Configurazione Nginx..."
 mkdir -p /etc/nginx/sites-available
 mkdir -p /etc/nginx/sites-enabled
 cp ../nginx/vpn-dashboard.conf /etc/nginx/sites-available/
+
+# Rilevamento versione PHP per configurare socket corretto in Nginx
+PHP_VERSION=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+log_info "Versione PHP rilevata: $PHP_VERSION. Aggiornamento configurazione Nginx..."
+sed -i "s/php8.1-fpm.sock/php$PHP_VERSION-fpm.sock/g" /etc/nginx/sites-available/vpn-dashboard.conf
+
 rm -f /etc/nginx/sites-enabled/default
 ln -sf /etc/nginx/sites-available/vpn-dashboard.conf /etc/nginx/sites-enabled/
 

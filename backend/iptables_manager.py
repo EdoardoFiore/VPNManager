@@ -114,7 +114,16 @@ def _ensure_jump_rule(source_chain: str, target_chain: str, table: str = "filter
     if res:
         logger.info(f"Enforced jump from {source_chain} to {target_chain} at pos {position}")
     else:
-        logger.error(f"Failed to enforce jump rule: {err}")
+        # Fallback for "Index of insertion too big"
+        if "Index of insertion too big" in err or "iptables: Index of insertion too big" in err:
+             logger.warning(f"Insert at pos {position} failed (Index too big), falling back to Append (-A).")
+             res_fallback, err_fallback = _run_iptables(table, ["-A", source_chain, "-j", target_chain])
+             if res_fallback:
+                 logger.info(f"Enforced jump from {source_chain} to {target_chain} via Append")
+             else:
+                 logger.error(f"Failed to enforce jump rule (fallback): {err_fallback}")
+        else:
+            logger.error(f"Failed to enforce jump rule: {err}")
 
 # --- Persistence Models ---
 
@@ -223,6 +232,19 @@ def _apply_vpn_instance_rules(inst: Instance, outgoing_interface: str = "eth0"):
 def apply_all_vpn_rules(): # Renamed from apply_all_openvpn_rules
     logger.info("Applying all VPN firewall rules...")
     
+    
+    # 1. Reset Top-Level VPN Chains
+    _create_or_flush_chain(VPN_INPUT_CHAIN, "filter")
+    _create_or_flush_chain(VPN_OUTPUT_CHAIN, "filter")
+    _create_or_flush_chain(VPN_NAT_POSTROUTING_CHAIN, "nat")
+    _create_or_flush_chain(VPN_MAIN_FWD_CHAIN, "filter")
+    
+    # 2. Ensure Jumps from Main Chains
+    _ensure_jump_rule("INPUT", VPN_INPUT_CHAIN, "filter", 1)
+    _ensure_jump_rule("OUTPUT", VPN_OUTPUT_CHAIN, "filter", 1)
+    _ensure_jump_rule("POSTROUTING", VPN_NAT_POSTROUTING_CHAIN, "nat", 1)
+    _ensure_jump_rule("FORWARD", VPN_MAIN_FWD_CHAIN, "filter", 1)
+
     with Session(engine) as session:
         instances = session.exec(select(Instance)).all()
         

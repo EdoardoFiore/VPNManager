@@ -93,6 +93,10 @@ class InstanceRequest(BaseModel):
 class FirewallPolicyRequest(BaseModel):
     default_policy: str
 
+from dotenv import load_dotenv
+
+load_dotenv() # Load environment variables from .env file
+
 # --- Sicurezza con API Key ---
 API_KEY = os.getenv("API_KEY", "change-this-in-production")
 API_KEY_NAME = "X-API-Key"
