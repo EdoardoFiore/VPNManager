@@ -126,8 +126,12 @@ async def startup_event():
     except Exception as e:
         print(f"Startup Error: Failed to apply OpenVPN rules: {e}")
         
-    # Machine firewall rules are applied on import of machine_firewall_manager, 
-    # but we could force re-apply here if needed.
+    # Re-apply Machine Firewall rules to ensure they are placed correctly (after VPN rules)
+    try:
+        machine_firewall_manager.apply_all_rules()
+        print("Startup: Machine firewall rules applied.")
+    except Exception as e:
+        print(f"Startup Error: Failed to apply Machine firewall rules: {e}")
 
 # --- Middleware CORS ---
 origins = ["*"]

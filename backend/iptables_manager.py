@@ -433,6 +433,18 @@ def _clean_legacy_rules():
         _run_iptables("filter", ["-D", "FORWARD", "-i", "tun+", "-o", def_if, "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"], suppress_errors=True)
         _run_iptables("filter", ["-D", "FORWARD", "-i", def_if, "-o", "tun+", "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"], suppress_errors=True)
 
+    # NAT Legacy
+    # Common masquerade rule: -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE
+    # We try to remove generic subnets if possible, or we could list and delete.
+    # For now, let's remove specific common subnets 10.8.0.0/24 which is default.
+    # Note: This might need to be smarter if user picked different subnets, but we'll start with the most common offender.
+    # We can also iterate known instances config and try to remove their "raw" rule equivalent.
+    
+    configs = _load_openvpn_rules_config()
+    for config in configs.values():
+         # Attempt to remove the direct rule that openvpn-install.sh might have added
+         _run_iptables("nat", ["-D", "POSTROUTING", "-s", config.subnet, "-o", config.outgoing_interface, "-j", "MASQUERADE"], suppress_errors=True)
+
 def apply_all_openvpn_rules():
     """
     Orchestrates the application of all OpenVPN-related iptables rules.

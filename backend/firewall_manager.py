@@ -146,7 +146,15 @@ def add_member_to_group(group_id: str, client_identifier: str, subnet_info: Dict
     while correct_identifier.startswith(prefix_to_check + instance_name):
         correct_identifier = correct_identifier[len(prefix_to_check):]
     
-    if instance_name != group.instance_id:
+    # Resolve instance object to safely compare ID vs Name
+    # (The frontend sends Name, but Group stores ID)
+    instances = instance_manager.get_all_instances()
+    inst_obj = next((i for i in instances if i.name == instance_name), None)
+    if not inst_obj:
+        # Fallback: maybe instance_name IS the ID?
+        inst_obj = next((i for i in instances if i.id == instance_name), None)
+
+    if not inst_obj or inst_obj.id != group.instance_id:
         raise ValueError(f"Client does not belong to instance {group.instance_id}")
 
     if correct_identifier not in group.members:
@@ -389,7 +397,9 @@ def apply_firewall_rules():
         # Add jumps from MAIN to INSTANCE chain
         # Note: We filter by source subnet to direct traffic to the correct instance chain
         _run_iptables(["iptables", "-A", main_chain, "-s", instance.subnet, "-j", instance_chain_name])
-        logger.info(f"[JUMP] Chain {main_chain}: -s {instance.subnet} -j {instance_chain_name}")
+        # Also filter by destination subnet to handle return traffic (Internet -> VPN)
+        _run_iptables(["iptables", "-A", main_chain, "-d", instance.subnet, "-j", instance_chain_name])
+        logger.info(f"[JUMP] Chain {main_chain}: -s/-d {instance.subnet} -j {instance_chain_name}")
 
         # --- General Instance Forwarding Rules (Moved from iptables_manager.add_openvpn_rules) ---
         # Find config for this instance to get interface

@@ -90,7 +90,15 @@ class MachineFirewallManager:
         
         # Assign an order if not provided
         if rule_data.get("order") is None:
-            rule_data["order"] = len(self.rules)
+            # Find the current maximum order.
+            # We don't just use len(self.rules) because if rules were deleted or reordered, 
+            # the order numbers might not be contiguous or match the length perfectly if not normalized.
+            # However, _reorder_rules_consecutively normalizes them on delete.
+            # But just to be safe and explicit:
+            max_order = -1
+            if self.rules:
+                max_order = max(r.order for r in self.rules)
+            rule_data["order"] = max_order + 1
         
         new_rule = MachineFirewallRule.from_dict(rule_data)
         self.rules.append(new_rule)
