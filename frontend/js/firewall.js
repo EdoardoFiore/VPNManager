@@ -175,9 +175,11 @@ function renderMembers(group) {
         row.innerHTML = `
             <td>${displayUser}</td>
             <td>
+                ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
                 <button class="btn btn-sm btn-ghost-danger" onclick="removeMember('${memberId}')">
                     <i class="ti ti-trash"></i>
                 </button>
+                ` : ''}
             </td>
         `;
         tbody.appendChild(row);
@@ -342,35 +344,38 @@ async function loadRules(groupId) {
             renderRules(window.currentRules);
 
             // Initialize SortableJS
-            if (sortableGroupRulesInstance) {
-                sortableGroupRulesInstance.destroy();
-            }
-            sortableGroupRulesInstance = new Sortable(tbody, {
-                animation: 150,
-                ghostClass: 'sortable-ghost',
-                handle: '.ti-grip-vertical',
-                filter: '.non-draggable-rule', // Add this line
-                onMove: function (evt) {
-                    // Prevent any item from being moved if the related element (the one it's trying to move over/next to) is the non-draggable rule
-                    if (evt.related.classList.contains('non-draggable-rule')) {
-                        return false;
-                    }
-                    // Also prevent the non-draggable rule itself from being moved if it somehow gets initiated
-                    if (evt.dragged.classList.contains('non-draggable-rule')) {
-                        return false;
-                    }
-                    return true; // Allow move otherwise
-                },
-                onEnd: function (evt) {
-                    // Get the moved item
-                    const movedItem = window.currentRules.splice(evt.oldIndex, 1)[0];
-                    // Insert it at the new index
-                    window.currentRules.splice(evt.newIndex, 0, movedItem);
-
-                    // The UI is already updated by SortableJS, we just need to save the new order.
-                    applyRuleOrder();
+            // Initialize SortableJS only for authorized roles
+            if (['admin', 'partner', 'technician'].includes(currentUserRole)) {
+                if (sortableGroupRulesInstance) {
+                    sortableGroupRulesInstance.destroy();
                 }
-            });
+                sortableGroupRulesInstance = new Sortable(tbody, {
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    handle: '.ti-grip-vertical',
+                    filter: '.non-draggable-rule', // Add this line
+                    onMove: function (evt) {
+                        // Prevent any item from being moved if the related element (the one it's trying to move over/next to) is the non-draggable rule
+                        if (evt.related.classList.contains('non-draggable-rule')) {
+                            return false;
+                        }
+                        // Also prevent the non-draggable rule itself from being moved if it somehow gets initiated
+                        if (evt.dragged.classList.contains('non-draggable-rule')) {
+                            return false;
+                        }
+                        return true; // Allow move otherwise
+                    },
+                    onEnd: function (evt) {
+                        // Get the moved item
+                        const movedItem = window.currentRules.splice(evt.oldIndex, 1)[0];
+                        // Insert it at the new index
+                        window.currentRules.splice(evt.newIndex, 0, movedItem);
+
+                        // The UI is already updated by SortableJS, we just need to save the new order.
+                        applyRuleOrder();
+                    }
+                });
+            }
 
         } else {
             tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Errore caricamento regole.</td></tr>';
@@ -408,12 +413,14 @@ function renderRules(rules) {
                 <td><code>${rule.destination}</code></td>
                 <td>${rule.port || '*'}</td>
                 <td class="text-end">
+                    ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
                     <button class="btn btn-sm btn-ghost-primary" onclick="openEditRuleModal('${rule.id}')" title="Modifica">
                         <i class="ti ti-edit"></i>
                     </button>
                     <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteRule('${rule.id}')" title="Elimina">
                         <i class="ti ti-trash"></i>
                     </button>
+                    ` : ''}
                 </td>
         `;
             tbody.appendChild(tr);

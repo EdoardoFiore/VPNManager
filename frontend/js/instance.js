@@ -72,6 +72,7 @@ async function fetchAndRenderClients() {
                         </td>
                         <td>
                             <div class="d-flex gap-2 justify-content-end">
+                                ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
                                 <button class="btn btn-secondary btn-sm btn-icon" onclick="showQRCode('${fullName}')" title="Mostra QR Code">
                                     <i class="ti ti-qrcode"></i>
                                 </button>
@@ -81,6 +82,7 @@ async function fetchAndRenderClients() {
                                 <button class="btn btn-danger btn-sm btn-icon" onclick="revokeClient('${fullName}')" title="Revoca Client">
                                     <i class="ti ti-trash"></i>
                                 </button>
+                                ` : ''}
                             </div>
                         </td>
                     </tr>
@@ -110,9 +112,11 @@ async function fetchAndRenderClients() {
                             </td>
 
                             <td>
+                                ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
                                 <button class="btn btn-danger btn-sm btn-icon" onclick="revokeClient('${fullName}')">
                                     <i class="ti ti-trash"></i>
                                 </button>
+                                ` : ''}
                             </td>
                         </tr>
                     `;

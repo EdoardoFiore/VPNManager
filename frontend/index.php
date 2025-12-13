@@ -7,9 +7,11 @@ require_once 'includes/header.php';
     <h2>Istanze OpenVPN</h2>
     <div class="d-flex align-items-center gap-2">
         <span class="text-muted small me-2" id="connection-status"></span>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-create-instance">
-            <i class="ti ti-plus icon"></i> Nuova Istanza
-        </button>
+        <?php if (in_array($currentRole, ['admin', 'partner'])): ?>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-create-instance">
+                <i class="ti ti-plus icon"></i> Nuova Istanza
+            </button>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -111,6 +113,9 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+<script>
+    const currentUserRole = '<?= $currentRole ?>';
+</script>
 <?php
 $extra_scripts = ['js/dashboard.js'];
 require_once 'includes/footer.php';

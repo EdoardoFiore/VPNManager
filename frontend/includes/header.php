@@ -1,3 +1,14 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['jwt_token']) && basename($_SERVER['PHP_SELF']) !== 'login.php') {
+    header('Location: login.php');
+    exit;
+}
+$currentUser = $_SESSION['username'] ?? 'User';
+$currentRole = $_SESSION['role'] ?? 'viewer';
+?>
 <!doctype html>
 <html lang="it">
 
@@ -108,24 +119,26 @@
                                     </span>
                                 </a>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="./machine_settings.php">
-                                    <span
-                                        class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler-icons.io/i/settings -->
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
-                                            viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
-                                            stroke-linecap="round" stroke-linejoin="round">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path
-                                                d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 3.31 2.37 -2.37c.996 .608 2.296 .07 2.572 -1.065z" />
-                                            <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
-                                        </svg>
-                                    </span>
-                                    <span class="nav-link-title">
-                                        Impostazioni Macchina
-                                    </span>
-                                </a>
-                            </li>
+                            <?php if (in_array($currentRole, ['admin', 'admin_readonly'])): ?>
+                                <li class="nav-item">
+                                    <a class="nav-link" href="./machine_settings.php">
+                                        <span
+                                            class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler-icons.io/i/settings -->
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
+                                                viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                                                stroke-linecap="round" stroke-linejoin="round">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path
+                                                    d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 3.31 2.37 -2.37c.996 .608 2.296 .07 2.572 -1.065z" />
+                                                <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+                                            </svg>
+                                        </span>
+                                        <span class="nav-link-title">
+                                            Impostazioni Macchina
+                                        </span>
+                                    </a>
+                                </li>
+                            <?php endif; ?>
                         </ul>
                     </div>
                 </div>
@@ -133,8 +146,8 @@
                     <div class="nav-item dropdown">
                         <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown"
                             aria-label="Open user menu">
-                            <span class="avatar avatar-sm"
-                                style="background-image: url(./static/avatars/000m.jpg)">S</span>
+                            <span
+                                class="avatar avatar-sm bg-blue-lt"><?= strtoupper(substr($currentUser, 0, 1)) ?></span>
                             <div class="d-none d-xl-block ps-2">
                                 <div><?= htmlspecialchars($currentUser) ?></div>
                                 <div class="mt-1 small text-muted"><?= htmlspecialchars(ucfirst($currentRole)) ?></div>

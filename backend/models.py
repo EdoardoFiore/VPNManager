@@ -1,10 +1,15 @@
+from typing import Optional, List, Dict
+from datetime import datetime
+from sqlmodel import Field, SQLModel, Relationship, JSON, Column
+import uuid
 import enum
 
 # --- Enums ---
 class UserRole(str, enum.Enum):
     ADMIN = "admin"
+    ADMIN_READ_ONLY = "admin_readonly"
     PARTNER = "partner"
-    OPERATOR = "operator"
+    TECHNICIAN = "technician"  # Formerly OPERATOR
     VIEWER = "viewer"
 
 # --- Models ---

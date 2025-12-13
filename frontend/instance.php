@@ -20,9 +20,11 @@ require_once 'includes/header.php';
     <div class="d-flex align-items-center">
         <span id="current-instance-port" class="me-2"></span>
         <span id="current-instance-subnet" class="me-2"></span>
-        <button class="btn btn-danger btn-sm btn-icon" onclick="deleteInstancePrompt()">
-            <i class="ti ti-trash"></i>
-        </button>
+        <?php if (in_array($currentRole, ['admin', 'partner'])): ?>
+            <button class="btn btn-danger btn-sm btn-icon" onclick="deleteInstancePrompt()">
+                <i class="ti ti-trash"></i>
+            </button>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -43,27 +45,29 @@ require_once 'includes/header.php';
 
     <!-- Client Management Tab -->
     <div class="tab-pane active show" id="tab-clients">
-        <div class="card mb-4">
-            <div class="card-header">
-                <h3 class="card-title">Aggiungi Nuovo Client</h3>
-            </div>
-            <div class="card-body">
-                <form id="addClientForm" onsubmit="event.preventDefault(); createClient();">
-                    <div class="row g-2">
-                        <div class="col">
-                            <input type="text" id="clientNameInput" class="form-control"
-                                placeholder="Es: laptop-mario-rossi" required>
-                            <div class="invalid-feedback">Solo lettere, numeri, trattini, punti e underscore.</div>
+        <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3 class="card-title">Aggiungi Nuovo Client</h3>
+                </div>
+                <div class="card-body">
+                    <form id="addClientForm" onsubmit="event.preventDefault(); createClient();">
+                        <div class="row g-2">
+                            <div class="col">
+                                <input type="text" id="clientNameInput" class="form-control"
+                                    placeholder="Es: laptop-mario-rossi" required>
+                                <div class="invalid-feedback">Solo lettere, numeri, trattini, punti e underscore.</div>
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="ti ti-plus icon"></i> Crea Client
+                                </button>
+                            </div>
                         </div>
-                        <div class="col-auto">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="ti ti-plus icon"></i> Crea Client
-                            </button>
-                        </div>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
-        </div>
+        <?php endif; ?>
 
         <div class="row">
             <div class="col-md-6">
@@ -125,9 +129,11 @@ require_once 'includes/header.php';
             <div class="card-header">
                 <h3 class="card-title">Rotte e DNS Personalizzati</h3>
                 <div class="card-actions">
-                    <button class="btn btn-sm btn-primary" onclick="toggleRouteEdit()">
-                        <i class="ti ti-edit"></i> Modifica
-                    </button>
+                    <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                        <button class="btn btn-sm btn-primary" onclick="toggleRouteEdit()">
+                            <i class="ti ti-edit"></i> Modifica
+                        </button>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="card-body">
@@ -188,7 +194,9 @@ require_once 'includes/header.php';
                     <small class="form-hint">Questa policy si applica a tutto il traffico che proviene dai client VPN di
                         questa istanza e che non corrisponde a nessuna delle regole dei gruppi ACL definite.</small>
                 </div>
-                <button class="btn btn-primary" onclick="saveInstanceFirewallPolicy()">Salva Policy</button>
+                <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                    <button class="btn btn-primary" onclick="saveInstanceFirewallPolicy()">Salva Policy</button>
+                <?php endif; ?>
             </div>
         </div>
         <div class="row row-cards">
@@ -198,10 +206,12 @@ require_once 'includes/header.php';
                     <div class="card-header">
                         <h3 class="card-title">Gruppi</h3>
                         <div class="card-actions">
-                            <a href="#" class="btn btn-sm btn-primary" data-bs-toggle="modal"
-                                data-bs-target="#modal-create-group">
-                                <i class="ti ti-plus"></i> Nuovo
-                            </a>
+                            <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                                <a href="#" class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                    data-bs-target="#modal-create-group">
+                                    <i class="ti ti-plus"></i> Nuovo
+                                </a>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="list-group list-group-flush" id="groups-list">
@@ -218,9 +228,11 @@ require_once 'includes/header.php';
                         <div class="card-header">
                             <h3 class="card-title" id="selected-group-title">Membri</h3>
                             <div class="card-actions">
+                                <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
                                 <button class="btn btn-sm btn-outline-danger" onclick="deleteCurrentGroup()">Elimina
                                     Gruppo</button>
                                 <button class="btn btn-sm btn-primary" onclick="openAddMemberModal()">Aggiungi</button>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="card-body p-0">
@@ -243,8 +255,10 @@ require_once 'includes/header.php';
                         <div class="card-header">
                             <h3 class="card-title">Regole Firewall</h3>
                             <div class="card-actions">
+                                <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
                                 <button class="btn btn-sm btn-primary" onclick="openCreateRuleModal()">Aggiungi
                                     Regola</button>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="card-table table-responsive">
@@ -564,6 +578,10 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+
+<script>
+    const currentUserRole = '<?= $currentRole ?>';
+</script>
 <?php
 $extra_scripts = ['js/qrcode.min.js', 'js/instance.js', 'js/firewall.js'];
 require_once 'includes/footer.php';

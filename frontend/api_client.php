@@ -335,12 +335,18 @@ function get_users()
     return api_request('/users');
 }
 
-function create_user($username, $password, $role)
+function create_user($username, $password, $role, $instance_ids = [])
 {
+    // Ensure instance_ids is an array
+    if (!is_array($instance_ids)) {
+        $instance_ids = [];
+    }
+
     return api_request('/users', 'POST', [
         'username' => $username,
         'password' => $password,
-        'role' => $role
+        'role' => $role,
+        'instance_ids' => $instance_ids
     ]);
 }
 
@@ -348,4 +354,7 @@ function delete_user($username)
 {
     return api_request('/users/' . urlencode($username), 'DELETE');
 }
-?>
+function update_user($username, $data)
+{
+    return api_request('/users/' . urlencode($username), 'PATCH', $data);
+}

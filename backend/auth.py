@@ -71,18 +71,18 @@ async def check_instance_access(request: Request, user: User = Depends(get_curre
     Dependency to check if the user has access to the instance specified in the path.
     Assumes 'instance_id' is a path parameter.
     """
-    if user.role in [UserRole.ADMIN, UserRole.PARTNER]:
+    # Admin, Partner, and Admin ReadOnly have access to all instances (for reading)
+    # Note: write operations are restricted by check_role on the endpoint itself.
+    if user.role in [UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY]:
         return user
     
-    if user.role == UserRole.OPERATOR:
+    # Technician and Viewer are scoped to specific instances
+    if user.role in [UserRole.TECHNICIAN, UserRole.VIEWER]:
         instance_id = request.path_params.get("instance_id")
         if not instance_id:
             return user # Should not happen if used on correct endpoint
             
         with Session(engine) as session:
-            # Re-fetch user with relationships if needed, or query link table
-            # Since user object from get_current_user might be detached or not eager loaded
-            # Let's query the link table directly
             from models import UserInstance
             link = session.get(UserInstance, (user.username, instance_id))
             if link:
