@@ -48,6 +48,10 @@ async function loadGroups() {
             }
             // Add this: Populate the default policy dropdown
             document.getElementById('instance-firewall-default-policy').value = currentInstance.firewall_default_policy;
+            const policyDisplay = document.getElementById('instance-firewall-default-policy-display');
+            if (policyDisplay) {
+                policyDisplay.value = currentInstance.firewall_default_policy;
+            }
 
         } else {
             console.error(result.body.detail);

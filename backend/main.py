@@ -637,7 +637,7 @@ async def revoke_client(instance_id: str, client_name: str, current_user: User =
 
 # --- Endpoints Gruppi e Firewall ---
 
-@app.get("/api/groups", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY, UserRole.TECHNICIAN]))])
+@app.get("/api/groups", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY, UserRole.TECHNICIAN, UserRole.VIEWER]))])
 async def list_groups(instance_id: Optional[str] = None):
     return instance_firewall_manager.get_groups(instance_id)
 
@@ -671,7 +671,7 @@ async def remove_group_member(group_id: str, client_identifier: str, instance_na
 
 # --- Endpoints Firewall Rules ---
 
-@app.get("/api/firewall/rules", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY, UserRole.TECHNICIAN]))])
+@app.get("/api/firewall/rules", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY, UserRole.TECHNICIAN, UserRole.VIEWER]))])
 async def list_rules(group_id: Optional[str] = None):
     return instance_firewall_manager.get_rules(group_id)
 
