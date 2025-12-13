@@ -84,24 +84,23 @@ Per chi vuole capire cosa succede "sotto il cofano":
 ### Processi e Servizi
 
 1.  **Backend API** (`vpn-manager.service`): Servizio Systemd che esegue Uvicorn/FastAPI. Gestisce la logica, le chiamate di sistema (`wg`, `iptables`, `ip`) e il database.
-2.  **Web Server** (`nginx`): Serve la dashboard statica/PHP e protegge l'accesso.
+2.  **Web Server** (`nginx`): Serve la dashboard statica/PHP.
 3.  **WireGuard** (`wg-quick@<nome>`): Servizio nativo di WireGuard per ogni interfaccia attiva.
 
 ---
 
-## 👥 Gestione Utenti Dashboard
+## 👥 Gestione Utenti (RBAC)
 
-L'accesso alla dashboard è protetto da **Nginx Basic Auth**.
+Il sistema include un gestore utenti integrato con ruoli:
 
-*   **Cambia password / Aggiungi utente**:
-    ```bash
-    sudo htpasswd /etc/nginx/.htpasswd tuonomeutente
-    ```
-*   **Rimuovi utente**:
-    ```bash
-    sudo htpasswd -D /etc/nginx/.htpasswd utente_da_rimuovere
-    ```
-    *Ricorda di ricaricare nginx (`sudo systemctl reload nginx`) dopo le modifiche.*
+*   **Admin**: Accesso completo.
+*   **Admin Read Only**: Visualizzazione completa ma nessuna modifica.
+*   **Partner**: Accesso completo (simile ad Admin).
+*   **Technician**: Gestisce solo le istanze assegnate (Start/Stop, Client, Policy).
+*   **Viewer**: Sola lettura sulle istanze assegnate.
+
+L'accesso è gestito via JWT e non richiede più Nginx Basic Auth.
+Di default viene creato l'utente `admin` (la password viene impostata al primo avvio dello script).
 
 ---
 

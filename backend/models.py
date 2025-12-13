@@ -32,7 +32,7 @@ class User(SQLModel, table=True):
 class InstanceBase(SQLModel):
     name: str
     port: int = Field(unique=True)
-    subnet: str
+    subnet: str = Field(unique=True)
     interface: str = Field(unique=True)
     tunnel_mode: str = "full"
     routes: List[Dict] = Field(default=[], sa_column=Column(JSON))

@@ -27,6 +27,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load initial data for the active tab (Firewall is active by default)
     loadMachineFirewallRules();
 
+    // HIDE UI ELEMENTS FOR ADMIN READ ONLY
+    if (window.userRole === 'admin_readonly') {
+        const btnAddRule = document.getElementById('btn-add-machine-rule');
+        if (btnAddRule) btnAddRule.style.display = 'none';
+    }
+
     // --- Popover and Preview for Add Machine Rule Modal ---
     const addRuleModal = document.getElementById('modal-add-machine-rule');
     if (addRuleModal) {
@@ -312,7 +318,8 @@ function renderMachineFirewallRules() {
             innerHTML += `<td>${rule.comment || ''}</td>`;
         }
 
-        innerHTML += `
+        if (window.userRole !== 'admin_readonly') {
+            innerHTML += `
             <td class="text-end">
                 <button class="btn btn-sm btn-ghost-primary" onclick="openEditMachineRuleModal('${rule.id}')" title="Modifica">
                     <i class="ti ti-edit"></i>
@@ -322,6 +329,9 @@ function renderMachineFirewallRules() {
                 </button>
             </td>
         `;
+        } else {
+            innerHTML += `<td></td>`;
+        }
 
         tr.innerHTML = innerHTML;
         if (targetBody) targetBody.appendChild(tr);
@@ -521,9 +531,10 @@ function renderNetworkInterfaces() {
             <td>${cidrDisplay}</td>
             <td>${netmaskDisplay}</td>
             <td class="text-end">
+                ${window.userRole !== 'admin_readonly' ? `
                 <button class="btn btn-sm btn-primary" onclick="openEditNetworkInterfaceModal('${iface.name}')">
                     <i class="ti ti-edit"></i> Configura
-                </button>
+                </button>` : ''}
             </td>
         `;
         tbody.appendChild(tr);

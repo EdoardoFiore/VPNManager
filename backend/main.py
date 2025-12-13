@@ -34,11 +34,13 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+    instance_ids: Optional[List[str]] = None
 
 class UserResponse(BaseModel):
     username: str
     role: UserRole
     is_active: bool
+    instance_ids: List[str] = []
 
 # --- Pydantic Models for App ---
 # --- Pydantic Models for App ---
@@ -140,13 +142,36 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @app.get("/api/users/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(auth.get_current_user)):
-    return current_user
+    # For 'me' endpoint, we might want to include instance_ids as well
+    with Session(engine) as session:
+        user_with_instances = session.get(User, current_user.username)
+        if not user_with_instances:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        instance_ids = [inst.id for inst in user_with_instances.assigned_instances]
+        return UserResponse(
+            username=user_with_instances.username,
+            role=user_with_instances.role,
+            is_active=user_with_instances.is_active,
+            instance_ids=instance_ids
+        )
 
 @app.get("/api/users", response_model=List[UserResponse], dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.ADMIN_READ_ONLY]))])
 async def read_users():
     with Session(engine) as session:
         users = session.exec(select(User)).all()
-        return users
+        response = []
+        for user in users:
+            # Eager load instance_ids logic via relationship or query
+            # Since we defined relationship assigned_instances, we can access it
+            instance_ids = [inst.id for inst in user.assigned_instances]
+            response.append(UserResponse(
+                username=user.username,
+                role=user.role,
+                is_active=user.is_active,
+                instance_ids=instance_ids
+            ))
+        return response
 
 @app.post("/api/users", response_model=UserResponse, dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def create_user(user: UserCreate):
@@ -158,20 +183,28 @@ async def create_user(user: UserCreate):
         session.add(db_user)
         
         # If role is Technician or Viewer (Scoped) and instance_ids are provided
+        assigned_ids = []
         if user.role in [UserRole.TECHNICIAN, UserRole.VIEWER] and user.instance_ids:
              # Verify instances exist
              from models import Instance
              for instance_id in user.instance_ids:
                  if not session.get(Instance, instance_id):
-                      # We might want to just skip or error. Let's error for correctness.
                       raise HTTPException(status_code=404, detail=f"Instance {instance_id} not found")
                  
                  link = UserInstance(user_id=user.username, instance_id=instance_id)
                  session.add(link)
+                 assigned_ids.append(instance_id)
 
         session.commit()
         session.refresh(db_user)
-        return db_user
+        
+        # Construct response manually to include instance_ids
+        return UserResponse(
+            username=db_user.username,
+            role=db_user.role,
+            is_active=db_user.is_active,
+            instance_ids=assigned_ids
+        )
 
 @app.patch("/api/users/{username}", response_model=UserResponse, dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def update_user(username: str, user_update: UserUpdate):
@@ -181,17 +214,46 @@ async def update_user(username: str, user_update: UserUpdate):
             raise HTTPException(status_code=404, detail="User not found")
         
         user_data = user_update.dict(exclude_unset=True)
+        instance_ids_to_update = None
+        
         if "password" in user_data:
             password = user_data.pop("password")
             db_user.hashed_password = auth.get_password_hash(password)
-        
+            
+        if "instance_ids" in user_data:
+            instance_ids_to_update = user_data.pop("instance_ids")
+
         for key, value in user_data.items():
             setattr(db_user, key, value)
             
         session.add(db_user)
+        
+        # Handle Instance Assignments Update
+        if instance_ids_to_update is not None:
+            # 1. Remove existing links
+            from sqlmodel import delete
+            stmt = delete(UserInstance).where(UserInstance.user_id == username)
+            session.exec(stmt)
+            
+            # 2. Add new links if role allows
+            if db_user.role in [UserRole.TECHNICIAN, UserRole.VIEWER]:
+                from models import Instance
+                for i_id in instance_ids_to_update:
+                     if session.get(Instance, i_id):
+                        session.add(UserInstance(user_id=username, instance_id=i_id))
+
         session.commit()
         session.refresh(db_user)
-        return db_user
+        
+        # Return updated response
+        # Need to re-fetch assigned instances to be sure
+        updated_instance_ids = [inst.id for inst in db_user.assigned_instances]
+        return UserResponse(
+            username=db_user.username,
+            role=db_user.role,
+            is_active=db_user.is_active,
+            instance_ids=updated_instance_ids
+        )
 
 @app.delete("/api/users/{username}", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def delete_user(username: str):
@@ -259,24 +321,10 @@ async def get_instances(current_user: User = Depends(auth.get_current_user)):
     # Logic: Admin, Partner, Admin ReadOnly -> ALL instances
     # Technician, Viewer -> Assigned instances only
     
-    global_access_roles = [UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY]
+    # Logic: Admin, Partner, Admin ReadOnly -> ALL instances
+    # Technician, Viewer -> Assigned instances only
     
-    if current_user.role in global_access_roles:
-         instances = instance_manager.get_all_instances()
-    else:
-         # Scoped access
-         # We need to fetch assigned instances.
-         # Ideally we load them via relationship, but instance_manager returns Pydantic models usually?
-         # Wait, instance_manager.get_all_instances() returns list of models.Instance?
-         # Let's check imports. instance_manager uses sqlmodel.
-         
-         # Re-query user with assigned_instances relationship eager loaded or query association
-         with Session(engine) as session:
-             # Query UserInstance table for this user
-             # Then fetch Instances.
-             from models import UserInstance, Instance
-             stmt = select(Instance).join(UserInstance).where(UserInstance.user_id == current_user.username)
-             instances = session.exec(stmt).all()
+    instances = get_user_instances(current_user)
     
     response_data = []
     for inst in instances:
@@ -291,8 +339,15 @@ async def get_instances(current_user: User = Depends(auth.get_current_user)):
     return response_data
 
 @app.get("/api/instances/{instance_id}", dependencies=[Depends(auth.get_current_user)])
-async def get_instance(instance_id: str):
+async def get_instance(instance_id: str, current_user: User = Depends(auth.get_current_user)):
     """Restituisce i dettagli di una specifica istanza."""
+    
+    # Check access
+    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY]:
+        user_instances = get_user_instances(current_user)
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
+
     instance = instance_manager.get_instance_by_id(instance_id)
     if not instance:
         raise HTTPException(status_code=404, detail="Instance not found")
@@ -361,10 +416,26 @@ async def update_instance_firewall_policy_endpoint(instance_id: str, request: Fi
 
 # --- Endpoints Statistiche ---
 
+
+def get_user_instances(user: User) -> List[Instance]:
+    """Helper to get instances accessible by a specific user."""
+    global_access_roles = [UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY]
+    
+    if user.role in global_access_roles:
+        return instance_manager.get_all_instances()
+    else:
+        with Session(engine) as session:
+            from models import UserInstance, Instance
+            stmt = select(Instance).join(UserInstance).where(UserInstance.user_id == user.username)
+            return session.exec(stmt).all()
+
 @app.get("/api/stats/top-clients", dependencies=[Depends(auth.get_current_user)])
-async def get_top_clients():
-    """Restituisce i top 5 client per traffico totale (tutte le istanze)."""
-    instances = instance_manager.get_all_instances()
+async def get_top_clients(current_user: User = Depends(auth.get_current_user)):
+    """Restituisce i top 5 client per traffico totale (filtrati per permessi)."""
+    
+    # Use helper to get only accessible instances
+    instances = get_user_instances(current_user)
+    
     all_clients = []
 
     for inst in instances:
@@ -405,9 +476,17 @@ async def get_network_interfaces():
 
 # --- Endpoints Client (Scoped per Istanza) ---
 
-@app.get("/api/instances/{instance_id}/clients", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY, UserRole.TECHNICIAN]))])
-async def get_clients(instance_id: str):
+@app.get("/api/instances/{instance_id}/clients", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY, UserRole.TECHNICIAN, UserRole.VIEWER]))])
+async def get_clients(instance_id: str, current_user: User = Depends(auth.get_current_user)):
     """Ottiene la lista dei client per una specifica istanza."""
+    
+    # Check access for restricted roles
+    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY]:
+        user_instances = get_user_instances(current_user)
+        # Check if the requested instance_id is one of the user's assigned instances
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
+
     try:
         clients = vpn_manager.list_clients(instance_id)
         return clients
@@ -417,8 +496,14 @@ async def get_clients(instance_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/instances/{instance_id}/clients", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
-async def create_client(instance_id: str, request: ClientRequest):
+async def create_client(instance_id: str, request: ClientRequest, current_user: User = Depends(auth.get_current_user)):
     """Crea un nuovo client per una specifica istanza."""
+    
+    # Check access for Technician
+    if current_user.role == UserRole.TECHNICIAN:
+        user_instances = get_user_instances(current_user)
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
     client_name = request.client_name
     if not client_name or not re.fullmatch(CLIENT_NAME_PATTERN, client_name):
         raise HTTPException(status_code=400, detail="Nome client non valido.")
@@ -430,8 +515,14 @@ async def create_client(instance_id: str, request: ClientRequest):
     return {"message": f"Client '{client_name}' creato con successo."}
 
 @app.get("/api/instances/{instance_id}/clients/{client_name}/download", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
-async def download_client_config(instance_id: str, client_name: str):
+async def download_client_config(instance_id: str, client_name: str, current_user: User = Depends(auth.get_current_user)):
     """Scarica il file .ovpn per un client."""
+    
+    # Check access for Technician
+    if current_user.role == UserRole.TECHNICIAN:
+        user_instances = get_user_instances(current_user)
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
     # Verifica esistenza istanza (opzionale, ma buona pratica)
     if not instance_manager.get_instance(instance_id):
         raise HTTPException(status_code=404, detail="Instance not found")
@@ -450,8 +541,14 @@ async def download_client_config(instance_id: str, client_name: str):
     )
 
 @app.delete("/api/instances/{instance_id}/clients/{client_name}", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
-async def revoke_client(instance_id: str, client_name: str):
+async def revoke_client(instance_id: str, client_name: str, current_user: User = Depends(auth.get_current_user)):
     """Revoca un client."""
+    
+    # Check access for Technician
+    if current_user.role == UserRole.TECHNICIAN:
+        user_instances = get_user_instances(current_user)
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
     if not client_name or not re.fullmatch(CLIENT_NAME_PATTERN, client_name):
         raise HTTPException(status_code=400, detail="Nome client non valido.")
 

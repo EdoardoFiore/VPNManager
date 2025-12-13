@@ -79,9 +79,16 @@ def create_instance(name: str, port: int, subnet: str,
         existing_instances = session.exec(select(Instance)).all()
         for inst in existing_instances:
             try:
-                if new_subnet.overlaps(ip_network(inst.subnet, strict=False)):
+                existing_subnet = ip_network(inst.subnet, strict=False)
+                if new_subnet.overlaps(existing_subnet):
                     raise ValueError(f"Subnet overlap with {inst.name}")
-            except: continue
+            except ValueError as e:
+                # If it's our own overlap error, re-raise it
+                if "Subnet overlap" in str(e):
+                    raise e
+                # Otherwise it might be a parsing error of existing subnet, log and continue
+                logger.warning(f"Invalid subnet in DB for instance {inst.name}: {inst.subnet}")
+                continue
 
         # Interface Name
         used_interfaces = [inst.interface for inst in existing_instances]

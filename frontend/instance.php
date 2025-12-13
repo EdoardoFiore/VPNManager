@@ -187,10 +187,16 @@ require_once 'includes/header.php';
             <div class="card-body">
                 <div class="mb-3">
                     <label class="form-label">Policy Iniziale per il Traffico dei Client VPN</label>
-                    <select class="form-select" id="instance-firewall-default-policy">
-                        <option value="ACCEPT">ACCEPT (Consenti tutto ciò che non è esplicitamente bloccato)</option>
-                        <option value="DROP">DROP (Blocca tutto ciò che non è esplicitamente consentito)</option>
-                    </select>
+                    <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                        <select class="form-select" id="instance-firewall-default-policy">
+                            <option value="ACCEPT">ACCEPT (Consenti tutto ciò che non è esplicitamente bloccato)</option>
+                            <option value="DROP">DROP (Blocca tutto ciò che non è esplicitamente consentito)</option>
+                        </select>
+                    <?php else: ?>
+                        <input type="text" class="form-control" id="instance-firewall-default-policy-display" readonly
+                            value="Caricamento...">
+                        <input type="hidden" id="instance-firewall-default-policy">
+                    <?php endif; ?>
                     <small class="form-hint">Questa policy si applica a tutto il traffico che proviene dai client VPN di
                         questa istanza e che non corrisponde a nessuna delle regole dei gruppi ACL definite.</small>
                 </div>
@@ -229,9 +235,9 @@ require_once 'includes/header.php';
                             <h3 class="card-title" id="selected-group-title">Membri</h3>
                             <div class="card-actions">
                                 <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteCurrentGroup()">Elimina
-                                    Gruppo</button>
-                                <button class="btn btn-sm btn-primary" onclick="openAddMemberModal()">Aggiungi</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCurrentGroup()">Elimina
+                                        Gruppo</button>
+                                    <button class="btn btn-sm btn-primary" onclick="openAddMemberModal()">Aggiungi</button>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -256,8 +262,8 @@ require_once 'includes/header.php';
                             <h3 class="card-title">Regole Firewall</h3>
                             <div class="card-actions">
                                 <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
-                                <button class="btn btn-sm btn-primary" onclick="openCreateRuleModal()">Aggiungi
-                                    Regola</button>
+                                    <button class="btn btn-sm btn-primary" onclick="openCreateRuleModal()">Aggiungi
+                                        Regola</button>
                                 <?php endif; ?>
                             </div>
                         </div>

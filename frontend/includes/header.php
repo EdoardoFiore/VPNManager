@@ -165,6 +165,10 @@ $currentRole = $_SESSION['role'] ?? 'viewer';
                 </div>
             </div>
         </header>
+        <script>
+            window.currentUser = '<?= $_SESSION['username'] ?? '' ?>';
+            window.userRole = '<?= $_SESSION['role'] ?? '' ?>';
+        </script>
 
         <div class="page-wrapper">
             <!-- Page body -->
