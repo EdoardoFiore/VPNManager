@@ -4,6 +4,7 @@ import zipfile
 import sqlite3
 import datetime
 import logging
+import subprocess
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
@@ -13,24 +14,26 @@ BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BACKEND_DIR)
 DATA_DIR = os.path.join(BACKEND_DIR, 'data') # SQLite is in backend/data
 CONFIG_DIR = "/etc/wireguard" # WireGuard configs
+UPLOAD_DIR = "/opt/vpn-manager/frontend/static/uploads" # Uploads directory
 
 def create_backup_zip():
     """
     Creates a zip archive containing:
     1. SQL dump of the database (safe check)
     2. WireGuard configuration files (/etc/wireguard)
+    3. Uploaded files (logos, etc.)
     
     Returns:
         Path to the created zip file
     """
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_filename = f"vpn_backup_{timestamp}.zip"
-    backup_path = os.path.join(BACKEND_DIR, 'static', 'backups', backup_filename) # Store in static/backups?
+    backup_path = os.path.join(BACKEND_DIR, 'static', 'backups', backup_filename)
     # Ensure dir exists
     os.makedirs(os.path.dirname(backup_path), exist_ok=True)
     
     # DB Path
-    db_path = os.path.join(DATA_DIR, 'vpn.db') # Verify this location in database.py
+    db_path = os.path.join(DATA_DIR, 'vpn.db')
     
     try:
         logger.info(f"Starting backup creation: {backup_path}")
@@ -38,10 +41,7 @@ def create_backup_zip():
             # 1. Add Database
             if os.path.exists(db_path):
                 logger.info(f"Adding database from {db_path}")
-                # We can't zip the live DB safely if it's locked.
-                # Better to perform a hot backup or dump.
-                # SQLite 'vacuum into' or similar. 
-                # For simplicity, let's copy it to a temp file first.
+                # Copy to temp file first to avoid locking issues (basic approach)
                 temp_db_path = f"{db_path}.temp"
                 shutil.copy2(db_path, temp_db_path)
                 zipf.write(temp_db_path, arcname="database/vpn.db")
@@ -58,81 +58,122 @@ def create_backup_zip():
                             arcname = os.path.relpath(file_path, os.path.dirname(CONFIG_DIR)) # e.g. wireguard/wg0.conf
                             zipf.write(file_path, arcname=arcname)
             else:
-                logger.warning(f"Config dir not found at {CONFIG_DIR}")
+                 logger.warning(f"Config dir not found at {CONFIG_DIR}")
+
+            # 3. Add Uploads (Logos)
+            if os.path.exists(UPLOAD_DIR):
+                for root, dirs, files in os.walk(UPLOAD_DIR):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Archive name: uploads/filename or uploads/subdir/filename
+                        arcname = os.path.join("uploads", os.path.relpath(file_path, UPLOAD_DIR))
+                        zipf.write(file_path, arcname=arcname)
 
         logger.info(f"Backup created at {backup_path}")
         return backup_path
 
     except Exception as e:
-        logger.error(f"Backup creation failed: {e}")
-        # Clean up partial file
+        logger.error(f"Backup failed: {e}")
         if os.path.exists(backup_path):
-            os.remove(backup_path)
+            os.remove(backup_path) # Cleanup failed partial
         raise e
 
-def restore_backup(zip_file_path: str):
+def restore_backup(zip_path):
     """
-    Restores database and configurations from a zip file.
-    Args:
-        zip_file_path: Path to the uploaded zip file.
-    RETURNS:
-        bool: True if successful
+    Restores the system from a zip backup.
+    1. Extract DB to temp
+    2. Extract Configs to temp
+    3. Extract Uploads to temp
+    4. Overwrite real locations
+    5. Set permissions
+    6. Restart WireGuard Services
     """
-    logger.info(f"Starting restore from {zip_file_path}")
+    logger.info(f"Starting restore from {zip_path}")
     
-    # Paths
-    db_path = os.path.join(DATA_DIR, 'vpn.db')
-    
-    # Temporary extraction dir
-    temp_extract_dir = os.path.join(BACKEND_DIR, 'temp_restore')
-    if os.path.exists(temp_extract_dir):
-        shutil.rmtree(temp_extract_dir)
-    os.makedirs(temp_extract_dir)
+    # Temp extraction dir
+    extract_dir = os.path.join(BACKEND_DIR, 'temp_restore')
+    if os.path.exists(extract_dir):
+        shutil.rmtree(extract_dir)
+    os.makedirs(extract_dir)
     
     try:
-        with zipfile.ZipFile(zip_file_path, 'r') as zipf:
-            zipf.extractall(temp_extract_dir)
+        with zipfile.ZipFile(zip_path, 'r') as zipf:
+            zipf.extractall(extract_dir)
             
         # 1. Restore Database
-        extracted_db = os.path.join(temp_extract_dir, 'database', 'vpn.db')
-        if os.path.exists(extracted_db):
-            logger.info("Restoring database...")
-            # Backup current DB just in case?
-            if os.path.exists(db_path):
-                 shutil.copy2(db_path, f"{db_path}.bak")
+        restored_db = os.path.join(extract_dir, 'database', 'vpn.db')
+        target_db = os.path.join(DATA_DIR, 'vpn.db')
+        
+        if os.path.exists(restored_db):
+            # Backup current DB just in case
+            if os.path.exists(target_db):
+                shutil.move(target_db, f"{target_db}.bak_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}")
             
-            # Allow overwrite
-            shutil.copy2(extracted_db, db_path)
-        else:
-            logger.warning("No database found in backup zip.")
-
+            shutil.copy2(restored_db, target_db)
+            logger.info("Database restored.")
+        
         # 2. Restore WireGuard Configs
-        extracted_wg_dir = os.path.join(temp_extract_dir, 'wireguard')
-        if os.path.exists(extracted_wg_dir):
-            logger.info("Restoring WireGuard configs...")
-            
-            # Copy files
-            for root, dirs, files in os.walk(extracted_wg_dir):
-                for file in files:
-                    src_file = os.path.join(root, file)
-                    # Rel path from extracted_wg_dir
-                    rel_path = os.path.relpath(src_file, extracted_wg_dir)
-                    dest_file = os.path.join(CONFIG_DIR, rel_path)
+        restored_configs = os.path.join(extract_dir, 'wireguard')
+        if os.path.exists(restored_configs):
+            for file in os.listdir(restored_configs):
+                if file.endswith('.conf'):
+                    src = os.path.join(restored_configs, file)
+                    dst = os.path.join(CONFIG_DIR, file)
+                    shutil.copy2(src, dst)
+                    # Set permissions 600
+                    os.chmod(dst, 0o600)
                     
-                    os.makedirs(os.path.dirname(dest_file), exist_ok=True)
-                    shutil.copy2(src_file, dest_file)
-                    # Fix permissions
-                    os.chmod(dest_file, 0o600) # WG configs should be private
-        else:
-             logger.warning("No WireGuard configs found in backup zip.")
+                    # Restart Interface Logic
+                    interface = file.replace('.conf', '')
+                    restart_wireguard_interface(interface)
 
-        logger.info("Restore completed successfully.")
+            logger.info("WireGuard configs restored and interfaces restarted.")
+
+        # 3. Restore Uploads
+        restored_uploads = os.path.join(extract_dir, 'uploads')
+        if os.path.exists(restored_uploads):
+            if not os.path.exists(UPLOAD_DIR):
+                os.makedirs(UPLOAD_DIR, exist_ok=True)
+            # Copy all files recursively
+            for root, dirs, files in os.walk(restored_uploads):
+                for file in files:
+                    src = os.path.join(root, file)
+                    rel = os.path.relpath(src, restored_uploads)
+                    dst = os.path.join(UPLOAD_DIR, rel)
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(src, dst)
+            logger.info("Uploads restored.")
+            
         return True
 
     except Exception as e:
         logger.error(f"Restore failed: {e}")
         raise e
     finally:
-        # Cleanup
-        if os.path.exists(temp_extract_dir):
-            shutil.rmtree(temp_extract_dir)
+        # Cleanup temp
+        if os.path.exists(extract_dir):
+            shutil.rmtree(extract_dir)
+
+def restart_wireguard_interface(interface):
+    """
+    Attempts to restart or bring up a WireGuard interface using systemd.
+    This ensures the service status remains consistent.
+    """
+    logger.info(f"Restarting interface {interface} via systemd")
+    
+    try:
+        # 1. Enable service for persistence
+        subprocess.run(['systemctl', 'enable', f'wg-quick@{interface}'], check=True)
+        
+        # 2. Restart service (handles stop/start and status update)
+        # We use restart to cover both "not running" (start) and "running" (restart) cases
+        subprocess.run(['systemctl', 'restart', f'wg-quick@{interface}'], check=True)
+        
+    except Exception as e:
+        logger.error(f"Failed to restart systemd service for {interface}: {e}")
+        # Fallback: try manual cleanup if systemd failed due to "already exists" conflict
+        try:
+             subprocess.run(['wg-quick', 'down', interface], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+             subprocess.run(['systemctl', 'restart', f'wg-quick@{interface}'], check=True)
+        except Exception as e2:
+             logger.error(f"Fallback restart failed for {interface}: {e2}")

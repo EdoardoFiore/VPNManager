@@ -45,12 +45,25 @@ def _get_service_name(instance: Instance) -> str:
     return f"wg-quick@{instance.interface}"
 
 def _is_service_active(instance: Instance) -> bool:
+    # 1. Check Systemd Service first
     service_name = _get_service_name(instance)
     try:
         subprocess.run(["/usr/bin/systemctl", "is-active", "--quiet", service_name], check=True)
         return True
     except subprocess.CalledProcessError:
-        return False
+        pass
+    
+    # 2. Fallback: Check if interface exists/active via WG command
+    # Useful if started manually via `wg-quick up` without systemd
+    try:
+        # We need sudo often for wg show
+        wg_check = subprocess.run(["sudo", "wg", "show", instance.interface], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if wg_check.returncode == 0:
+            return True
+    except Exception:
+        pass
+        
+    return False
 
 def create_instance(name: str, port: int, subnet: str, 
                    tunnel_mode: str = "full", routes: List[Dict[str, str]] = None, dns_servers: List[str] = None) -> Instance:
