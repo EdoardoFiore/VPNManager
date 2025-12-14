@@ -249,12 +249,8 @@ function create_rule($group_id, $action, $protocol, $destination, $port = null, 
     ]);
 }
 
-<<<<<<< HEAD
-function update_group_firewall_rule($rule_id, $group_id, $action, $protocol, $destination, $port = null, $description = '') {
-=======
 function update_group_firewall_rule($rule_id, $group_id, $action, $protocol, $destination, $port = null, $description = '')
 {
->>>>>>> wireguard
     return api_request('/firewall/rules/' . urlencode($rule_id), 'PUT', [
         'group_id' => $group_id, // Needed for backend to locate the rule's group context
         'action' => $action,
@@ -265,12 +261,8 @@ function update_group_firewall_rule($rule_id, $group_id, $action, $protocol, $de
     ]);
 }
 
-<<<<<<< HEAD
-function delete_rule($rule_id) {
-=======
 function delete_rule($rule_id)
 {
->>>>>>> wireguard
     return api_request('/firewall/rules/' . urlencode($rule_id), 'DELETE');
 }
 
