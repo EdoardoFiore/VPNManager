@@ -272,17 +272,7 @@ switch ($action) {
         echo json_encode($response);
         break;
 
-    case 'update_instance_firewall_policy':
-        $input = file_get_contents('php://input');
-        $data = json_decode($input, true);
 
-        if (!$data || !isset($data['instance_id']) || !isset($data['default_policy'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti per aggiornamento policy firewall.']]);
-            exit;
-        }
-        $response = update_instance_firewall_policy($data['instance_id'], $data['default_policy']);
-        echo json_encode($response);
-        break;
 
     // --- Machine Firewall Rules Cases ---
 
@@ -399,7 +389,38 @@ switch ($action) {
         echo json_encode($response);
         break;
 
+
+    case 'get_system_settings':
+        $response = get_system_settings();
+        echo json_encode($response);
+        break;
+
+    case 'update_system_settings':
+        $input = file_get_contents('php://input');
+        $json_data = json_decode($input, true);
+
+        $data = [];
+        if ($json_data) {
+            $data = $json_data;
+        } else {
+            $data = $_POST;
+        }
+
+        $response = update_system_settings($data);
+        echo json_encode($response);
+        break;
+
+    case 'upload_logo':
+        if (!isset($_FILES['file']) || !isset($_POST['type'])) {
+            echo json_encode(['success' => false, 'body' => ['detail' => 'File o tipo mancante.']]);
+            exit;
+        }
+        $response = upload_logo($_FILES['file'], $_POST['type']);
+        echo json_encode($response);
+        break;
+
     default:
+
         echo json_encode(['success' => false, 'body' => ['detail' => 'Azione non riconosciuta.']]);
         break;
 

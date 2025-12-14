@@ -378,3 +378,47 @@ function share_client_config($instance_id, $client_name, $email)
 {
     return api_request("/instances/{$instance_id}/clients/{$client_name}/share_complete", 'POST', ['email' => $email]);
 }
+
+function get_system_settings()
+{
+    return api_request('/settings/system', 'GET');
+}
+
+function update_system_settings($data)
+{
+    return api_request('/settings/system', 'POST', $data);
+}
+
+function upload_logo($file, $type)
+{
+    $url = API_BASE_URL . '/settings/logo';
+    $ch = curl_init();
+
+    // Headers for Auth, but NOT Content-Type (curl sets multipart boundary auto)
+    $headers = [];
+    if (isset($_SESSION['jwt_token'])) {
+        $headers[] = 'Authorization: Bearer ' . $_SESSION['jwt_token'];
+    }
+
+    $cfile = new CURLFile($file['tmp_name'], $file['type'], $file['name']);
+    $data = ['file' => $cfile, 'type' => $type];
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $is_success = ($http_code >= 200 && $http_code < 300);
+    $body = json_decode($response, true);
+
+    return [
+        'success' => $is_success,
+        'code' => $http_code,
+        'body' => $body ?: $response
+    ];
+}

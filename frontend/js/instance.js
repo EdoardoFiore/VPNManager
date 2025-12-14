@@ -45,6 +45,9 @@ function renderInstanceDetails() {
 async function fetchAndRenderClients() {
     if (!currentInstance) return;
 
+    // Ensure SMTP status is fresh to avoid race conditions
+    await checkSMTPStatus();
+
     try {
         const response = await fetch(`${API_AJAX_HANDLER}?action=get_clients&instance_id=${currentInstance.id}`);
         const result = await response.json();
@@ -73,10 +76,15 @@ async function fetchAndRenderClients() {
                         <td>
                             <div class="d-flex gap-2 justify-content-end">
                                 ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
+                                
                                 ${smtpConfigured ? `
                                 <button class="btn btn-info btn-sm btn-icon" onclick="shareClient('${fullName}')" title="Invia via Email">
                                     <i class="ti ti-mail"></i>
-                                </button>` : ''}
+                                </button>` : `
+                                <button class="btn btn-ghost-warning btn-sm btn-icon" onclick="showNotification('warning', 'Configura i parametri SMTP nelle Impostazioni per abilitare l\\'invio via email.')" title="SMTP non configurato (Clicca per info)">
+                                    <i class="ti ti-mail-exclamation"></i>
+                                </button>`}
+                                
                                 <button class="btn btn-secondary btn-sm btn-icon" onclick="showQRCode('${fullName}')" title="Mostra QR Code">
                                     <i class="ti ti-qrcode"></i>
                                 </button>

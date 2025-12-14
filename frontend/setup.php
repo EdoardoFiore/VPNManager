@@ -1,8 +1,22 @@
 <?php
 // setup.php
-require_once 'config.php';
-// Note: We do NOT require header.php because this page is public and should have a minimal layout.
-// However, we need CSS/JS resources.
+require_once 'api_client.php';
+
+// Fetch Branding
+$brandName = 'VPN Manager';
+$brandColor = '#0054a6';
+$brandLogo = '';
+
+$sysSettings = get_system_settings();
+if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSettings['body'])) {
+    $s = $sysSettings['body'];
+    if (!empty($s['company_name']))
+        $brandName = $s['company_name'];
+    if (!empty($s['primary_color']))
+        $brandColor = $s['primary_color'];
+    if (!empty($s['logo_url']))
+        $brandLogo = $s['logo_url'];
+}
 ?>
 <!doctype html>
 <html lang="it">
@@ -14,15 +28,31 @@ require_once 'config.php';
     <!-- CSS files -->
     <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
-
+    <style>
+        :root {
+            --tblr-primary: <?= $brandColor ?>;
+        }
+        .text-primary { color: <?= $brandColor ?> !important; }
+        .bg-primary { background-color: <?= $brandColor ?> !important; }
+        .btn-primary { 
+            background-color: <?= $brandColor ?> !important; 
+            border-color: <?= $brandColor ?> !important; 
+        }
+        /* Spinner color override */
+        .spinner-border.text-primary { color: <?= $brandColor ?> !important; }
+    </style>
 </head>
 <body class="d-flex flex-column bg-light">
     <div class="page page-center">
         <div class="container container-sm py-4">
             <div class="text-center mb-4">
                 <a href="." class="navbar-brand navbar-brand-autodark" style="text-decoration: none;">
-                    <i class="ti ti-shield-lock text-primary" style="font-size: 2rem; vertical-align: middle;"></i>
-                    <span class="ms-2" style="font-size: 1.5rem; vertical-align: middle; color: inherit;">VPN Manager</span>
+                    <?php if ($brandLogo): ?>
+                            <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo" style="height: 48px; width: auto; vertical-align: middle;">
+                    <?php else: ?>
+                            <i class="ti ti-shield-lock text-primary" style="font-size: 2rem; vertical-align: middle;"></i>
+                    <?php endif; ?>
+                    <span class="ms-2" style="font-size: 1.5rem; vertical-align: middle; color: inherit;"><?= htmlspecialchars($brandName) ?></span>
                 </a>
             </div>
             

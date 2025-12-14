@@ -157,3 +157,15 @@ class MagicToken(SQLModel, table=True):
     # Relationship to get client details (useful for generating config)
     # Note: SQLModel Relationship usually requires definitions on both sides.
     # We might not need back_populates on Client if we query manually.
+
+class SystemSettings(SQLModel, table=True):
+    """Singleton table for Portal Customization (only id=1 used)"""
+    id: int = Field(default=1, primary_key=True)
+    company_name: str = "VPN Manager"
+    support_url: Optional[str] = None
+    primary_color: str = "#0054a6"
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
+    custom_css: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+

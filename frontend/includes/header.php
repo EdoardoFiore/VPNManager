@@ -2,12 +2,31 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+// Ensure API Client is loaded
+require_once __DIR__ . '/../api_client.php';
+
 if (!isset($_SESSION['jwt_token']) && basename($_SERVER['PHP_SELF']) !== 'login.php') {
     header('Location: login.php');
     exit;
 }
 $currentUser = $_SESSION['username'] ?? 'User';
 $currentRole = $_SESSION['role'] ?? 'viewer';
+
+// Fetch Branding
+$brandName = 'VPN Manager';
+$brandColor = '#0054a6';
+$brandLogo = '';
+
+$sysSettings = get_system_settings();
+if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSettings['body'])) {
+    $s = $sysSettings['body'];
+    if (!empty($s['company_name']))
+        $brandName = $s['company_name'];
+    if (!empty($s['primary_color']))
+        $brandColor = $s['primary_color'];
+    if (!empty($s['logo_url']))
+        $brandLogo = $s['logo_url'];
+}
 ?>
 <!doctype html>
 <html lang="it">
@@ -71,6 +90,52 @@ $currentRole = $_SESSION['role'] ?? 'viewer';
         .alert-danger {
             border-left: 5px solid #d63939 !important;
         }
+
+        /* Dynamic Branding */
+        :root {
+            --tblr-primary:
+                <?= $brandColor ?>
+            ;
+        }
+
+        .text-primary {
+            color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .bg-primary {
+            background-color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .btn-primary {
+            background-color:
+                <?= $brandColor ?>
+                !important;
+            border-color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .nav-link.active {
+            border-bottom-color:
+                <?= $brandColor ?>
+                !important;
+            color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .form-check-input:checked {
+            background-color:
+                <?= $brandColor ?>
+                !important;
+            border-color:
+                <?= $brandColor ?>
+                !important;
+        }
     </style>
 </head>
 
@@ -83,18 +148,22 @@ $currentRole = $_SESSION['role'] ?? 'viewer';
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
-                    <a href="index.php">
-                        <!-- Custom Logo: Shield with Circuit Node -->
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            class="icon text-primary me-2">
-                            <path
-                                d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
-                            <circle cx="12" cy="11" r="3" />
-                            <line x1="12" y1="14" x2="12" y2="15" />
-                            <circle cx="12" cy="16" r="1" fill="currentColor" />
-                        </svg>
-                        VPN Manager
+                    <a href="index.php" class="d-flex align-items-center text-decoration-none">
+                        <?php if ($brandLogo): ?>
+                             <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo" class="navbar-brand-image me-2" style="height: 32px; width: auto;">
+                        <?php else: ?>
+                            <!-- Default SVG -->
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                class="icon text-primary me-2">
+                                <path
+                                    d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                                <circle cx="12" cy="11" r="3" />
+                                <line x1="12" y1="14" x2="12" y2="15" />
+                                <circle cx="12" cy="16" r="1" fill="currentColor" />
+                            </svg>
+                        <?php endif; ?>
+                        <?= htmlspecialchars($brandName) ?>
                     </a>
                 </h1>
                 <div class="collapse navbar-collapse" id="navbar-menu">

@@ -2,14 +2,132 @@
 
 document.addEventListener('DOMContentLoaded', function () {
     loadSMTPSettings();
+    loadSystemSettings();
 
     document.getElementById('smtp-form').addEventListener('submit', function (e) {
         e.preventDefault();
         saveSMTPSettings();
     });
 
+    document.getElementById('system-settings-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        saveSystemSettings();
+    });
+
     document.getElementById('btn-test-smtp').addEventListener('click', testSMTPSettings);
+
+    // Color Picker Sync
+    const colorInput = document.querySelector('[name="primary_color"]');
+    const colorText = document.querySelector('[name="primary_color_text"]');
+
+    if (colorInput && colorText) {
+        colorInput.addEventListener('input', (e) => {
+            colorText.value = e.target.value;
+            updatePreview();
+        });
+        colorText.addEventListener('input', (e) => {
+            colorInput.value = e.target.value;
+            updatePreview();
+        });
+        document.querySelector('[name="company_name"]').addEventListener('input', updatePreview);
+    }
 });
+
+function updatePreview() {
+    const name = document.querySelector('[name="company_name"]').value || 'VPN Manager';
+    const color = document.querySelector('[name="primary_color"]').value || '#0054a6';
+
+    document.getElementById('preview-company-name').textContent = name;
+    document.getElementById('preview-color-strip').style.backgroundColor = color;
+    document.getElementById('preview-btn').style.backgroundColor = color;
+    document.getElementById('preview-btn').style.borderColor = color;
+}
+
+async function loadSystemSettings() {
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}?action=get_system_settings`);
+        const result = await response.json();
+
+        if (result.success && result.body) {
+            const data = result.body;
+            const form = document.getElementById('system-settings-form');
+
+            form.querySelector('[name="company_name"]').value = data.company_name || 'VPN Manager';
+            const color = data.primary_color || '#0054a6';
+            form.querySelector('[name="primary_color"]').value = color;
+            form.querySelector('[name="primary_color_text"]').value = color;
+
+            if (data.logo_url) {
+                document.getElementById('preview-logo').src = data.logo_url;
+            }
+            updatePreview();
+        }
+    } catch (e) {
+        console.error("Error loading system settings:", e);
+    }
+}
+
+async function saveSystemSettings() {
+    const form = document.getElementById('system-settings-form');
+    const btn = form.querySelector('button[type="submit"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Salvataggio...';
+    btn.disabled = true;
+
+    try {
+        // 1. Text Settings
+        const payload = {
+            action: 'update_system_settings',
+            company_name: form.querySelector('[name="company_name"]').value,
+            primary_color: form.querySelector('[name="primary_color"]').value
+        };
+
+        const response = await fetch(API_AJAX_HANDLER, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }, // Handler needs to support JSON!
+            body: JSON.stringify(payload)
+        });
+
+        // Wait, PHP Ajax Handler usually expects POST Form Data to populate $_POST['action'].
+        // JSON body requires wrapper.
+        // Let's stick to URLSearchParams for text data as done in saveSMTPSettings.
+
+        const textResponse = await fetch(API_AJAX_HANDLER, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(payload)
+        });
+        const textResult = await textResponse.json();
+
+        if (!textResult.success) throw new Error(textResult.body.detail || 'Errore salvataggio dati.');
+
+
+        // 2. Logo Upload
+        const logoInput = form.querySelector('[name="logo_file"]');
+        if (logoInput.files.length > 0) {
+            const formData = new FormData();
+            formData.append('action', 'upload_logo');
+            formData.append('file', logoInput.files[0]);
+            formData.append('type', 'logo');
+
+            const logoResponse = await fetch(API_AJAX_HANDLER, { method: 'POST', body: formData });
+            const logoResult = await logoResponse.json();
+            if (!logoResult.success) throw new Error('Errore upload logo: ' + (logoResult.body.detail));
+
+            // Update preview immediately
+            if (logoResult.body.url) document.getElementById('preview-logo').src = logoResult.body.url;
+        }
+
+        showNotification('success', 'Personalizzazione salvata!');
+
+    } catch (e) {
+        showNotification('danger', e.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
 
 async function loadSMTPSettings() {
     try {

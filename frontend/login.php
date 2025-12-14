@@ -2,6 +2,22 @@
 session_start();
 require_once 'api_client.php';
 
+// Fetch Branding
+$brandName = 'VPN Manager';
+$brandColor = '#0054a6';
+$brandLogo = '';
+
+$sysSettings = get_system_settings();
+if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSettings['body'])) {
+    $s = $sysSettings['body'];
+    if (!empty($s['company_name']))
+        $brandName = $s['company_name'];
+    if (!empty($s['primary_color']))
+        $brandColor = $s['primary_color'];
+    if (!empty($s['logo_url']))
+        $brandLogo = $s['logo_url'];
+}
+
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -42,6 +58,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Login - VPN Manager</title>
     <!-- CSS files -->
     <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --tblr-primary:
+                <?= $brandColor ?>
+            ;
+        }
+
+        .text-primary {
+            color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .bg-primary {
+            background-color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .btn-primary {
+            background-color:
+                <?= $brandColor ?>
+                !important;
+            border-color:
+                <?= $brandColor ?>
+                !important;
+        }
+    </style>
 </head>
 
 <body class=" d-flex flex-column">
@@ -49,15 +93,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="container container-tight py-4">
             <div class="text-center mb-4">
                 <!-- Custom Logo -->
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                    class="icon text-primary">
-                    <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
-                    <circle cx="12" cy="11" r="3" />
-                    <line x1="12" y1="14" x2="12" y2="15" />
-                    <circle cx="12" cy="16" r="1" fill="currentColor" />
-                </svg>
-                <h2>VPN Manager</h2>
+                <?php if ($brandLogo): ?>
+                    <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo" class="navbar-brand-image mb-3"
+                        style="max-height: 64px; max-width: 100%; width: auto;">
+                <?php else: ?>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="icon text-primary mb-3">
+                        <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                        <circle cx="12" cy="11" r="3" />
+                        <line x1="12" y1="14" x2="12" y2="15" />
+                        <circle cx="12" cy="16" r="1" fill="currentColor" />
+                    </svg>
+                <?php endif; ?>
+                <h2><?= htmlspecialchars($brandName) ?></h2>
             </div>
             <div class="card card-md">
                 <div class="card-body">

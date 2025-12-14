@@ -17,7 +17,7 @@ import firewall_manager as instance_firewall_manager
 import iptables_manager
 from machine_firewall_manager import machine_firewall_manager
 from database import create_db_and_tables, engine
-from models import User, UserRole, UserInstance, Instance, SMTPSettings, MagicToken
+from models import User, UserRole, UserInstance, Instance, SMTPSettings, MagicToken, SystemSettings
 import auth
 import smtplib
 from email.mime.text import MIMEText
@@ -272,6 +272,101 @@ def test_smtp_settings(email_req: EmailShareRequest):
             return {"success": True, "message": "Test email sent."}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
+
+# --- System Settings Endpoints ---
+
+class SystemSettingsUpdate(BaseModel):
+    company_name: str
+    support_url: Optional[str] = None
+    primary_color: str
+    custom_css: Optional[str] = None
+    # Logo and Favicon handled via separate upload endpoint to manage files
+
+@app.get("/api/settings/system")
+def get_system_settings():
+    """Public endpoint for branding (Login page etc)."""
+    with Session(engine) as session:
+        settings = session.get(SystemSettings, 1)
+        if not settings:
+             # Return defaults if not set
+            return {
+                "company_name": "VPN Manager",
+                "primary_color": "#0054a6"
+            }
+        return settings
+
+@app.post("/api/settings/system", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def update_system_settings(settings_update: SystemSettingsUpdate):
+    with Session(engine) as session:
+        settings = session.get(SystemSettings, 1)
+        if not settings:
+            settings = SystemSettings(id=1, **settings_update.dict())
+        else:
+            settings_data = settings_update.dict(exclude_unset=True)
+            for key, value in settings_data.items():
+                setattr(settings, key, value)
+            settings.updated_at = datetime.utcnow()
+        
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+        return settings
+
+from fastapi import UploadFile, File
+from fastapi.staticfiles import StaticFiles
+
+# Mount static upload dir
+UPLOAD_DIR = "/opt/vpn-manager/frontend/static/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+# Note: Frontend PHP serves static files directly or via Nginx. 
+# We need to ensure the path is accessible.
+# If running behind Nginx, /static/uploads should map to this dir.
+
+@app.post("/api/settings/logo", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+async def upload_logo(file: UploadFile = File(...), type: str = "logo"):
+    """
+    Type: 'logo' or 'favicon'
+    """
+    if type not in ['logo', 'favicon']:
+        raise HTTPException(status_code=400, detail="Invalid type")
+    
+    # Secure filename
+    filename = f"{type}_{secrets.token_hex(4)}.png" # Force PNG or keep extension?
+    # Let's keep extension but simple
+    ext = os.path.splitext(file.filename)[1]
+    if ext.lower() not in ['.png', '.jpg', '.jpeg', '.svg', '.ico']:
+         raise HTTPException(status_code=400, detail="Invalid file type")
+    
+    filename = f"{type}{ext}" # Overwrite existing? Or unique?
+    # Overwrite is better to save space, but unique avoids caching issues.
+    # Let's use unique and return URL.
+    filename = f"{type}_{secrets.token_hex(4)}{ext}"
+    
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    with open(file_path, "wb") as buffer:
+        content = await file.read()
+        buffer.write(content)
+        
+    # Update DB
+    relative_path = f"static/uploads/{filename}"
+    
+    with Session(engine) as session:
+        settings = session.get(SystemSettings, 1)
+        if not settings:
+            settings = SystemSettings(id=1, company_name="VPN Manager") # Init if missing
+            
+        if type == "logo":
+            settings.logo_url = relative_path
+        elif type == "favicon":
+            settings.favicon_url = relative_path
+            
+        settings.updated_at = datetime.utcnow()
+        session.add(settings)
+        session.commit()
+    
+    return {"success": True, "url": relative_path}
 
 
 # --- Secure Share Endpoints ---
