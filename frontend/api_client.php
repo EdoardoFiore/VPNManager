@@ -442,3 +442,50 @@ function trigger_manual_backup()
 {
     return api_request('/backup/now', 'POST');
 }
+
+function stream_backup_download()
+{
+    $url = API_BASE_URL . '/backup/download';
+
+    $ch = curl_init();
+
+    // Auth Header
+    $headers = [];
+    if (isset($_SESSION['jwt_token'])) {
+        $headers[] = 'Authorization: Bearer ' . $_SESSION['jwt_token'];
+    }
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, false); // Stream directly
+
+    // Pass essential headers
+    curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($curl, $header) {
+        $len = strlen($header);
+        $header_parts = explode(':', $header, 2);
+
+        // Forward Status Code line (HTTP/1.1 200 OK)
+        if (stripos($header, 'HTTP/') === 0) {
+            header($header);
+        }
+
+        if (count($header_parts) < 2)
+            return $len;
+
+        $name = strtolower(trim($header_parts[0]));
+        // Pass relevant headers to browser
+        if (in_array($name, ['content-disposition', 'content-type', 'content-length'])) {
+            header(trim($header_parts[0]) . ': ' . trim($header_parts[1]));
+        }
+        return $len;
+    });
+
+    $result = curl_exec($ch);
+    if ($result === false) {
+        error_log("Backup Download Curl Error: " . curl_error($ch));
+        http_response_code(500);
+        echo "Download Error: " . curl_error($ch);
+    }
+    curl_close($ch);
+    curl_close($ch);
+}

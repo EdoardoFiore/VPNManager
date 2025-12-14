@@ -290,9 +290,14 @@ if ($currentRole !== 'admin') {
                                     </dl>
                                     <p class="text-muted small">I backup includono il database SQLite e le
                                         configurazioni WireGuard.</p>
-                                    <button class="btn btn-outline-primary w-100" id="btn-backup-now">
-                                        <i class="ti ti-cloud-upload me-2"></i> Esegui Backup Adesso
-                                    </button>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-primary" id="btn-backup-remote">
+                                            <i class="ti ti-cloud-upload me-2"></i> Backup Remoto
+                                        </button>
+                                        <button class="btn btn-outline-secondary" id="btn-backup-download">
+                                            <i class="ti ti-download me-2"></i> Scarica Backup
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

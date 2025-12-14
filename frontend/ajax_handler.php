@@ -439,6 +439,10 @@ switch ($action) {
         echo json_encode(trigger_manual_backup());
         break;
 
+    case 'download_backup':
+        stream_backup_download();
+        exit;
+
     default:
 
         echo json_encode(['success' => false, 'body' => ['detail' => 'Azione non riconosciuta.']]);

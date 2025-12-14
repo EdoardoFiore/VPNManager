@@ -3,7 +3,9 @@ import re
 from typing import List, Optional, Dict, Union
 from datetime import timedelta
 import fastapi
-from fastapi import FastAPI, HTTPException, Security, Depends, status, Request
+from fastapi import FastAPI, Depends, HTTPException, Body, File, UploadFile, Request
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import PlainTextResponse
@@ -232,10 +234,11 @@ class EmailShareRequest(BaseModel):
 CLIENT_NAME_PATTERN = r"^[a-zA-Z0-9_.-]+$"
 
 # --- Scheduler Logic ---
-def run_backup_job():
+def run_backup_job(force_run: bool = False):
     with Session(engine) as session:
         settings = session.get(BackupSettings, 1)
-        if not settings or not settings.enabled: return
+        if not settings: return
+        if not settings.enabled and not force_run: return
         
         try:
             zip_path = backup_logic.create_backup_zip()
@@ -245,12 +248,13 @@ def run_backup_job():
                 success = upload_manager.upload_backup(zip_path, settings)
                 if success:
                      settings.last_run_status = f"Success ({settings.remote_protocol.upper()})"
+                     # Only clean up if upload was successful
+                     if os.path.exists(zip_path):
+                         os.remove(zip_path)
                 else:
                      settings.last_run_status = "Failed (Upload)"
             
             settings.last_run_time = datetime.utcnow()
-            # Clean up local zip if desired?
-            # os.remove(zip_path) 
             
         except Exception as e:
              settings.last_run_status = f"Failed: {str(e)}"
@@ -1204,6 +1208,8 @@ def update_backup_settings(settings_update: BackupSettingsUpdate):
         else:
             settings_data = settings_update.dict(exclude_unset=True)
             for key, value in settings_data.items():
+                if key == "remote_password" and value == "":
+                    continue
                 setattr(settings, key, value)
             settings.updated_at = datetime.utcnow()
         
@@ -1218,12 +1224,20 @@ def update_backup_settings(settings_update: BackupSettingsUpdate):
 
 @app.post("/api/backup/now", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 def trigger_backup_manual(request: ManualBackupRequest = None):
-    scheduler.add_job(run_backup_job)
+    scheduler.add_job(run_backup_job, args=[True])
     return {"success": True, "message": "Backup triggered in background."}
 
 @app.post("/api/settings/backup/test", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 def test_backup_connection(settings_update: BackupSettingsUpdate):
     temp_settings = BackupSettings(**settings_update.dict(exclude_unset=True))
+    
+    # If password is empty, try to fetch from DB
+    if not temp_settings.remote_password:
+        with Session(engine) as session:
+             saved_settings = session.get(BackupSettings, 1)
+             if saved_settings and saved_settings.remote_password:
+                 temp_settings.remote_password = saved_settings.remote_password
+
     test_file = "test_connection.txt"
     with open(test_file, 'w') as f:
         f.write("VPN Manager Backup Test Connection")
@@ -1238,15 +1252,6 @@ def test_backup_connection(settings_update: BackupSettingsUpdate):
         if os.path.exists(test_file):
             os.remove(test_file)
 
-            raise HTTPException(status_code=500, detail="Failed to write Netplan config file.")
-        
-        success, error = network_utils.apply_netplan_config()
-        if not success:
-            raise HTTPException(status_code=500, detail=f"Failed to apply Netplan config: {error}")
-
-        return {"success": True, "message": f"Netplan config for {interface_name} updated and applied."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating Netplan config: {e}")
 
 @app.post("/api/machine-network/netplan-apply", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def apply_global_netplan_config():
@@ -1259,6 +1264,23 @@ async def apply_global_netplan_config():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/api/backup/download", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def download_backup():
+    try:
+        zip_path = backup_logic.create_backup_zip()
+        if not os.path.exists(zip_path):
+             raise HTTPException(status_code=500, detail="Backup creation failed")
+        
+        # Return as downloadable file
+        return FileResponse(
+            path=zip_path, 
+            filename=os.path.basename(zip_path), 
+            media_type='application/zip',
+            background=BackgroundTask(lambda: os.remove(zip_path)) # Cleanup after send
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 async def root():

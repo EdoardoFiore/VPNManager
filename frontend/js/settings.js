@@ -31,14 +31,36 @@ document.addEventListener('DOMContentLoaded', function () {
             updatePreview();
         });
         document.querySelector('[name="company_name"]').addEventListener('input', updatePreview);
+
+        const logoInput = document.querySelector('[name="logo_file"]');
+        if (logoInput) {
+            logoInput.addEventListener('change', function (e) {
+                if (this.files && this.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        const img = document.getElementById('preview-logo-img');
+                        const svg = document.getElementById('preview-logo-default');
+                        if (img) {
+                            img.src = e.target.result;
+                            img.classList.remove('d-none');
+                            if (svg) svg.classList.add('d-none');
+                        }
+                    }
+                    reader.readAsDataURL(this.files[0]);
+                }
+            });
+        }
     }
 
     // --- Backup Settings Listeners ---
     if (document.getElementById('backup-form')) {
         document.getElementById('btn-save-backup').addEventListener('click', function (e) { e.preventDefault(); saveBackupSettings(); });
         document.getElementById('btn-test-backup').addEventListener('click', function (e) { e.preventDefault(); testBackupConnection(); });
-        const btnNow = document.getElementById('btn-backup-now');
-        if (btnNow) btnNow.addEventListener('click', function (e) { e.preventDefault(); triggerManualBackup(); });
+        const btnRemote = document.getElementById('btn-backup-remote');
+        if (btnRemote) btnRemote.addEventListener('click', function (e) { e.preventDefault(); triggerRemoteBackup(); });
+
+        const btnDownload = document.getElementById('btn-backup-download');
+        if (btnDownload) btnDownload.addEventListener('click', function (e) { e.preventDefault(); triggerDownloadBackup(); });
     }
 });
 
@@ -47,12 +69,16 @@ function updatePreview() {
     const color = document.querySelector('[name="primary_color"]').value || '#0054a6';
 
     document.getElementById('preview-company-name').textContent = name;
-    document.getElementById('preview-color-strip').style.backgroundColor = color;
-    document.getElementById('preview-btn').style.backgroundColor = color;
-    document.getElementById('preview-btn').style.borderColor = color;
+
+    // Use setProperty with 'important' to override utility classes like .bg-primary
+    document.getElementById('preview-color-strip').style.setProperty('background-color', color, 'important');
+
+    const btn = document.getElementById('preview-btn');
+    btn.style.setProperty('background-color', color, 'important');
+    btn.style.setProperty('border-color', color, 'important');
 
     const svg = document.getElementById('preview-logo-default');
-    if (svg) svg.style.color = color;
+    if (svg) svg.style.setProperty('color', color, 'important');
 }
 
 async function loadSystemSettings() {
@@ -144,7 +170,8 @@ async function saveSystemSettings() {
             }
         }
 
-        showNotification('success', 'Personalizzazione salvata!');
+        showNotification('success', 'Personalizzazione salvata! Ricaricamento...');
+        setTimeout(() => location.reload(), 1500);
 
     } catch (e) {
         showNotification('danger', e.message);
@@ -247,146 +274,166 @@ async function testSMTPSettings() {
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
+}
 
-    // --- BACKUP SETTINGS HELPERS ---
+// --- BACKUP SETTINGS HELPERS ---
 
-    async function loadBackupSettings() {
-        try {
-            const response = await fetch(`${API_AJAX_HANDLER}?action=get_backup_settings`);
-            const result = await response.json();
-            if (result.success && result.body) {
-                const data = result.body;
-                const form = document.getElementById('backup-form');
-                if (form) {
-                    form.querySelector('[name="backup_enabled"]').checked = data.enabled || false;
-                    form.querySelector('[name="backup_frequency"]').value = data.frequency || 'daily';
-                    form.querySelector('[name="backup_time"]').value = data.time || '03:00';
+async function loadBackupSettings() {
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}?action=get_backup_settings`);
+        const result = await response.json();
+        if (result.success && result.body) {
+            const data = result.body;
+            const form = document.getElementById('backup-form');
+            if (form) {
+                form.querySelector('[name="backup_enabled"]').checked = data.enabled || false;
+                form.querySelector('[name="backup_frequency"]').value = data.frequency || 'daily';
+                form.querySelector('[name="backup_time"]').value = data.time || '03:00';
 
-                    form.querySelector('[name="remote_protocol"]').value = data.remote_protocol || 'sftp';
-                    form.querySelector('[name="remote_host"]').value = data.remote_host || '';
-                    form.querySelector('[name="remote_port"]').value = data.remote_port || 22;
-                    form.querySelector('[name="remote_user"]').value = data.remote_user || '';
-                    // Password is usually empty for security
-                    form.querySelector('[name="remote_password"]').value = '';
-                    form.querySelector('[name="remote_path"]').value = data.remote_path || '/';
+                form.querySelector('[name="remote_protocol"]').value = data.remote_protocol || 'sftp';
+                form.querySelector('[name="remote_host"]').value = data.remote_host || '';
+                form.querySelector('[name="remote_port"]').value = data.remote_port || 22;
+                form.querySelector('[name="remote_user"]').value = data.remote_user || '';
+                // Password is usually empty for security
+                form.querySelector('[name="remote_password"]').value = '';
+                form.querySelector('[name="remote_path"]').value = data.remote_path || '/';
 
-                    // Status Update
-                    const lastStatus = data.last_run_status || 'Mai eseguito';
-                    const lastTime = data.last_run_time ? new Date(data.last_run_time).toLocaleString() : '-';
+                // Status Update
+                const lastStatus = data.last_run_status || 'Mai eseguito';
+                const lastTime = data.last_run_time ? new Date(data.last_run_time).toLocaleString() : '-';
 
-                    const statusEl = document.getElementById('backup-last-status');
-                    if (statusEl) statusEl.textContent = lastStatus;
+                const statusEl = document.getElementById('backup-last-status');
+                if (statusEl) statusEl.textContent = lastStatus;
 
-                    const timeEl = document.getElementById('backup-last-time');
-                    if (timeEl) timeEl.textContent = lastTime;
+                const timeEl = document.getElementById('backup-last-time');
+                if (timeEl) timeEl.textContent = lastTime;
+
+                const btnRemote = document.getElementById('btn-backup-remote');
+                if (btnRemote) {
+                    if (!data.remote_host || !data.remote_user) {
+                        btnRemote.disabled = true;
+                        btnRemote.title = "Configura Host e Utente remoto per abilitare.";
+                    } else {
+                        btnRemote.disabled = false;
+                        btnRemote.title = "";
+                    }
                 }
             }
-        } catch (e) {
-            console.error("Error loading backup settings:", e);
         }
+    } catch (e) {
+        console.error("Error loading backup settings:", e);
     }
+}
 
-    async function saveBackupSettings() {
-        const form = document.getElementById('backup-form');
-        const btn = document.getElementById('btn-save-backup');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Salvataggio...';
-        btn.disabled = true;
+async function saveBackupSettings() {
+    const form = document.getElementById('backup-form');
+    const btn = document.getElementById('btn-save-backup');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Salvataggio...';
+    btn.disabled = true;
 
-        try {
-            const payload = {
-                action: 'update_backup_settings',
-                enabled: form.querySelector('[name="backup_enabled"]').checked,
-                frequency: form.querySelector('[name="backup_frequency"]').value,
-                time: form.querySelector('[name="backup_time"]').value,
-                remote_protocol: form.querySelector('[name="remote_protocol"]').value,
-                remote_host: form.querySelector('[name="remote_host"]').value,
-                remote_port: form.querySelector('[name="remote_port"]').value,
-                remote_user: form.querySelector('[name="remote_user"]').value,
-                remote_path: form.querySelector('[name="remote_path"]').value
-            };
+    try {
+        const payload = {
+            action: 'update_backup_settings',
+            enabled: form.querySelector('[name="backup_enabled"]').checked,
+            frequency: form.querySelector('[name="backup_frequency"]').value,
+            time: form.querySelector('[name="backup_time"]').value,
+            remote_protocol: form.querySelector('[name="remote_protocol"]').value,
+            remote_host: form.querySelector('[name="remote_host"]').value,
+            remote_port: form.querySelector('[name="remote_port"]').value,
+            remote_user: form.querySelector('[name="remote_user"]').value,
+            remote_path: form.querySelector('[name="remote_path"]').value
+        };
 
-            const pwd = form.querySelector('[name="remote_password"]').value;
-            if (pwd) payload.remote_password = pwd;
+        const pwd = form.querySelector('[name="remote_password"]').value;
+        if (pwd) payload.remote_password = pwd;
 
-            // Use JSON body because ajax_handler.php decodes input for `update_backup_settings`
-            const res = await fetch(API_AJAX_HANDLER, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+        // Use JSON body because ajax_handler.php decodes input for `update_backup_settings`
+        const res = await fetch(API_AJAX_HANDLER, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-            const result = await res.json();
-            if (result.success) {
-                showNotification('success', 'Configurazione Backup salvata!');
-                loadBackupSettings(); // Reload to refresh status
-            } else {
-                throw new Error(result.error || (result.body && result.body.detail) || 'Errore sconosciuto');
-            }
-        } catch (e) {
-            showNotification('danger', 'Errore salvataggio: ' + e.message);
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
+        const result = await res.json();
+        if (result.success) {
+            showNotification('success', 'Configurazione Backup salvata!');
+            loadBackupSettings(); // Reload to refresh status
+        } else {
+            throw new Error(result.error || (result.body && result.body.detail) || 'Errore sconosciuto');
         }
+    } catch (e) {
+        showNotification('danger', 'Errore salvataggio: ' + e.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
     }
+}
 
-    async function testBackupConnection() {
-        const form = document.getElementById('backup-form');
-        const btn = document.getElementById('btn-test-backup');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Test...';
-        btn.disabled = true;
+async function testBackupConnection() {
+    const form = document.getElementById('backup-form');
+    const btn = document.getElementById('btn-test-backup');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Test...';
+    btn.disabled = true;
 
-        try {
-            const payload = {
-                action: 'test_backup_connection',
-                remote_protocol: form.querySelector('[name="remote_protocol"]').value,
-                remote_host: form.querySelector('[name="remote_host"]').value,
-                remote_port: form.querySelector('[name="remote_port"]').value,
-                remote_user: form.querySelector('[name="remote_user"]').value,
-                remote_path: form.querySelector('[name="remote_path"]').value,
-                remote_password: form.querySelector('[name="remote_password"]').value
-            };
+    try {
+        const payload = {
+            action: 'test_backup_connection',
+            remote_protocol: form.querySelector('[name="remote_protocol"]').value,
+            remote_host: form.querySelector('[name="remote_host"]').value,
+            remote_port: form.querySelector('[name="remote_port"]').value,
+            remote_user: form.querySelector('[name="remote_user"]').value,
+            remote_path: form.querySelector('[name="remote_path"]').value,
+            remote_password: form.querySelector('[name="remote_password"]').value
+        };
 
-            const res = await fetch(API_AJAX_HANDLER, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+        const res = await fetch(API_AJAX_HANDLER, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-            const result = await res.json();
-            if (result.success) {
-                showNotification('success', 'Connessione Riuscita!');
-            } else {
-                showNotification('danger', 'Test Fallito: ' + (result.body?.detail || result.error || 'Errore'));
-            }
-        } catch (e) {
-            showNotification('danger', 'Errore Test: ' + e.message);
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
+        const result = await res.json();
+        if (result.success) {
+            showNotification('success', 'Connessione Riuscita!');
+        } else {
+            showNotification('danger', 'Test Fallito: ' + (result.body?.detail || result.error || 'Errore'));
         }
+    } catch (e) {
+        showNotification('danger', 'Errore Test: ' + e.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
     }
+}
 
-    async function triggerManualBackup() {
-        const btn = document.getElementById('btn-backup-now');
-        if (!confirm("Vuoi avviare il backup manuale adesso?")) return;
+async function triggerRemoteBackup() {
+    const btn = document.getElementById('btn-backup-remote');
+    if (!confirm("Vuoi avviare il backup remoto adesso?")) return;
 
-        btn.disabled = true;
-        try {
-            const response = await fetch(`${API_AJAX_HANDLER}?action=trigger_manual_backup`);
-            const result = await response.json();
-            if (result.success) {
-                showNotification('success', 'Backup avviato in background.');
-                setTimeout(loadBackupSettings, 2000);
-            } else {
-                showNotification('danger', 'Errore avvio backup.');
-            }
-        } catch (e) {
-            showNotification('danger', 'Errore: ' + e.message);
-        } finally {
-            btn.disabled = false;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Avvio...';
+    btn.disabled = true;
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}?action=trigger_manual_backup`);
+        const result = await response.json();
+        if (result.success) {
+            showNotification('success', 'Backup avviato in background (Remoto).');
+            setTimeout(loadBackupSettings, 2000);
+        } else {
+            showNotification('danger', 'Errore avvio backup: ' + (result.body?.detail || 'Sconosciuto'));
         }
+    } catch (e) {
+        showNotification('danger', 'Errore: ' + e.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
     }
+}
+
+function triggerDownloadBackup() {
+    if (!confirm("Creare e scaricare un backup adesso?")) return;
+    window.location.href = `${API_AJAX_HANDLER}?action=download_backup`;
+}
 

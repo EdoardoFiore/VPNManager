@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BACKEND_DIR)
-DATA_DIR = os.path.join(ROOT_DIR, 'data') # Assuming sqlite is here
+DATA_DIR = os.path.join(BACKEND_DIR, 'data') # SQLite is in backend/data
 CONFIG_DIR = "/etc/wireguard" # WireGuard configs
 
 def create_backup_zip():
@@ -33,9 +33,11 @@ def create_backup_zip():
     db_path = os.path.join(DATA_DIR, 'vpn.db') # Verify this location in database.py
     
     try:
+        logger.info(f"Starting backup creation: {backup_path}")
         with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             # 1. Add Database
             if os.path.exists(db_path):
+                logger.info(f"Adding database from {db_path}")
                 # We can't zip the live DB safely if it's locked.
                 # Better to perform a hot backup or dump.
                 # SQLite 'vacuum into' or similar. 

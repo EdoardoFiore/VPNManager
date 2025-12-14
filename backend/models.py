@@ -166,6 +166,7 @@ class SystemSettings(SQLModel, table=True):
     primary_color: str = "#0054a6"
     logo_url: Optional[str] = None
     favicon_url: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class BackupSettings(SQLModel, table=True):
     """Singleton table for Backup Configuration (only id=1 used)"""
