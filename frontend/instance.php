@@ -568,17 +568,80 @@ require_once 'includes/header.php';
     </div>
 </div>
 
-<!-- Modal QR Code -->
-<div class="modal modal-blur fade" id="modal-qrcode" tabindex="-1" role="dialog" aria-hidden="true">
+<!-- Modal Connect Mobile (QR) -->
+<div class="modal modal-blur fade" id="modal-connect-mobile" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">QR Code Configurazione</h5>
+                <h5 class="modal-title">Connetti Dispositivo Mobile</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body text-center">
-                <div id="qrcode-container" class="mb-3 d-flex justify-content-center"></div>
-                <p class="text-muted">Scansiona con l'app WireGuard</p>
+            <div class="modal-body">
+                <div class="markdown">
+                    <ol>
+                        <li>
+                            <strong>Installa l'app WireGuard:</strong>
+                            <div class="mt-2 mb-3">
+                                <a href="https://itunes.apple.com/us/app/wireguard/id1441195209?ls=1&mt=8"
+                                    target="_blank" class="btn btn-dark btn-sm me-2">
+                                    <i class="ti ti-brand-apple"></i> App Store
+                                </a>
+                                <a href="https://play.google.com/store/apps/details?id=com.wireguard.android"
+                                    target="_blank" class="btn btn-success btn-sm">
+                                    <i class="ti ti-brand-android"></i> Play Store
+                                </a>
+                            </div>
+                        </li>
+                        <li>Apri l'app e tocca il pulsante <strong>+</strong> in basso a destra.</li>
+                        <li>Seleziona <strong>"Scansiona codice QR"</strong> e inquadra:</li>
+                    </ol>
+                </div>
+                <div id="qrcode-container" class="my-3 d-flex justify-content-center"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Connect Desktop (Download) -->
+<div class="modal modal-blur fade" id="modal-connect-desktop" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Connetti Computer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="markdown">
+                    <ol>
+                        <li>
+                            <strong>Installa il Client WireGuard:</strong>
+                            <div class="mt-2 mb-3">
+                                <a href="https://download.wireguard.com/windows-client/wireguard-installer.exe"
+                                    class="btn btn-ghost-primary btn-sm" target="_blank">
+                                    <i class="ti ti-brand-windows"></i> Windows
+                                </a>
+                                <a href="https://itunes.apple.com/us/app/wireguard/id1451685025?ls=1&mt=12"
+                                    class="btn btn-ghost-dark btn-sm" target="_blank">
+                                    <i class="ti ti-brand-apple"></i> macOS
+                                </a>
+                                <a href="https://www.wireguard.com/install/" class="btn btn-ghost-warning btn-sm"
+                                    target="_blank">
+                                    <i class="ti ti-brand-ubuntu"></i> Linux
+                                </a>
+                            </div>
+                        </li>
+                        <li>
+                            <strong>Scarica la configurazione:</strong>
+                            <div class="mt-2 mb-3">
+                                <button id="btn-download-config-action" class="btn btn-primary w-100">
+                                    <i class="ti ti-download me-2"></i> Scarica Profilo .conf
+                                </button>
+                            </div>
+                        </li>
+                        <li>Apri WireGuard e clicca su <strong>"Importa tunnel da file"</strong> (o "Add Tunnel").</li>
+                        <li>Seleziona il file scaricato e clicca <strong>"Attiva"</strong>.</li>
+                    </ol>
+                </div>
             </div>
         </div>
     </div>

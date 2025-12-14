@@ -141,15 +141,16 @@ async function fetchAndRenderClients() {
 async function showQRCode(clientName) {
     if (!currentInstance) return;
 
-    // Clear previous QR
-    const container = document.getElementById('qrcode-container');
-    container.innerHTML = 'Caricamento...';
-    new bootstrap.Modal(document.getElementById('modal-qrcode')).show();
-
     try {
+        // Show new Mobile Modal
+        const el = document.getElementById('modal-connect-mobile');
+        const modal = bootstrap.Modal.getOrCreateInstance(el);
+        modal.show();
+
+        const container = document.getElementById('qrcode-container');
+        container.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+
         // Fetch raw config text
-        // Note: The AJAX handler might need adjustment to return raw text for a specific action,
-        // or we use the download link and fetch it as text.
         const url = `${API_AJAX_HANDLER}?action=download_client&instance_id=${currentInstance.id}&client_name=${clientName}`;
         const response = await fetch(url);
 
@@ -161,13 +162,14 @@ async function showQRCode(clientName) {
         container.innerHTML = '';
         new QRCode(container, {
             text: configText,
-            width: 256,
-            height: 256,
+            width: 200,
+            height: 200,
             correctLevel: QRCode.CorrectLevel.M
         });
 
     } catch (e) {
-        container.innerHTML = `<span class="text-danger">Errore: ${e.message}</span>`;
+        const container = document.getElementById('qrcode-container');
+        if (container) container.innerHTML = `<span class="text-danger">Errore: ${e.message}</span>`;
     }
 }
 
@@ -209,7 +211,16 @@ async function createClient() {
 
 function downloadClient(clientName) {
     if (!currentInstance) return;
-    window.location.href = `${API_AJAX_HANDLER}?action=download_client&instance_id=${currentInstance.id}&client_name=${clientName}`;
+
+    // Show Desktop Modal
+    const modal = new bootstrap.Modal(document.getElementById('modal-connect-desktop'));
+    modal.show();
+
+    // Bind the download button inside the modal
+    const btn = document.getElementById('btn-download-config-action');
+    btn.onclick = () => {
+        window.location.href = `${API_AJAX_HANDLER}?action=download_client&instance_id=${currentInstance.id}&client_name=${clientName}`;
+    };
 }
 
 function revokeClient(clientName) {
