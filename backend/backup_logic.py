@@ -69,3 +69,70 @@ def create_backup_zip():
         if os.path.exists(backup_path):
             os.remove(backup_path)
         raise e
+
+def restore_backup(zip_file_path: str):
+    """
+    Restores database and configurations from a zip file.
+    Args:
+        zip_file_path: Path to the uploaded zip file.
+    RETURNS:
+        bool: True if successful
+    """
+    logger.info(f"Starting restore from {zip_file_path}")
+    
+    # Paths
+    db_path = os.path.join(DATA_DIR, 'vpn.db')
+    
+    # Temporary extraction dir
+    temp_extract_dir = os.path.join(BACKEND_DIR, 'temp_restore')
+    if os.path.exists(temp_extract_dir):
+        shutil.rmtree(temp_extract_dir)
+    os.makedirs(temp_extract_dir)
+    
+    try:
+        with zipfile.ZipFile(zip_file_path, 'r') as zipf:
+            zipf.extractall(temp_extract_dir)
+            
+        # 1. Restore Database
+        extracted_db = os.path.join(temp_extract_dir, 'database', 'vpn.db')
+        if os.path.exists(extracted_db):
+            logger.info("Restoring database...")
+            # Backup current DB just in case?
+            if os.path.exists(db_path):
+                 shutil.copy2(db_path, f"{db_path}.bak")
+            
+            # Allow overwrite
+            shutil.copy2(extracted_db, db_path)
+        else:
+            logger.warning("No database found in backup zip.")
+
+        # 2. Restore WireGuard Configs
+        extracted_wg_dir = os.path.join(temp_extract_dir, 'wireguard')
+        if os.path.exists(extracted_wg_dir):
+            logger.info("Restoring WireGuard configs...")
+            
+            # Copy files
+            for root, dirs, files in os.walk(extracted_wg_dir):
+                for file in files:
+                    src_file = os.path.join(root, file)
+                    # Rel path from extracted_wg_dir
+                    rel_path = os.path.relpath(src_file, extracted_wg_dir)
+                    dest_file = os.path.join(CONFIG_DIR, rel_path)
+                    
+                    os.makedirs(os.path.dirname(dest_file), exist_ok=True)
+                    shutil.copy2(src_file, dest_file)
+                    # Fix permissions
+                    os.chmod(dest_file, 0o600) # WG configs should be private
+        else:
+             logger.warning("No WireGuard configs found in backup zip.")
+
+        logger.info("Restore completed successfully.")
+        return True
+
+    except Exception as e:
+        logger.error(f"Restore failed: {e}")
+        raise e
+    finally:
+        # Cleanup
+        if os.path.exists(temp_extract_dir):
+            shutil.rmtree(temp_extract_dir)

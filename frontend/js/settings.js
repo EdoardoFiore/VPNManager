@@ -62,6 +62,53 @@ document.addEventListener('DOMContentLoaded', function () {
         const btnDownload = document.getElementById('btn-backup-download');
         if (btnDownload) btnDownload.addEventListener('click', function (e) { e.preventDefault(); triggerDownloadBackup(); });
     }
+
+    const restoreForm = document.getElementById('restore-form');
+    // We bind submit to open modal instead of confirm
+    if (restoreForm) {
+        restoreForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            // Check if file is selected
+            if (this.querySelector('[name="backup_file"]').files.length === 0) return;
+
+            // Open Modal
+            const modal = new bootstrap.Modal(document.getElementById('modal-confirm-restore'));
+            modal.show();
+        });
+    }
+
+    // Modal Action Listeners
+    // 1. Remote Backup Confirm
+    const btnConfirmBackup = document.getElementById('btn-confirm-backup-remote');
+    if (btnConfirmBackup) {
+        btnConfirmBackup.addEventListener('click', function () {
+            // Hide Modal
+            const modalEl = document.getElementById('modal-confirm-backup');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            // Run logic
+            executeRemoteBackup();
+        });
+    }
+
+    // 2. Restore Confirm
+    const btnConfirmRestore = document.getElementById('btn-confirm-restore-action');
+    if (btnConfirmRestore) {
+        btnConfirmRestore.addEventListener('click', function () {
+            // Hide Modal
+            const modalEl = document.getElementById('modal-confirm-restore');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            // Run logic form submisson
+            if (restoreForm) {
+                // We call the async handler manually passing the form element context if needed, 
+                // or better, extract logic to a function.
+                executeRestoreLogic(restoreForm);
+            }
+        });
+    }
 });
 
 function updatePreview() {
@@ -126,16 +173,7 @@ async function saveSystemSettings() {
             primary_color: form.querySelector('[name="primary_color"]').value
         };
 
-        const response = await fetch(API_AJAX_HANDLER, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }, // Handler needs to support JSON!
-            body: JSON.stringify(payload)
-        });
-
-        // Wait, PHP Ajax Handler usually expects POST Form Data to populate $_POST['action'].
-        // JSON body requires wrapper.
-        // Let's stick to URLSearchParams for text data as done in saveSMTPSettings.
-
+        // Use URLSearchParams for simple text updates via POST
         const textResponse = await fetch(API_AJAX_HANDLER, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -408,10 +446,14 @@ async function testBackupConnection() {
     }
 }
 
-async function triggerRemoteBackup() {
-    const btn = document.getElementById('btn-backup-remote');
-    if (!confirm("Vuoi avviare il backup remoto adesso?")) return;
+function triggerRemoteBackup() {
+    // Show Modal instead of confirm
+    const modal = new bootstrap.Modal(document.getElementById('modal-confirm-backup'));
+    modal.show();
+}
 
+async function executeRemoteBackup() {
+    const btn = document.getElementById('btn-backup-remote');
     const originalText = btn.innerHTML;
     btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Avvio...';
     btn.disabled = true;
@@ -425,7 +467,7 @@ async function triggerRemoteBackup() {
             showNotification('danger', 'Errore avvio backup: ' + (result.body?.detail || 'Sconosciuto'));
         }
     } catch (e) {
-        showNotification('danger', 'Errore: ' + e.message);
+        showNotification('danger', 'Errore backup: ' + e.message);
     } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -433,7 +475,48 @@ async function triggerRemoteBackup() {
 }
 
 function triggerDownloadBackup() {
-    if (!confirm("Creare e scaricare un backup adesso?")) return;
+    // Direct link to handler which streams the file
     window.location.href = `${API_AJAX_HANDLER}?action=download_backup`;
 }
 
+async function executeRestoreLogic(form) {
+    const btn = document.getElementById('btn-restore');
+    const progressBar = document.getElementById('restore-progress');
+    const fileInput = form.querySelector('[name="backup_file"]');
+
+    if (fileInput.files.length === 0) return;
+
+    btn.disabled = true;
+    btn.innerHTML = 'Ripristino in corso...';
+    progressBar.classList.remove('d-none');
+
+    const formData = new FormData();
+    formData.append('backup_file', fileInput.files[0]);
+    formData.append('action', 'restore_backup'); // Passed as POST field for PHP handling
+
+    try {
+        const response = await fetch(API_AJAX_HANDLER, {
+            method: 'POST',
+            body: formData
+            // Do NOT set Content-Type header when sending FormData, logic handles it
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification('success', 'Ripristino Completato! Ricarica la pagina.');
+            alert("Ripristino completato con successo. La pagina verrà ricaricata.");
+            window.location.reload();
+        } else {
+            showNotification('danger', 'Errore Ripristino: ' + (result.body?.detail || result.error || 'Errore sconosciuto'));
+        }
+
+    } catch (e) {
+        showNotification('danger', 'Errore durante il ripristino: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-history me-2"></i> Ripristina Backup';
+        progressBar.classList.add('d-none');
+        form.reset();
+    }
+}

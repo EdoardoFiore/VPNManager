@@ -300,11 +300,92 @@ if ($currentRole !== 'admin') {
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Restore Card -->
+                            <div class="card border-danger mt-3">
+                                <div class="card-status-top bg-danger"></div>
+                                <div class="card-body">
+                                    <h3 class="card-title text-danger">Ripristino da Backup</h3>
+                                    <p class="text-muted small">Carica un file backup (.zip) per ripristinare il
+                                        database e le configurazioni.</p>
+                                    <div class="alert alert-warning">
+                                        <i class="ti ti-alert-triangle me-2"></i> <strong>Attenzione:</strong> Questa
+                                        azione sovrascriverà tutti i dati attuali!
+                                    </div>
+                                    <form id="restore-form">
+                                        <div class="mb-3">
+                                            <input type="file" class="form-control" name="backup_file" accept=".zip"
+                                                required>
+                                        </div>
+                                        <button type="submit" class="btn btn-danger w-100" id="btn-restore">
+                                            <i class="ti ti-history me-2"></i> Ripristina Backup
+                                        </button>
+                                    </form>
+                                    <div id="restore-progress" class="mt-3 d-none">
+                                        <div class="progress">
+                                            <div class="progress-bar progress-bar-indeterminate bg-danger"></div>
+                                        </div>
+                                        <div class="text-center small mt-1 text-muted">Ripristino (Caricamento in
+                                            corso)...</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div id="notification-container"></div>
+
+                <!-- Backup Confirmation Modal -->
+                <div class="modal modal-blur fade" id="modal-confirm-backup" tabindex="-1" role="dialog"
+                    aria-hidden="true">
+                    <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+                        <div class="modal-content">
+                            <div class="modal-body">
+                                <div class="modal-title">Avviare Backup Remoto?</div>
+                                <div>Stai per avviare il processo di backup e caricamento remoto. L'operazione potrebbe
+                                    richiedere alcuni secondi.</div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-link link-secondary me-auto"
+                                    data-bs-dismiss="modal">Annulla</button>
+                                <button type="button" class="btn btn-primary" id="btn-confirm-backup-remote">Sì, Avvia
+                                    Backup</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Restore Confirmation Modal -->
+                <div class="modal modal-blur fade" id="modal-confirm-restore" tabindex="-1" role="dialog"
+                    aria-hidden="true">
+                    <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+                        <div class="modal-content">
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            <div class="modal-status bg-danger"></div>
+                            <div class="modal-body text-center py-4">
+                                <i class="ti ti-alert-triangle text-danger icon mb-2" style="font-size: 3rem;"></i>
+                                <h3>Sei sicuro?</h3>
+                                <div class="text-muted">Questa azione <strong>sovrascriverà il database e le
+                                        configurazioni esistenti</strong>. Il sistema verrà riavviato e potresti perdere
+                                    i dati attuali non salvati.</div>
+                            </div>
+                            <div class="modal-footer">
+                                <div class="w-100">
+                                    <div class="row">
+                                        <div class="col"><a href="#" class="btn w-100" data-bs-dismiss="modal">
+                                                Annulla
+                                            </a></div>
+                                        <div class="col"><a href="#" class="btn btn-danger w-100"
+                                                id="btn-confirm-restore-action">
+                                                Ripristina
+                                            </a></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <script src="js/settings.js"></script>
 

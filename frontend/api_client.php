@@ -443,6 +443,39 @@ function trigger_manual_backup()
     return api_request('/backup/now', 'POST');
 }
 
+function restore_backup($file)
+{
+    $url = API_BASE_URL . '/backup/restore';
+
+    $ch = curl_init();
+
+    // Auth Header
+    $headers = [];
+    if (isset($_SESSION['jwt_token'])) {
+        $headers[] = 'Authorization: Bearer ' . $_SESSION['jwt_token'];
+    }
+
+    $cfile = new CURLFile($file['tmp_name'], $file['type'], $file['name']);
+    $data = ['file' => $cfile];
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $body = json_decode($response, true);
+    return [
+        'success' => ($http_code >= 200 && $http_code < 300),
+        'code' => $http_code,
+        'body' => $body ?: $response
+    ];
+}
+
 function stream_backup_download()
 {
     $url = API_BASE_URL . '/backup/download';

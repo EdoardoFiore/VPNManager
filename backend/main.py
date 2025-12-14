@@ -25,6 +25,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import secrets
+import zipfile
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -1281,6 +1282,42 @@ def download_backup():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/backup/restore", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+async def restore_backup_endpoint(file: UploadFile = File(...)):
+    """Restores the system from a backup zip file."""
+    
+    # Save uploaded file temporarily
+    filename = f"restore_{secrets.token_hex(4)}.zip"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+             content = await file.read()
+             buffer.write(content)
+        
+        # Verify zip
+        if not zipfile.is_zipfile(file_path):
+             raise HTTPException(status_code=400, detail="Invalid zip file")
+
+        # Perform Restore
+        backup_logic.restore_backup(file_path)
+        
+        # Trigger Firewall Reload to apply restored rules
+        # Re-apply OpenVPN rules since DB changed
+        try:
+            iptables_manager.apply_all_openvpn_rules()
+            machine_firewall_manager.apply_all_rules()
+        except Exception as ignored:
+            print(f"Post-restore re-apply error: {ignored}")
+            
+        return {"success": True, "message": "Restore completed. Please restart the service to ensure full consistency."}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 @app.get("/")
 async def root():

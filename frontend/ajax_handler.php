@@ -443,6 +443,14 @@ switch ($action) {
         stream_backup_download();
         exit;
 
+    case 'restore_backup':
+        if (!isset($_FILES['backup_file'])) {
+            echo json_encode(['success' => false, 'body' => ['detail' => 'File mancante.']]);
+            exit;
+        }
+        echo json_encode(restore_backup($_FILES['backup_file']));
+        break;
+
     default:
 
         echo json_encode(['success' => false, 'body' => ['detail' => 'Azione non riconosciuta.']]);
