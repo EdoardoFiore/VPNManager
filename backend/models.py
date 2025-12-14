@@ -127,3 +127,33 @@ class MachineFirewallRule(SQLModel, table=True):
     comment: Optional[str] = None
     table_name: str = Field(default="filter", alias="table") # 'table' is reserved SQL keyword
     order: int = 0
+
+
+# --- New Models for Email Onboarding ---
+
+class SMTPSettings(SQLModel, table=True):
+    """Singleton table for SMTP Configuration (only id=1 used)"""
+    id: int = Field(default=1, primary_key=True)
+    smtp_host: str
+    smtp_port: int
+    smtp_encryption: str = "tls"  # none, tls, ssl
+    smtp_username: Optional[str] = None
+    # Password should be stored carefully. For now storing plain/hashed? 
+    # Storing plain for function, but ideally encrypted.
+    smtp_password: Optional[str] = None 
+    sender_email: str
+    sender_name: str = "VPN Manager"
+    public_url: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class MagicToken(SQLModel, table=True):
+    """Temporary token for public access to client configuration"""
+    token: str = Field(primary_key=True)
+    client_id: uuid.UUID = Field(foreign_key="client.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime
+    used: bool = False
+
+    # Relationship to get client details (useful for generating config)
+    # Note: SQLModel Relationship usually requires definitions on both sides.
+    # We might not need back_populates on Client if we query manually.

@@ -2,7 +2,8 @@ import os
 import re
 from typing import List, Optional, Dict, Union
 from datetime import timedelta
-from fastapi import FastAPI, HTTPException, Security, Depends, status
+import fastapi
+from fastapi import FastAPI, HTTPException, Security, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import PlainTextResponse
@@ -16,8 +17,13 @@ import firewall_manager as instance_firewall_manager
 import iptables_manager
 from machine_firewall_manager import machine_firewall_manager
 from database import create_db_and_tables, engine
-from models import User, UserRole, UserInstance, Instance
+from models import User, UserRole, UserInstance, Instance, SMTPSettings, MagicToken
 import auth
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import secrets
+from datetime import datetime, timedelta
 
 # --- Pydantic Models for Auth ---
 class Token(BaseModel):
@@ -186,6 +192,19 @@ class MachineFirewallRuleModel(BaseModel):
 class MachineFirewallRuleOrderRequest(BaseModel):
     id: str
     order: int
+
+class SMTPSettingsUpdate(BaseModel):
+    smtp_host: str
+    smtp_port: int
+    smtp_encryption: str
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    sender_email: str
+    sender_name: str
+    public_url: Optional[str] = None
+
+class EmailShareRequest(BaseModel):
+    email: str
     
 # Regex per validare i nomi dei client (permette alfanumerici, underscore, trattini e punti)
 CLIENT_NAME_PATTERN = r"^[a-zA-Z0-9_.-]+$"
@@ -196,6 +215,170 @@ app = FastAPI(
     description="WireGuard VPN Management with RBAC.",
     version="3.0.0",
 )
+
+# --- SMTP Settings Endpoints ---
+
+@app.get("/api/settings/smtp", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def get_smtp_settings():
+    with Session(engine) as session:
+        settings = session.get(SMTPSettings, 1)
+        if not settings:
+            return {}
+        return settings
+
+@app.post("/api/settings/smtp", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def update_smtp_settings(settings_update: SMTPSettingsUpdate):
+    with Session(engine) as session:
+        settings = session.get(SMTPSettings, 1)
+        if not settings:
+            settings = SMTPSettings(id=1, **settings_update.dict())
+        else:
+            settings_data = settings_update.dict(exclude_unset=True)
+            for key, value in settings_data.items():
+                setattr(settings, key, value)
+            settings.updated_at = datetime.utcnow()
+        
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+        return settings
+
+@app.post("/api/settings/smtp/test", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def test_smtp_settings(email_req: EmailShareRequest):
+    with Session(engine) as session:
+        settings = session.get(SMTPSettings, 1)
+        if not settings:
+            raise HTTPException(status_code=400, detail="SMTP Settings not configured.")
+        
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = f"{settings.sender_name} <{settings.sender_email}>"
+            msg['To'] = email_req.email
+            msg['Subject'] = "Test Email from VPN Manager"
+            msg.attach(MIMEText("This is a test email to verify SMTP settings.", 'plain'))
+
+            if settings.smtp_encryption == "ssl":
+                server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port)
+            else:
+                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port)
+                if settings.smtp_encryption == "tls":
+                    server.starttls()
+
+            if settings.smtp_username and settings.smtp_password:
+                server.login(settings.smtp_username, settings.smtp_password)
+            
+            server.send_message(msg)
+            server.quit()
+            return {"success": True, "message": "Test email sent."}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
+
+# --- Secure Share Endpoints ---
+
+@app.post("/api/instances/{instance_id}/clients/{client_name}/share_complete")
+def share_client_config_full(
+    instance_id: str, 
+    client_name: str, 
+    email_req: EmailShareRequest,
+    request: Request,
+    current_user: User = Depends(auth.get_current_user)
+):
+    # (Auth check role manual if not in decorator)
+    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    client, _ = vpn_manager.get_client_and_instance(client_name, instance_id)
+    if not client:
+         raise HTTPException(status_code=404, detail="Client not found")
+
+    with Session(engine) as session:
+        settings = session.get(SMTPSettings, 1)
+        if not settings or not settings.smtp_host:
+             raise HTTPException(status_code=400, detail="SMTP not configured.")
+
+        token_str = secrets.token_urlsafe(32)
+        expiration = datetime.utcnow() + timedelta(hours=48)
+        
+        try:
+            magic_token = MagicToken(token=token_str, client_id=client.id, expires_at=expiration)
+            session.add(magic_token)
+            session.commit()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database Error (MagicToken): {str(e)}")
+        
+        # Construct URL using request.base_url
+        # Construct URL
+        base_url = str(request.base_url).rstrip('/')
+        if settings.public_url:
+             base_url = settings.public_url.rstrip('/')
+             
+        setup_link = f"{base_url}/setup.php?token={token_str}"
+        
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = f"{settings.sender_name} <{settings.sender_email}>"
+            msg['To'] = email_req.email
+            msg['Subject'] = f"VPN Configuration: {client_name}"
+            
+            html_content = f"""
+            <html>
+            <body>
+                <h2>VPN Configuration Setup</h2>
+                <p>Hello,</p>
+                <p>You have been invited to connect to the VPN <strong>{client_name}</strong>.</p>
+                <p>Please click the link below to configure your device (Mobile or Desktop).</p>
+                <p>
+                    <a href="{setup_link}" style="background-color: #0054a6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                        Configure VPN
+                    </a>
+                </p>
+                <p>Or verify this link: <a href="{setup_link}">{setup_link}</a></p>
+                <p>This link will expire in 48 hours.</p>
+            </body>
+            </html>
+            """
+            msg.attach(MIMEText(html_content, 'html'))
+
+            if settings.smtp_encryption == "ssl":
+                server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port)
+            else:
+                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port)
+                if settings.smtp_encryption == "tls":
+                    server.starttls()
+
+            if settings.smtp_username and settings.smtp_password:
+                server.login(settings.smtp_username, settings.smtp_password)
+            
+            server.send_message(msg)
+            server.quit()
+            return {"success": True, "message": "Email sent successfully."}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to send: {str(e)}")
+
+@app.get("/api/public/setup/{token}")
+def get_public_client_config(token: str):
+    with Session(engine) as session:
+        magic_token = session.get(MagicToken, token)
+        if not magic_token:
+            raise HTTPException(status_code=403, detail="Invalid token")
+        
+        if datetime.utcnow() > magic_token.expires_at or magic_token.used:
+             # Optionally update 'used' if one-time. But request was 48h access.
+             raise HTTPException(status_code=403, detail="Token expired")
+             
+        client = session.get(vpn_manager.Client, magic_token.client_id)
+        if not client:
+             raise HTTPException(status_code=404, detail="Client not found")
+        
+        # Generate Config
+        config_content, qr_path = vpn_manager.get_client_config(client.name, client.instance_id)
+        
+        return {
+            "client_name": client.name,
+            "instance_name": f"VPN-{client.instance_id}", 
+            "config": config_content
+        }
 
 # --- Auth Endpoints ---
 

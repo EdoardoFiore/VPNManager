@@ -369,6 +369,36 @@ switch ($action) {
         echo json_encode($response);
         break;
 
+    case 'get_smtp_settings':
+        $response = get_smtp_settings();
+        echo json_encode($response);
+        break;
+
+    case 'update_smtp_settings':
+        $response = update_smtp_settings($_POST);
+        echo json_encode($response);
+        break;
+
+    case 'test_smtp_settings':
+        $email = $_POST['email'] ?? '';
+        $response = test_smtp_settings($email);
+        echo json_encode($response);
+        break;
+
+    case 'share_client_config':
+        $instance_id = $_POST['instance_id'] ?? '';
+        $client_name = $_POST['client_name'] ?? '';
+        $email = $_POST['email'] ?? '';
+        $response = share_client_config($instance_id, $client_name, $email);
+        echo json_encode($response);
+        break;
+
+    case 'get_public_client_config':
+        $token = $_GET['token'] ?? '';
+        $response = api_request('/public/setup/' . urlencode($token), 'GET');
+        echo json_encode($response);
+        break;
+
     default:
         echo json_encode(['success' => false, 'body' => ['detail' => 'Azione non riconosciuta.']]);
         break;

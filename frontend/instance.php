@@ -568,6 +568,32 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+<!-- Modal Share Client (Email) -->
+<div class="modal modal-blur fade" id="modal-share-client" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Invia Configurazione via Email</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Invia un link sicuro a <strong id="share-client-name"></strong> per configurare il
+                    dispositivo.</p>
+                <div class="mb-3">
+                    <label class="form-label">Email Destinatario</label>
+                    <input type="email" class="form-control" id="share-client-email" placeholder="user@example.com">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" id="btn-share-client-confirm">
+                    <i class="ti ti-mail me-2"></i> Invia Email
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Connect Mobile (QR) -->
 <div class="modal modal-blur fade" id="modal-connect-mobile" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">

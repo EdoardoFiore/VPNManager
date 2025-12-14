@@ -73,6 +73,10 @@ async function fetchAndRenderClients() {
                         <td>
                             <div class="d-flex gap-2 justify-content-end">
                                 ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
+                                ${smtpConfigured ? `
+                                <button class="btn btn-info btn-sm btn-icon" onclick="shareClient('${fullName}')" title="Invia via Email">
+                                    <i class="ti ti-mail"></i>
+                                </button>` : ''}
                                 <button class="btn btn-secondary btn-sm btn-icon" onclick="showQRCode('${fullName}')" title="Mostra QR Code">
                                     <i class="ti ti-qrcode"></i>
                                 </button>
@@ -222,6 +226,91 @@ function downloadClient(clientName) {
         window.location.href = `${API_AJAX_HANDLER}?action=download_client&instance_id=${currentInstance.id}&client_name=${clientName}`;
     };
 }
+
+let smtpConfigured = false;
+async function checkSMTPStatus() {
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}?action=get_smtp_settings`);
+        const result = await response.json();
+        // If result.body is the settings object directly (as returned by API Main.py)
+        // Main.py returns `settings` model or {}.
+        // Ajax handler returns `json_encode($response)`.
+        // If $response is object, JS sees object.
+        // Wait. `get_smtp_settings` in `main.py` returns `settings`.
+        // `ajax_handler` does NOT wrap in `['success'=>true, 'body'=>...]` for `get_smtp_settings` case?
+        // Let's check `ajax_handler`.
+        // Case `get_smtp_settings`: `$response = get_smtp_settings(); echo json_encode($response);`.
+        // `api_client` `get_smtp_settings` returns `api_request(..., 'GET')`.
+        // `api_request` returns `['success'=>..., 'body'=>...]`.
+        // So `result` in JS is that.
+        // So `result.body.smtp_host`.
+        if (result.success && result.body && result.body.smtp_host) {
+            smtpConfigured = true;
+        }
+    } catch (e) { console.error(e); }
+}
+// Init check
+document.addEventListener('DOMContentLoaded', checkSMTPStatus);
+
+function shareClient(clientName) {
+    if (!smtpConfigured) {
+        showNotification('warning', 'SMTP non configurato. Contatta l\'amministratore.');
+        return;
+    }
+
+    let displayName = clientName;
+    if (currentInstance && clientName.startsWith(currentInstance.name + "_")) {
+        displayName = clientName.replace(currentInstance.name + "_", "");
+    }
+    document.getElementById('share-client-name').textContent = displayName;
+    document.getElementById('share-client-email').value = '';
+
+    // Bind verify button
+    const btn = document.getElementById('btn-share-client-confirm');
+    btn.onclick = () => performShareClient(clientName);
+
+    const el = document.getElementById('modal-share-client');
+    const modal = bootstrap.Modal.getOrCreateInstance(el);
+    modal.show();
+}
+
+async function performShareClient(clientName) {
+    const emailInput = document.getElementById('share-client-email');
+    const email = emailInput.value.trim();
+    if (!email) {
+        emailInput.classList.add('is-invalid');
+        return;
+    }
+
+    const btn = document.getElementById('btn-share-client-confirm');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Invio...';
+    btn.disabled = true;
+
+    try {
+        const formData = new FormData();
+        formData.append('action', 'share_client_config');
+        formData.append('instance_id', currentInstance.id);
+        formData.append('client_name', clientName);
+        formData.append('email', email);
+
+        const response = await fetch(API_AJAX_HANDLER, { method: 'POST', body: formData });
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification('success', 'Email inviata con successo.');
+            bootstrap.Modal.getInstance(document.getElementById('modal-share-client')).hide();
+        } else {
+            showNotification('danger', 'Errore: ' + (result.body.detail || 'Sconosciuto'));
+        }
+    } catch (e) {
+        showNotification('danger', e.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
 
 function revokeClient(clientName) {
     let displayName = clientName;

@@ -358,3 +358,23 @@ function update_user($username, $data)
 {
     return api_request('/users/' . urlencode($username), 'PATCH', $data);
 }
+
+function get_smtp_settings()
+{
+    return api_request('/settings/smtp', 'GET');
+}
+
+function update_smtp_settings($data)
+{
+    return api_request('/settings/smtp', 'POST', $data);
+}
+
+function test_smtp_settings($email)
+{
+    return api_request('/settings/smtp/test', 'POST', ['email' => $email]);
+}
+
+function share_client_config($instance_id, $client_name, $email)
+{
+    return api_request("/instances/{$instance_id}/clients/{$client_name}/share_complete", 'POST', ['email' => $email]);
+}

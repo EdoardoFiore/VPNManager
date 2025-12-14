@@ -159,6 +159,7 @@ $currentRole = $_SESSION['role'] ?? 'viewer';
                         <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
                             <?php if ($currentRole == 'admin'): ?>
                                 <a href="./users.php" class="dropdown-item">Gestione Utenti</a>
+                                <a href="./settings.php" class="dropdown-item">Impostazioni</a>
                             <?php endif; ?>
                             <!-- <a href="./settings.php" class="dropdown-item">Settings</a> -->
                             <div class="dropdown-divider"></div>

@@ -198,3 +198,11 @@ AllowedIPs = {allowed_ips}
 PersistentKeepalive = 25
 """
         return config, None
+
+def get_client_and_instance(client_name: str, instance_id: str) -> Tuple[Optional[Client], Optional[Instance]]:
+    with Session(engine) as session:
+        client = session.exec(select(Client).where(Client.instance_id == instance_id, Client.name == client_name)).first()
+        if not client: return None, None
+        
+        inst = session.get(Instance, instance_id)
+        return client, inst
