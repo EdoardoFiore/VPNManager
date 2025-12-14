@@ -1,11 +1,11 @@
-# Gestore Automatizzato per OpenVPN con Interfaccia Web
+# Gestore Automatizzato per WireGuard con Interfaccia Web
 
 [![Licenza: MIT](https://img.shields.io/badge/Licenza-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Un sistema completo per automatizzare il deployment e la gestione di server OpenVPN su Ubuntu 24.
-Questo progetto nasce con l'obiettivo di rendere la creazione di una VPN accessibile a tutti, eliminando la complessità della configurazione manuale da riga di comando e offrendo una dashboard web moderna per la gestione quotidiana.
+Un sistema completo per automatizzare il deployment e la gestione di server WireGuard su Ubuntu 24.
+Questo progetto modernizza la gestione delle VPN utilizzando **WireGuard** (più veloce, snello e sicuro di OpenVPN) e offre una dashboard web moderna per la gestione quotidiana, costruita con tecnologie recenti come Python FastAPI, SQLModel e Tabler.
 
-Che tu sia un amministratore di sistema esperto che vuole risparmiare tempo o un appassionato che vuole proteggere la propria navigazione, questo sistema ti permette di essere operativo in pochi minuti.
+Che tu sia un amministratore di sistema esperto o un appassionato che vuole proteggere la propria navigazione, questo sistema ti permette di essere operativo in pochi minuti con una VPN di nuova generazione.
 
 ---
 
@@ -19,7 +19,7 @@ L'installazione è progettata per essere "Zero Config": cloni la repository, lan
 *   **Privilegi**: Accesso root (`sudo`).
 *   **Rete**:
     *   **IP Pubblico**: Ideale.
-    *   **NAT**: Se sei dietro un router, devi inoltrare la porta UDP (default `1194`) e TCP `80` (per la dashboard) verso l'IP della VM.
+    *   **NAT**: Se sei dietro un router, devi inoltrare la porta UDP utilizzata dall'istanza (default `51820` per la prima istanza) e TCP `80` (per la dashboard).
 
 ### Passaggi
 
@@ -31,7 +31,7 @@ L'installazione è progettata per essere "Zero Config": cloni la repository, lan
     ```
 
 2.  **Avvia l'Installazione**
-    Esegui lo script di setup. Ti guiderà attraverso i pochi passaggi necessari (creazione utente dashboard, scelta rotte opzionali).
+    Esegui lo script di setup. Ti guiderà attraverso l'installazione delle dipendenze (WireGuard, Python, Nginx).
     ```bash
     sudo bash setup-vpn-manager.sh
     ```
@@ -43,95 +43,78 @@ L'installazione è progettata per essere "Zero Config": cloni la repository, lan
 
 ## ✨ Funzionalità Principali
 
-*   **Gestione Multi-Istanza**: Non sei limitato a una sola VPN. Crea istanze multiple su porte diverse per separare team o servizi (es. una VPN per l'ufficio, una per i developer).
-*   **Dashboard Intuitiva**: Pannello web responsive per vedere chi è connesso, aggiungere client e monitorare il traffico.
-*   **Tunneling Flessibile**:
-    *   **Full Tunnel**: Tutto il traffico passa per la VPN (ottimo per privacy/Wi-Fi pubblici).
-    *   **Split Tunnel**: Decidi tu quali reti (es. `192.168.1.0/24`) passano per la VPN, lasciando il resto del traffico su internet normale.
-*   **Gestione Client Semplificata**:
-    *   Crea nuovi utenti in un click.
-    *   Scarica il file `.ovpn` autoconfigurante.
-    *   Revoca l'accesso istantaneamente se un dispositivo viene perso o compromesso.
-*   **DNS Personalizzati**: Configura server DNS specifici per ogni istanza VPN (es. Pi-Hole, Google DNS).
-*   **Firewall ACL per Gruppi**:
-    *   Crea gruppi di client (es. "Amministratori", "Sviluppatori") per ogni istanza.
-    *   Assegna regole granulari per consentire (`ACCEPT`) o bloccare (`DROP`) il traffico verso specifiche destinazioni (IP/CIDR) e porte.
-    *   A ogni client aggiunto a un gruppo viene assegnato un IP statico per garantire la coerenza delle regole.
-    *   Gestisci l'ordine di priorità delle regole direttamente dall'interfaccia.
-
-*   **Firewall Globale della Macchina**:
-    *   Crea, modifica ed elimina regole `iptables` per il firewall dell'host direttamente dall'interfaccia web.
-    *   Supporto completo per tabelle (`filter`, `nat`), chain, azioni, protocolli, IP, porte e stati di connessione.
-    *   Gestisci l'ordine di priorità delle regole con un semplice drag-and-drop.
-    *   Un sistema di aiuto integrato e un'anteprima del comando `iptables` rendono la creazione delle regole semplice e a prova di errore.
-
-*   **Gestione Interfacce di Rete**:
-    *   Visualizza tutte le interfacce di rete della macchina con i relativi dettagli (MAC, stato, IP).
-    *   Configura il metodo di assegnazione IP per ogni interfaccia (DHCP o Statico).
-    *   Imposta indirizzi IP statici, gateway e server DNS direttamente dalla dashboard (richiede `netplan`).
+*   **WireGuard Core**: Utilizza il protocollo WireGuard ad alte prestazioni, integrato nel kernel Linux.
+*   **Gestione Multi-Istanza**: Crea istanze multiple su porte diverse (es. `wg0` su 51820, `wg1` su 51821) per separare reti e scopi.
+*   **Dashboard Intuitiva**: Pannello web responsive basato su _Tabler_ per vedere stato, QR code e configurazioni.
+*   **Tunnel Mode Intelligente**:
+    *   **Full Tunnel**: Invia tutto il traffico Internet attraverso la VPN.
+    *   **Split Tunnel**: Specifica le sottoreti da ruotare (es. reti aziendali), lasciando il resto del traffico diretto.
+    *   **Auto-Secure**: In modalità Split Tunnel, il firewall imposta automaticamente una policy di default `DROP` per massima sicurezza.
+*   **Gestione Client**:
+    *   Generazione istantanea di chiavi (Pubblica/Privata/Preshared).
+    *   Visualizzazione QR Code per mobile.
+    *   Download configurazione `.conf`.
+*   **Firewall Avanzato (Iptables Wrapper)**:
+    *   **Machine Firewall**: Gestisci le regole di input/output globali della macchina server (es. permetti SSH solo da certi IP).
+    *   **Group Firewall**: Crea gruppi logici (es. "Admin", "Guest") e assegna regole di accesso specifiche.
+    *   Il backend gestisce automaticamente le chain `iptables` per garantire isolamento e sicurezza (es. `VPN_INPUT`, `VIG_<GroupID>`).
+*   **Database SQLite**: Tutte le configurazioni sono salvate in un db `database.db` gestito via SQLModel, sostituendo i vecchi file JSON per maggiore robustezza.
 
 ---
 
 ## 🛠 Come Funziona (Backend e Architettura)
 
-Per chi vuole capire cosa succede "sotto il cofano", ecco come è strutturato il sistema dopo l'installazione.
+Per chi vuole capire cosa succede "sotto il cofano":
+
+### Stack Tecnologico
+*   **VPN Note**: WireGuard (Kernel Module).
+*   **Backend**: Python 3.12+ con **FastAPI** e **SQLModel** (ORM per SQLite).
+*   **Frontend**: PHP (Logic Layer) + HTML5/JS (Tabler UI) + AJAX per comunicare con le API.
+*   **Server Web**: Nginx (Reverse Proxy & Auth).
 
 ### Posizionamento File
 
-Tutto il sistema risiede in `/opt/vpn-manager/`. Non sporchiamo il resto del filesystem se non necessario.
-
 | Directory | Contenuto |
 | :--- | :--- |
-| `/opt/vpn-manager/backend` | Il cuore del sistema (API Python/FastAPI). |
-| `/opt/vpn-manager/frontend` | L'interfaccia web (PHP/HTML/JS) servita da Nginx. |
-| `/opt/vpn-manager/scripts` | Script di supporto (es. gestione iptables, forwarding). |
-| `/etc/openvpn` | Configurazioni standard di OpenVPN (`server.conf`). |
+| `/opt/vpn-manager/backend` | API Server (Python). Contiene `main.py`, models, e i manager (WireGuard, Firewall). |
+| `/opt/vpn-manager/backend/data` | Database SQLite (`database.db`) e configurazioni WireGuard generate. |
+| `/opt/vpn-manager/frontend` | Interfaccia Web pubblica. |
+| `/etc/wireguard` | Directory di sistema dove vengono linkate le configurazioni attive. |
 
 ### Processi e Servizi
 
-Il sistema installa dei servizi `systemd` che si avviano al boot:
-
-1.  **Backend API** (`vpn-manager.service`): È il cervello. Ascolta su porta locale, riceve i comandi dalla dashboard e pilota OpenVPN.
-2.  **Web Server** (`nginx`): Serve la dashboard e protegge l'accesso con password.
-3.  **OpenVPN** (`openvpn@<nome>.service`): Ogni istanza VPN ha il suo processo dedicato separato.
-4.  **Firewall Persistence** (`iptables-openvpn.service`): Assicura che le regole di NAT e routing sopravvivano al riavvio del server.
+1.  **Backend API** (`vpn-manager.service`): Servizio Systemd che esegue Uvicorn/FastAPI. Gestisce la logica, le chiamate di sistema (`wg`, `iptables`, `ip`) e il database.
+2.  **Web Server** (`nginx`): Serve la dashboard statica/PHP.
+3.  **WireGuard** (`wg-quick@<nome>`): Servizio nativo di WireGuard per ogni interfaccia attiva.
 
 ---
 
-## 👥 Gestione Utenti Dashboard
+## 👥 Gestione Utenti (RBAC)
 
-L'accesso alla dashboard è protetto da un livello di sicurezza aggiuntivo (Nginx Basic Auth).
+Il sistema include un gestore utenti integrato con ruoli:
 
-Se vuoi aggiungere colleghi o cambiare la tua password, usa il comando `htpasswd` sul server:
+*   **Admin**: Accesso completo.
+*   **Admin Read Only**: Visualizzazione completa ma nessuna modifica.
+*   **Partner**: Accesso completo (simile ad Admin).
+*   **Technician**: Gestisce solo le istanze assegnate (Start/Stop, Client, Policy).
+*   **Viewer**: Sola lettura sulle istanze assegnate.
 
-*   **Cambia password / Aggiungi utente**:
-    ```bash
-    sudo htpasswd /etc/nginx/.htpasswd tuonomeutente
-    ```
-*   **Rimuovi utente**:
-    ```bash
-    sudo htpasswd -D /etc/nginx/.htpasswd utente_da_rimuovere
-    ```
-    *Ricorda di riavviare nginx (`sudo systemctl reload nginx`) dopo le modifiche.*
-
----
-
-## � Stack Tecnologico
-
-*   **Core**: OpenVPN (protocollo standard industriale). Per la prima installazione e configurazione base di OpenVPN, viene utilizzato lo script di https://github.com/angristan/openvpn-install.
-*   **Backend**: Python con FastAPI (veloce, asincrono).
-*   **Frontend**: PHP leggero + JavaScript Vanilla (nessun processo di build complesso necessario).
-*   **Server**: Nginx (affidabilità e performance).
+L'accesso è gestito via JWT e non richiede più Nginx Basic Auth.
+Di default viene creato l'utente `admin` (la password viene impostata al primo avvio dello script).
 
 ---
 
 ## 🆘 Troubleshooting
 
-Qualcosa non va? Ecco i primi controlli da fare:
-
-*   **La dashboard non carica**: Verifica che Nginx sia attivo (`systemctl status nginx`).
-*   **Errore "API Error"**: Verifica che il backend sia su (`systemctl status vpn-manager.service`).
-*   **I client si connettono ma non navigano**: Spesso è un problema di IP Forwarding o Firewall. Controlla se le regole iptables sono caricate (`iptables -L -t nat`).
+*   **Dashboard irraggiungibile**: Controlla Nginx (`systemctl status nginx`).
+*   **Errore 500 / API Error**: Controlla i log del backend:
+    ```bash
+    journalctl -u vpn-manager -f
+    ```
+*   **Client connesso ma no traffico**:
+    *   Verifica l'IP Forwarding (`sysctl net.ipv4.ip_forward`).
+    *   Controlla il Masquerading nelle regole firewall (`iptables -t nat -L -v`).
+    *   Se sei in Split Tunnel, controlla di non avere policy `DROP` che bloccano tutto senza regole di allow.
 
 ---
 

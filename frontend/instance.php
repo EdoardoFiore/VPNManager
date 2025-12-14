@@ -20,9 +20,11 @@ require_once 'includes/header.php';
     <div class="d-flex align-items-center">
         <span id="current-instance-port" class="me-2"></span>
         <span id="current-instance-subnet" class="me-2"></span>
-        <button class="btn btn-danger btn-sm btn-icon" onclick="deleteInstancePrompt()">
-            <i class="ti ti-trash"></i>
-        </button>
+        <?php if (in_array($currentRole, ['admin', 'partner'])): ?>
+            <button class="btn btn-danger btn-sm btn-icon" onclick="deleteInstancePrompt()">
+                <i class="ti ti-trash"></i>
+            </button>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -40,30 +42,32 @@ require_once 'includes/header.php';
 </ul>
 
 <div class="tab-content">
-    
+
     <!-- Client Management Tab -->
     <div class="tab-pane active show" id="tab-clients">
-        <div class="card mb-4">
-            <div class="card-header">
-                <h3 class="card-title">Aggiungi Nuovo Client</h3>
-            </div>
-            <div class="card-body">
-                <form id="addClientForm" onsubmit="event.preventDefault(); createClient();">
-                    <div class="row g-2">
-                        <div class="col">
-                            <input type="text" id="clientNameInput" class="form-control" placeholder="Es: laptop-mario-rossi"
-                                required>
-                            <div class="invalid-feedback">Solo lettere, numeri, trattini, punti e underscore.</div>
+        <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3 class="card-title">Aggiungi Nuovo Client</h3>
+                </div>
+                <div class="card-body">
+                    <form id="addClientForm" onsubmit="event.preventDefault(); createClient();">
+                        <div class="row g-2">
+                            <div class="col">
+                                <input type="text" id="clientNameInput" class="form-control"
+                                    placeholder="Es: laptop-mario-rossi" required>
+                                <div class="invalid-feedback">Solo lettere, numeri, trattini, punti e underscore.</div>
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="ti ti-plus icon"></i> Crea Client
+                                </button>
+                            </div>
                         </div>
-                        <div class="col-auto">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="ti ti-plus icon"></i> Crea Client
-                            </button>
-                        </div>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
-        </div>
+        <?php endif; ?>
 
         <div class="row">
             <div class="col-md-6">
@@ -107,7 +111,7 @@ require_once 'includes/header.php';
                                     <th>Client</th>
                                     <th>Indirizzi IP</th>
                                     <th>Traffico</th>
-                                    <th>Connesso da</th>
+
                                     <th class="w-1"></th>
                                 </tr>
                             </thead>
@@ -121,13 +125,15 @@ require_once 'includes/header.php';
 
     <!-- Routes Tab -->
     <div class="tab-pane" id="tab-routes">
-         <div class="card">
+        <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Rotte e DNS Personalizzati</h3>
                 <div class="card-actions">
-                    <button class="btn btn-sm btn-primary" onclick="toggleRouteEdit()">
-                        <i class="ti ti-edit"></i> Modifica
-                    </button>
+                    <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                        <button class="btn btn-sm btn-primary" onclick="toggleRouteEdit()">
+                            <i class="ti ti-edit"></i> Modifica
+                        </button>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="card-body">
@@ -181,13 +187,22 @@ require_once 'includes/header.php';
             <div class="card-body">
                 <div class="mb-3">
                     <label class="form-label">Policy Iniziale per il Traffico dei Client VPN</label>
-                    <select class="form-select" id="instance-firewall-default-policy">
-                        <option value="ACCEPT">ACCEPT (Consenti tutto ciò che non è esplicitamente bloccato)</option>
-                        <option value="DROP">DROP (Blocca tutto ciò che non è esplicitamente consentito)</option>
-                    </select>
-                    <small class="form-hint">Questa policy si applica a tutto il traffico che proviene dai client VPN di questa istanza e che non corrisponde a nessuna delle regole dei gruppi ACL definite.</small>
+                    <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                        <select class="form-select" id="instance-firewall-default-policy">
+                            <option value="ACCEPT">ACCEPT (Consenti tutto ciò che non è esplicitamente bloccato)</option>
+                            <option value="DROP">DROP (Blocca tutto ciò che non è esplicitamente consentito)</option>
+                        </select>
+                    <?php else: ?>
+                        <input type="text" class="form-control" id="instance-firewall-default-policy-display" readonly
+                            value="Caricamento...">
+                        <input type="hidden" id="instance-firewall-default-policy">
+                    <?php endif; ?>
+                    <small class="form-hint">Questa policy si applica a tutto il traffico che proviene dai client VPN di
+                        questa istanza e che non corrisponde a nessuna delle regole dei gruppi ACL definite.</small>
                 </div>
-                <button class="btn btn-primary" onclick="saveInstanceFirewallPolicy()">Salva Policy</button>
+                <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                    <button class="btn btn-primary" onclick="saveInstanceFirewallPolicy()">Salva Policy</button>
+                <?php endif; ?>
             </div>
         </div>
         <div class="row row-cards">
@@ -197,9 +212,12 @@ require_once 'includes/header.php';
                     <div class="card-header">
                         <h3 class="card-title">Gruppi</h3>
                         <div class="card-actions">
-                             <a href="#" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modal-create-group">
-                                <i class="ti ti-plus"></i> Nuovo
-                            </a>
+                            <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                                <a href="#" class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                    data-bs-target="#modal-create-group">
+                                    <i class="ti ti-plus"></i> Nuovo
+                                </a>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="list-group list-group-flush" id="groups-list">
@@ -216,12 +234,15 @@ require_once 'includes/header.php';
                         <div class="card-header">
                             <h3 class="card-title" id="selected-group-title">Membri</h3>
                             <div class="card-actions">
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteCurrentGroup()">Elimina Gruppo</button>
-                                <button class="btn btn-sm btn-primary" onclick="openAddMemberModal()">Aggiungi</button>
+                                <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCurrentGroup()">Elimina
+                                        Gruppo</button>
+                                    <button class="btn btn-sm btn-primary" onclick="openAddMemberModal()">Aggiungi</button>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="card-body p-0">
-                             <div class="table-responsive">
+                            <div class="table-responsive">
                                 <table class="table table-vcenter card-table">
                                     <thead>
                                         <tr>
@@ -240,7 +261,14 @@ require_once 'includes/header.php';
                         <div class="card-header">
                             <h3 class="card-title">Regole Firewall</h3>
                             <div class="card-actions">
+<<<<<<< HEAD
                                 <button class="btn btn-sm btn-primary" onclick="openCreateRuleModal()">Aggiungi Regola</button>
+=======
+                                <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
+                                    <button class="btn btn-sm btn-primary" onclick="openCreateRuleModal()">Aggiungi
+                                        Regola</button>
+                                <?php endif; ?>
+>>>>>>> wireguard
                             </div>
                         </div>
                         <div class="card-table table-responsive">
@@ -260,7 +288,7 @@ require_once 'includes/header.php';
                         </div>
                     </div>
                 </div>
-                
+
                 <div id="no-group-selected" class="card card-body text-center py-5">
                     <h3 class="text-muted">Seleziona un gruppo.</h3>
                 </div>
@@ -304,7 +332,7 @@ require_once 'includes/header.php';
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                 <div class="mb-3">
+                <div class="mb-3">
                     <label class="form-label">Seleziona Cliente</label>
                     <select class="form-select" id="member-select">
                         <option value="">Caricamento...</option>
@@ -341,7 +369,12 @@ require_once 'includes/header.php';
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Protocollo</label>
+<<<<<<< HEAD
                             <select class="form-select" id="rule-proto" name="protocol" onchange="togglePortInput(this.value, 'add')">
+=======
+                            <select class="form-select" id="rule-proto" name="protocol"
+                                onchange="togglePortInput(this.value, 'add')">
+>>>>>>> wireguard
                                 <option value="tcp">TCP</option>
                                 <option value="udp">UDP</option>
                                 <option value="icmp">ICMP</option>
@@ -351,13 +384,25 @@ require_once 'includes/header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Destinazione (CIDR o IP)</label>
+<<<<<<< HEAD
                         <input type="text" class="form-control" id="rule-dest" name="destination" placeholder="0.0.0.0/0 per tutto, o 192.168.1.50">
+=======
+                        <input type="text" class="form-control" id="rule-dest" name="destination"
+                            placeholder="0.0.0.0/0 per tutto, o 192.168.1.50">
+>>>>>>> wireguard
                         <div class="invalid-feedback">Destinazione non valida. Inserisci un IP, un CIDR o 'any'.</div>
                     </div>
                     <div class="mb-3" id="port-container">
                         <label class="form-label">Porta (Opzionale)</label>
+<<<<<<< HEAD
                         <input type="text" class="form-control" id="rule-port" name="port" placeholder="80, 443, 1000:2000">
                         <div class="invalid-feedback">Porta non valida. Inserisci un numero (1-65535) o un intervallo (es. 1000:2000).</div>
+=======
+                        <input type="text" class="form-control" id="rule-port" name="port"
+                            placeholder="80, 443, 1000:2000">
+                        <div class="invalid-feedback">Porta non valida. Inserisci un numero (1-65535) o un intervallo
+                            (es. 1000:2000).</div>
+>>>>>>> wireguard
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Descrizione</label>
@@ -395,7 +440,12 @@ require_once 'includes/header.php';
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Protocollo</label>
+<<<<<<< HEAD
                             <select class="form-select" id="edit-rule-proto" name="protocol" onchange="togglePortInput('edit')">
+=======
+                            <select class="form-select" id="edit-rule-proto" name="protocol"
+                                onchange="togglePortInput('edit')">
+>>>>>>> wireguard
                                 <option value="tcp">TCP</option>
                                 <option value="udp">UDP</option>
                                 <option value="icmp">ICMP</option>
@@ -405,13 +455,25 @@ require_once 'includes/header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Destinazione (CIDR o IP)</label>
+<<<<<<< HEAD
                         <input type="text" class="form-control" id="edit-rule-dest" name="destination" placeholder="0.0.0.0/0 per tutto, o 192.168.1.50">
+=======
+                        <input type="text" class="form-control" id="edit-rule-dest" name="destination"
+                            placeholder="0.0.0.0/0 per tutto, o 192.168.1.50">
+>>>>>>> wireguard
                         <div class="invalid-feedback">Destinazione non valida. Inserisci un IP, un CIDR o 'any'.</div>
                     </div>
                     <div class="mb-3" id="edit-port-container">
                         <label class="form-label">Porta (Opzionale)</label>
+<<<<<<< HEAD
                         <input type="text" class="form-control" id="edit-rule-port" name="port" placeholder="80, 443, 1000:2000">
                         <div class="invalid-feedback">Porta non valida. Inserisci un numero (1-65535) o un intervallo (es. 1000:2000).</div>
+=======
+                        <input type="text" class="form-control" id="edit-rule-port" name="port"
+                            placeholder="80, 443, 1000:2000">
+                        <div class="invalid-feedback">Porta non valida. Inserisci un numero (1-65535) o un intervallo
+                            (es. 1000:2000).</div>
+>>>>>>> wireguard
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Descrizione</label>
@@ -438,11 +500,57 @@ require_once 'includes/header.php';
             <div class="modal-body">
                 <p>Sei sicuro di voler eliminare la seguente regola?</p>
                 <div id="delete-rule-summary" class="mb-3"></div>
-                <p class="text-muted">Questa azione non può essere annullata. La regola firewall verrà rimossa permanentemente.</p>
+                <p class="text-muted">Questa azione non può essere annullata. La regola firewall verrà rimossa
+                    permanentemente.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-danger" id="confirm-delete-rule-button" data-bs-dismiss="modal">Sì, elimina</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-rule-button" data-bs-dismiss="modal">Sì,
+                    elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Tunnel Change Confirm -->
+<div class="modal modal-blur fade" id="modal-tunnel-change-confirm" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-warning">Attenzione: Cambio Modalità Tunnel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="modal-tunnel-change-body-content">
+                    <!-- Dynamic content will be injected here -->
+                    <p>Stai cambiando la modalità del tunnel.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-warning" id="confirm-tunnel-change-btn" data-bs-dismiss="modal">Sì,
+                    applica modifiche</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Revoke Member Confirm -->
+<div class="modal modal-blur fade" id="modal-revoke-member-confirm" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Rimuovi Utente dal Gruppo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Sei sicuro di voler rimuovere <strong id="revoke-member-name"></strong> dal gruppo?</p>
+                <p class="text-muted">L'utente perderà immediatamente le autorizzazioni associate a questo gruppo.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger" id="confirm-revoke-member-btn" data-bs-dismiss="modal">Sì,
+                    rimuovi</button>
             </div>
         </div>
     </div>
@@ -462,7 +570,8 @@ require_once 'includes/header.php';
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-danger" id="confirm-revoke-button" data-bs-dismiss="modal">Sì, revoca</button>
+                <button type="button" class="btn btn-danger" id="confirm-revoke-button" data-bs-dismiss="modal">Sì,
+                    revoca</button>
             </div>
         </div>
     </div>
@@ -477,17 +586,128 @@ require_once 'includes/header.php';
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                Sei sicuro di voler eliminare questa istanza? Tutti i client e le configurazioni associate verranno rimosse permanentemente. Questa azione non può essere annullata.
+                Sei sicuro di voler eliminare questa istanza? Tutti i client e le configurazioni associate verranno
+                rimosse permanentemente. Questa azione non può essere annullata.
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-danger" onclick="deleteInstanceAction()" data-bs-dismiss="modal">Sì, elimina</button>
+                <button type="button" class="btn btn-danger" onclick="deleteInstanceAction()"
+                    data-bs-dismiss="modal">Sì, elimina</button>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Modal Share Client (Email) -->
+<div class="modal modal-blur fade" id="modal-share-client" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Invia Configurazione via Email</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Invia un link sicuro a <strong id="share-client-name"></strong> per configurare il
+                    dispositivo.</p>
+                <div class="mb-3">
+                    <label class="form-label">Email Destinatario</label>
+                    <input type="email" class="form-control" id="share-client-email" placeholder="user@example.com">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" id="btn-share-client-confirm">
+                    <i class="ti ti-mail me-2"></i> Invia Email
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Connect Mobile (QR) -->
+<div class="modal modal-blur fade" id="modal-connect-mobile" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Connetti Dispositivo Mobile</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="markdown">
+                    <ol>
+                        <li>
+                            <strong>Installa l'app WireGuard:</strong>
+                            <div class="mt-2 mb-3">
+                                <a href="https://itunes.apple.com/us/app/wireguard/id1441195209?ls=1&mt=8"
+                                    target="_blank" class="btn btn-dark btn-sm me-2">
+                                    <i class="ti ti-brand-apple"></i> App Store
+                                </a>
+                                <a href="https://play.google.com/store/apps/details?id=com.wireguard.android"
+                                    target="_blank" class="btn btn-success btn-sm">
+                                    <i class="ti ti-brand-android"></i> Play Store
+                                </a>
+                            </div>
+                        </li>
+                        <li>Apri l'app e tocca il pulsante <strong>+</strong> in basso a destra.</li>
+                        <li>Seleziona <strong>"Scansiona codice QR"</strong> e inquadra:</li>
+                    </ol>
+                </div>
+                <div id="qrcode-container" class="my-3 d-flex justify-content-center"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Connect Desktop (Download) -->
+<div class="modal modal-blur fade" id="modal-connect-desktop" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Connetti Computer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="markdown">
+                    <ol>
+                        <li>
+                            <strong>Installa il Client WireGuard:</strong>
+                            <div class="mt-2 mb-3">
+                                <a href="https://download.wireguard.com/windows-client/wireguard-installer.exe"
+                                    class="btn btn-ghost-primary btn-sm" target="_blank">
+                                    <i class="ti ti-brand-windows"></i> Windows
+                                </a>
+                                <a href="https://itunes.apple.com/us/app/wireguard/id1451685025?ls=1&mt=12"
+                                    class="btn btn-ghost-dark btn-sm" target="_blank">
+                                    <i class="ti ti-brand-apple"></i> macOS
+                                </a>
+                                <a href="https://www.wireguard.com/install/" class="btn btn-ghost-warning btn-sm"
+                                    target="_blank">
+                                    <i class="ti ti-brand-ubuntu"></i> Linux
+                                </a>
+                            </div>
+                        </li>
+                        <li>
+                            <strong>Scarica la configurazione:</strong>
+                            <div class="mt-2 mb-3">
+                                <button id="btn-download-config-action" class="btn btn-primary w-100">
+                                    <i class="ti ti-download me-2"></i> Scarica Profilo .conf
+                                </button>
+                            </div>
+                        </li>
+                        <li>Apri WireGuard e clicca su <strong>"Importa tunnel da file"</strong> (o "Add Tunnel").</li>
+                        <li>Seleziona il file scaricato e clicca <strong>"Attiva"</strong>.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    const currentUserRole = '<?= $currentRole ?>';
+</script>
 <?php
-$extra_scripts = ['js/instance.js', 'js/firewall.js']; // Reusing firewall.js logic adapted
+$extra_scripts = ['js/qrcode.min.js', 'js/instance.js', 'js/firewall.js'];
 require_once 'includes/footer.php';
 ?>

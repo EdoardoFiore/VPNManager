@@ -2,34 +2,68 @@
 
 const API_AJAX_HANDLER = 'ajax_handler.php';
 
-function showNotification(message, type = 'success') {
+function showNotification(type, message) {
     // Check if notification container exists, if not create it
     let container = document.getElementById('notification-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'notification-container';
-        container.style.position = 'fixed';
-        container.style.top = '20px';
-        container.style.right = '20px';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
         container.style.zIndex = '1050';
         document.body.appendChild(container);
+    } else {
+        // Ensure styling updates if container already exists (and was created by old logic)
+        if (!container.className.includes('toast-container')) {
+            container.className = 'toast-container position-fixed top-0 end-0 p-3';
+            container.style.top = ''; // Reset inline styles if any
+            container.style.right = '';
+        }
     }
+
+    // Default title mapping
+    const titles = {
+        'success': 'Successo',
+        'danger': 'Errore',
+        'warning': 'Attenzione',
+        'info': 'Informazione'
+    };
+
+    // Icon mapping (Tabler icons)
+    const icons = {
+        'success': '<svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>',
+        'danger': '<svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>',
+        'warning': '<svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v2m0 4v.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.84 2.75z" /></svg>',
+        'info': '<svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12.01" y2="8" /><polyline points="11 12 12 12 12 16 13 16" /></svg>'
+    };
 
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
     alertDiv.role = 'alert';
+
+    // Make alerts stand out more with white background and border
+    alertDiv.style.backgroundColor = '#fff';
+    alertDiv.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+
     alertDiv.innerHTML = `
-        ${message}
+        <div class="d-flex">
+            <div>
+                ${icons[type] || icons['info']}
+            </div>
+            <div>
+                <h4 class="alert-title">${titles[type] || 'Notifica'}</h4>
+                <div class="text-secondary">${message}</div>
+            </div>
+        </div>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
 
     container.appendChild(alertDiv);
 
-    // Auto dismiss after 3 seconds
+    // Auto dismiss after 4 seconds
     setTimeout(() => {
         alertDiv.classList.remove('show');
         setTimeout(() => alertDiv.remove(), 150);
-    }, 3000);
+    }, 4000);
 }
 
 function formatDateTime(isoString) {

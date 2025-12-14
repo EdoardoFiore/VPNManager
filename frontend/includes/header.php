@@ -1,3 +1,33 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// Ensure API Client is loaded
+require_once __DIR__ . '/../api_client.php';
+
+if (!isset($_SESSION['jwt_token']) && basename($_SERVER['PHP_SELF']) !== 'login.php') {
+    header('Location: login.php');
+    exit;
+}
+$currentUser = $_SESSION['username'] ?? 'User';
+$currentRole = $_SESSION['role'] ?? 'viewer';
+
+// Fetch Branding
+$brandName = 'VPN Manager';
+$brandColor = '#0054a6';
+$brandLogo = '';
+
+$sysSettings = get_system_settings();
+if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSettings['body'])) {
+    $s = $sysSettings['body'];
+    if (!empty($s['company_name']))
+        $brandName = $s['company_name'];
+    if (!empty($s['primary_color']))
+        $brandColor = $s['primary_color'];
+    if (!empty($s['logo_url']))
+        $brandLogo = $s['logo_url'];
+}
+?>
 <!doctype html>
 <html lang="it">
 
@@ -26,7 +56,12 @@
 
         /* SortableJS Ghost Class for drag-and-drop preview */
         .sortable-ghost {
+<<<<<<< HEAD
             background-color: #f0f8ff; /* Light blue background */
+=======
+            background-color: #f0f8ff;
+            /* Light blue background */
+>>>>>>> wireguard
             opacity: 0.6;
         }
 
@@ -59,6 +94,52 @@
         .alert-danger {
             border-left: 5px solid #d63939 !important;
         }
+
+        /* Dynamic Branding */
+        :root {
+            --tblr-primary:
+                <?= $brandColor ?>
+            ;
+        }
+
+        .text-primary {
+            color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .bg-primary {
+            background-color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .btn-primary {
+            background-color:
+                <?= $brandColor ?>
+                !important;
+            border-color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .nav-link.active {
+            border-bottom-color:
+                <?= $brandColor ?>
+                !important;
+            color:
+                <?= $brandColor ?>
+                !important;
+        }
+
+        .form-check-input:checked {
+            background-color:
+                <?= $brandColor ?>
+                !important;
+            border-color:
+                <?= $brandColor ?>
+                !important;
+        }
     </style>
 </head>
 
@@ -71,8 +152,22 @@
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
-                    <a href="index.php">
-                        <i class="ti ti-brand-openvpn me-2"></i> VPN Manager
+                    <a href="index.php" class="d-flex align-items-center text-decoration-none">
+                        <?php if ($brandLogo): ?>
+                             <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo" class="navbar-brand-image me-2" style="height: 32px; width: auto;">
+                        <?php else: ?>
+                            <!-- Default SVG -->
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                class="icon text-primary me-2">
+                                <path
+                                    d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                                <circle cx="12" cy="11" r="3" />
+                                <line x1="12" y1="14" x2="12" y2="15" />
+                                <circle cx="12" cy="16" r="1" fill="currentColor" />
+                            </svg>
+                        <?php endif; ?>
+                        <?= htmlspecialchars($brandName) ?>
                     </a>
                 </h1>
                 <div class="collapse navbar-collapse" id="navbar-menu">
@@ -80,37 +175,82 @@
                         <ul class="navbar-nav">
                             <li class="nav-item">
                                 <a class="nav-link" href="./index.php">
+<<<<<<< HEAD
                                     <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler-icons.io/i/home -->
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-home"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l-2 0l9 -9l9 9l-2 0" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" /><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" /></svg>
+=======
+                                    <span
+                                        class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler-icons.io/i/home -->
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round"
+                                            class="icon icon-tabler icons-tabler-outline icon-tabler-home">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                            <path d="M5 12l-2 0l9 -9l9 9l-2 0" />
+                                            <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" />
+                                            <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" />
+                                        </svg>
+>>>>>>> wireguard
                                     </span>
                                     <span class="nav-link-title">
                                         Dashboard
                                     </span>
                                 </a>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="./machine_settings.php">
-                                    <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler-icons.io/i/settings -->
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c.996 .608 2.296 .07 2.572 -1.065z"/><path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/></svg>
-                                    </span>
-                                    <span class="nav-link-title">
-                                        Impostazioni Macchina
-                                    </span>
-                                </a>
-                            </li>
+                            <?php if (in_array($currentRole, ['admin', 'admin_readonly'])): ?>
+                                <li class="nav-item">
+                                    <a class="nav-link" href="./machine_settings.php">
+                                        <span
+                                            class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler-icons.io/i/settings -->
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-settings">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path
+                                                    d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z" />
+                                                <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+                                            </svg>
+                                        </span>
+                                        <span class="nav-link-title">
+                                            Impostazioni Macchina
+                                        </span>
+                                    </a>
+                                </li>
+                            <?php endif; ?>
                         </ul>
                     </div>
                 </div>
                 <div class="navbar-nav flex-row order-md-last">
-                    <div class="nav-item">
-                        <a href="https://github.com/edoardofiore/vpnmanager" target="_blank"
-                            class="nav-link px-0" title="Source Code" rel="noreferrer">
-                            <i class="ti ti-brand-github icon"></i>
+                    <div class="nav-item dropdown">
+                        <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown"
+                            aria-label="Open user menu">
+                            <span
+                                class="avatar avatar-sm bg-blue-lt"><?= strtoupper(substr($currentUser, 0, 1)) ?></span>
+                            <div class="d-none d-xl-block ps-2">
+                                <div><?= htmlspecialchars($currentUser) ?></div>
+                                <div class="mt-1 small text-muted">
+                                    <?= htmlspecialchars($currentRole === 'admin_readonly' ? 'Admin Read Only' : ucfirst($currentRole)) ?>
+                                </div>
+                            </div>
                         </a>
+                        <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                            <?php if ($currentRole == 'admin'): ?>
+                                <a href="./users.php" class="dropdown-item">Gestione Utenti</a>
+                                <a href="./settings.php" class="dropdown-item">Impostazioni</a>
+                            <?php endif; ?>
+                            <!-- <a href="./settings.php" class="dropdown-item">Settings</a> -->
+                            <div class="dropdown-divider"></div>
+                            <a href="./logout.php" class="dropdown-item">Logout</a>
+                        </div>
                     </div>
                 </div>
             </div>
         </header>
+        <script>
+            window.currentUser = '<?= $_SESSION['username'] ?? '' ?>';
+            window.userRole = '<?= $_SESSION['role'] ?? '' ?>';
+        </script>
 
         <div class="page-wrapper">
             <!-- Page body -->

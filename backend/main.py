@@ -1,30 +1,111 @@
 import os
 import re
-from typing import List, Optional, Dict, Union # Added Union
-from fastapi import FastAPI, HTTPException, Security, Depends
+from typing import List, Optional, Dict, Union
+from datetime import timedelta
+import fastapi
+from fastapi import FastAPI, Depends, HTTPException, Body, File, UploadFile, Request
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security.api_key import APIKeyHeader
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
+from sqlmodel import Session, select
 
 import vpn_manager
 import instance_manager
 import network_utils
-import firewall_manager as instance_firewall_manager # Renamed for clarity on instance-specific firewall
-from machine_firewall_manager import machine_firewall_manager # Will be created later
+import firewall_manager as instance_firewall_manager
+import iptables_manager
+from machine_firewall_manager import machine_firewall_manager
+from database import create_db_and_tables, engine
+from models import User, UserRole, UserInstance, Instance, SMTPSettings, MagicToken, SystemSettings, BackupSettings
+import auth
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import secrets
+import zipfile
+from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import backup_logic
+import upload_manager
 
-# --- Modelli Pydantic ---
+# Scheduler instance
+scheduler = BackgroundScheduler()
+
+# --- Pydantic Models for Auth ---
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: UserRole = UserRole.VIEWER
+    instance_ids: List[str] = []
+
+class UserUpdate(BaseModel):
+    password: Optional[str] = None
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+    instance_ids: Optional[List[str]] = None
+
+class UserResponse(BaseModel):
+    username: str
+    role: UserRole
+    is_active: bool
+    instance_ids: List[str] = []
+
+class BackupSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    frequency: Optional[str] = None
+    time: Optional[str] = None
+    remote_protocol: Optional[str] = None
+    remote_host: Optional[str] = None
+    remote_port: Optional[int] = None
+    remote_user: Optional[str] = None
+    remote_password: Optional[str] = None
+    remote_path: Optional[str] = None
+
+class ManualBackupRequest(BaseModel):
+    note: Optional[str] = None
+
+
+# --- Pydantic Models for App ---
+# --- Pydantic Models for App ---
 class ClientRequest(BaseModel):
     client_name: str
+
+class GroupMemberRequest(BaseModel):
+    client_identifier: str # e.g. "instance_clientname"
+    subnet_info: Dict[str, str]
 
 class GroupRequest(BaseModel):
     name: str
     instance_id: str
     description: str = ""
 
-class GroupMemberRequest(BaseModel):
-    client_identifier: str # e.g. "instance_clientname"
-    subnet_info: Dict[str, str]
+class RouteConfig(BaseModel):
+    network: str
+    interface: str
+
+class RouteUpdateRequest(BaseModel):
+    tunnel_mode: str = "full"
+    routes: List[RouteConfig] = []
+    dns_servers: List[str] = []
+
+class InstanceRequest(BaseModel):
+    name: str
+    port: int
+    subnet: str
+    tunnel_mode: str = "full"
+    routes: List[RouteConfig] = []
+    dns_servers: List[str] = []
+
+class FirewallPolicyRequest(BaseModel):
+    default_policy: str
 
 class RuleRequest(BaseModel):
     group_id: str
@@ -39,9 +120,11 @@ class RuleOrderRequest(BaseModel):
     id: str
     order: int
 
-# Pydantic model for Machine-level Firewall Rules
+from pydantic import BaseModel, Field, validator
+import ipaddress
+
 class MachineFirewallRuleModel(BaseModel):
-    id: Optional[str] = None # Will be generated if not provided
+    id: Optional[str] = None
     chain: str
     action: str
     protocol: Optional[str] = None
@@ -52,61 +135,605 @@ class MachineFirewallRuleModel(BaseModel):
     out_interface: Optional[str] = None
     state: Optional[str] = None
     comment: Optional[str] = None
-    table: str = "filter"
+    table_name: str = Field(default="filter", alias="table") 
     order: int = 0
+    
+    model_config = {
+        "populate_by_name": True
+    }
+
+    @validator('action')
+    def validate_action(cls, v):
+        valid_actions = ["ACCEPT", "DROP", "REJECT", "MASQUERADE", "SNAT", "DNAT", "RETURN", "LOG"]
+        if v.upper() not in valid_actions:
+            raise ValueError(f"Invalid action: {v}. Must be one of {valid_actions}")
+        return v.upper()
+
+    @validator('protocol')
+    def validate_protocol(cls, v):
+        if not v: return None
+        if v.lower() == "all": return "all"
+        valid_protocols = ["tcp", "udp", "icmp", "esp", "ah", "gre", "igmp"] 
+        if v.lower() not in valid_protocols:
+            raise ValueError(f"Invalid protocol: {v}. Must be one of {valid_protocols} or 'all'")
+        return v.lower()
+
+    @validator('port')
+    def validate_port(cls, v):
+        if not v: return None
+        v_str = str(v)
+        if ":" in v_str:
+            # Range check
+            parts = v_str.split(":")
+            if len(parts) != 2: raise ValueError("Invalid port range format (start:end)")
+            try:
+                p1, p2 = int(parts[0]), int(parts[1])
+                if not (1 <= p1 <= 65535 and 1 <= p2 <= 65535): raise ValueError
+            except ValueError:
+                raise ValueError("Ports must be integers between 1 and 65535")
+        else:
+            try:
+                p = int(v_str)
+                if not (1 <= p <= 65535): raise ValueError
+            except ValueError:
+                raise ValueError("Port must be integer between 1 and 65535")
+        return v_str
+
+    @validator('source', 'destination')
+    def validate_ip_network(cls, v):
+        if not v or v.lower() == "any": return None
+        try:
+            # Check if it's a valid IP or CIDR
+            ipaddress.ip_network(v, strict=False)
+        except ValueError:
+             # It might be a single IP, try ip_address
+             try:
+                 ipaddress.ip_address(v)
+             except ValueError:
+                 raise ValueError(f"Invalid IP address or CIDR: {v}")
+        return v
+
+    @validator('table_name')
+    def validate_table(cls, v):
+        valid_tables = ["filter", "nat", "mangle", "raw"]
+        if v.lower() not in valid_tables:
+            raise ValueError(f"Invalid table: {v}")
+        return v.lower()
+    
+    @validator('chain')
+    def validate_chain(cls, v, values):
+        # We can try to validate chain based on table if table is already validated/present
+        # note: 'table_name' might not be in values if it failed validation or hasn't run yet?
+        # Pydantic validates in order of definition usually.
+        # But for simplicity, let's just ensure it's uppercase.
+        # Standard chains: INPUT, OUTPUT, FORWARD, PREROUTING, POSTROUTING
+        # Custom chains allowed? The model is for Machine Firewall, usually standard chains.
+        # Let's verify standard + custom just in case, but usually we restrict to standard for UI safety.
+        # Given UI has dropdown, let's enforce standard chains per table if possible, OR just basic check.
+        # Let's stick to upper() for now to avoid blocking custom usage if user manually posted.
+        if not v: raise ValueError("Chain is required")
+        return v.upper()
 
 class MachineFirewallRuleOrderRequest(BaseModel):
     id: str
     order: int
 
+class SMTPSettingsUpdate(BaseModel):
+    smtp_host: str
+    smtp_port: int
+    smtp_encryption: str
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    sender_email: str
+    sender_name: str
+    public_url: Optional[str] = None
+
+class EmailShareRequest(BaseModel):
+    email: str
+    
 # Regex per validare i nomi dei client (permette alfanumerici, underscore, trattini e punti)
 CLIENT_NAME_PATTERN = r"^[a-zA-Z0-9_.-]+$"
 
-# --- Modelli Pydantic ---
-class ClientRequest(BaseModel):
-    client_name: str
+# --- Scheduler Logic ---
+def run_backup_job(force_run: bool = False):
+    with Session(engine) as session:
+        settings = session.get(BackupSettings, 1)
+        if not settings: return
+        if not settings.enabled and not force_run: return
+        
+        try:
+            zip_path = backup_logic.create_backup_zip()
+            settings.last_run_status = "Success (Local)"
+            
+            if settings.remote_protocol in ['ftp', 'sftp']:
+                success = upload_manager.upload_backup(zip_path, settings)
+                if success:
+                     settings.last_run_status = f"Success ({settings.remote_protocol.upper()})"
+                     # Only clean up if upload was successful
+                     if os.path.exists(zip_path):
+                         os.remove(zip_path)
+                else:
+                     settings.last_run_status = "Failed (Upload)"
+            
+            settings.last_run_time = datetime.utcnow()
+            
+        except Exception as e:
+             settings.last_run_status = f"Failed: {str(e)}"
+        
+        session.add(settings)
+        session.commit()
 
-class RouteConfig(BaseModel):
-    network: str  # e.g., "192.168.1.0/24"
-    interface: str  # e.g., "eth1"
+def update_scheduler(settings: BackupSettings):
+    scheduler.remove_all_jobs()
+    if settings.enabled:
+        try:
+             h, m = map(int, settings.time.split(':'))
+             trigger_args = {'hour': h, 'minute': m}
+             if settings.frequency == 'weekly':
+                 trigger_args['day_of_week'] = 'sun'
+             
+             scheduler.add_job(run_backup_job, CronTrigger(**trigger_args))
+        except Exception as e:
+             print(f"Error scheduling backup: {e}")
 
-class RouteUpdateRequest(BaseModel):
-    tunnel_mode: str = "full"  # "full" or "split"
-    routes: List[RouteConfig] = []  # Custom routes for split tunnel
-    dns_servers: List[str] = [] # Optional custom DNS servers
+# --- App Init ---
+app = FastAPI(
+    title="VPN Manager API",
+    description="WireGuard VPN Management with RBAC.",
+    version="3.0.0",
+)
 
-class InstanceRequest(BaseModel):
-    name: str
-    port: int
-    subnet: str
-    protocol: str = "udp"
-    tunnel_mode: str = "full"  # "full" or "split"
-    routes: List[RouteConfig] = []  # Custom routes for split tunnel
-    dns_servers: List[str] = [] # Optional custom DNS servers
+@app.on_event("startup")
+def on_startup():
+    scheduler.start()
+    try:
+        with Session(engine) as session:
+            settings = session.get(BackupSettings, 1)
+            if settings:
+                update_scheduler(settings)
+    except Exception as e:
+        print(f"Startup scheduler error: {e}")
 
-class FirewallPolicyRequest(BaseModel):
-    default_policy: str
 
-# --- Sicurezza con API Key ---
-API_KEY = os.getenv("API_KEY", "change-this-in-production")
-API_KEY_NAME = "X-API-Key"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
+# --- SMTP Settings Endpoints ---
 
-async def get_api_key(key: str = Security(api_key_header)):
-    if key == API_KEY:
-        return key
-    else:
-        raise HTTPException(
-            status_code=403,
-            detail="Could not validate credentials",
+@app.get("/api/settings/smtp", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def get_smtp_settings():
+    with Session(engine) as session:
+        settings = session.get(SMTPSettings, 1)
+        if not settings:
+            return {}
+        return settings
+
+@app.post("/api/settings/smtp", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def update_smtp_settings(settings_update: SMTPSettingsUpdate):
+    with Session(engine) as session:
+        settings = session.get(SMTPSettings, 1)
+        if not settings:
+            settings = SMTPSettings(id=1, **settings_update.dict())
+        else:
+            settings_data = settings_update.dict(exclude_unset=True)
+            for key, value in settings_data.items():
+                setattr(settings, key, value)
+            settings.updated_at = datetime.utcnow()
+        
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+        return settings
+
+@app.post("/api/settings/smtp/test", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def test_smtp_settings(email_req: EmailShareRequest):
+    with Session(engine) as session:
+        settings = session.get(SMTPSettings, 1)
+        if not settings:
+            raise HTTPException(status_code=400, detail="SMTP Settings not configured.")
+        
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = f"{settings.sender_name} <{settings.sender_email}>"
+            msg['To'] = email_req.email
+            msg['Subject'] = "Test Email from VPN Manager"
+            msg.attach(MIMEText("This is a test email to verify SMTP settings.", 'plain'))
+
+            if settings.smtp_encryption == "ssl":
+                server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port)
+            else:
+                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port)
+                if settings.smtp_encryption == "tls":
+                    server.starttls()
+
+            if settings.smtp_username and settings.smtp_password:
+                server.login(settings.smtp_username, settings.smtp_password)
+            
+            server.send_message(msg)
+            server.quit()
+            return {"success": True, "message": "Test email sent."}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
+
+# --- System Settings Endpoints ---
+
+class SystemSettingsUpdate(BaseModel):
+    company_name: str
+    support_url: Optional[str] = None
+    primary_color: str
+    custom_css: Optional[str] = None
+    # Logo and Favicon handled via separate upload endpoint to manage files
+
+@app.get("/api/settings/system")
+def get_system_settings():
+    """Public endpoint for branding (Login page etc)."""
+    with Session(engine) as session:
+        settings = session.get(SystemSettings, 1)
+        if not settings:
+             # Return defaults if not set
+            return {
+                "company_name": "VPN Manager",
+                "primary_color": "#0054a6"
+            }
+        return settings
+
+@app.post("/api/settings/system", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def update_system_settings(settings_update: SystemSettingsUpdate):
+    with Session(engine) as session:
+        settings = session.get(SystemSettings, 1)
+        if not settings:
+            settings = SystemSettings(id=1, **settings_update.dict())
+        else:
+            settings_data = settings_update.dict(exclude_unset=True)
+            for key, value in settings_data.items():
+                setattr(settings, key, value)
+            settings.updated_at = datetime.utcnow()
+        
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+        return settings
+
+from fastapi import UploadFile, File
+from fastapi.staticfiles import StaticFiles
+
+# Mount static upload dir
+UPLOAD_DIR = "/opt/vpn-manager/frontend/static/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+# Note: Frontend PHP serves static files directly or via Nginx. 
+# We need to ensure the path is accessible.
+# If running behind Nginx, /static/uploads should map to this dir.
+
+@app.post("/api/settings/logo", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+async def upload_logo(file: UploadFile = File(...), type: str = "logo"):
+    """
+    Type: 'logo' or 'favicon'
+    """
+    if type not in ['logo', 'favicon']:
+        raise HTTPException(status_code=400, detail="Invalid type")
+    
+    # Secure filename
+    filename = f"{type}_{secrets.token_hex(4)}.png" # Force PNG or keep extension?
+    # Let's keep extension but simple
+    ext = os.path.splitext(file.filename)[1]
+    if ext.lower() not in ['.png', '.jpg', '.jpeg', '.svg', '.ico']:
+         raise HTTPException(status_code=400, detail="Invalid file type")
+    
+    filename = f"{type}{ext}" # Overwrite existing? Or unique?
+    # Overwrite is better to save space, but unique avoids caching issues.
+    # Let's use unique and return URL.
+    filename = f"{type}_{secrets.token_hex(4)}{ext}"
+    
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    with open(file_path, "wb") as buffer:
+        content = await file.read()
+        buffer.write(content)
+        
+    # Update DB
+    relative_path = f"static/uploads/{filename}"
+    
+    with Session(engine) as session:
+        settings = session.get(SystemSettings, 1)
+        if not settings:
+            settings = SystemSettings(id=1, company_name="VPN Manager") # Init if missing
+            
+        if type == "logo":
+            settings.logo_url = relative_path
+        elif type == "favicon":
+            settings.favicon_url = relative_path
+            
+        settings.updated_at = datetime.utcnow()
+        session.add(settings)
+        session.commit()
+    
+    return {"success": True, "url": relative_path}
+
+
+# --- Secure Share Endpoints ---
+
+@app.post("/api/instances/{instance_id}/clients/{client_name}/share_complete")
+def share_client_config_full(
+    instance_id: str, 
+    client_name: str, 
+    email_req: EmailShareRequest,
+    request: Request,
+    current_user: User = Depends(auth.get_current_user)
+):
+    # (Auth check role manual if not in decorator)
+    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    client, _ = vpn_manager.get_client_and_instance(client_name, instance_id)
+    if not client:
+         raise HTTPException(status_code=404, detail="Client not found")
+
+    with Session(engine) as session:
+        settings = session.get(SMTPSettings, 1)
+        if not settings or not settings.smtp_host:
+             raise HTTPException(status_code=400, detail="SMTP not configured.")
+
+        token_str = secrets.token_urlsafe(32)
+        expiration = datetime.utcnow() + timedelta(hours=48)
+        
+        try:
+            magic_token = MagicToken(token=token_str, client_id=client.id, expires_at=expiration)
+            session.add(magic_token)
+            session.commit()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database Error (MagicToken): {str(e)}")
+        
+        # Construct URL using request.base_url
+        # Construct URL
+        base_url = str(request.base_url).rstrip('/')
+        if settings.public_url:
+             base_url = settings.public_url.rstrip('/')
+             
+        setup_link = f"{base_url}/setup.php?token={token_str}"
+        
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = f"{settings.sender_name} <{settings.sender_email}>"
+            msg['To'] = email_req.email
+            msg['Subject'] = f"VPN Configuration: {client_name}"
+            
+            html_content = f"""
+            <html>
+            <body>
+                <h2>VPN Configuration Setup</h2>
+                <p>Hello,</p>
+                <p>You have been invited to connect to the VPN <strong>{client_name}</strong>.</p>
+                <p>Please click the link below to configure your device (Mobile or Desktop).</p>
+                <p>
+                    <a href="{setup_link}" style="background-color: #0054a6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                        Configure VPN
+                    </a>
+                </p>
+                <p>Or verify this link: <a href="{setup_link}">{setup_link}</a></p>
+                <p>This link will expire in 48 hours.</p>
+            </body>
+            </html>
+            """
+            msg.attach(MIMEText(html_content, 'html'))
+
+            if settings.smtp_encryption == "ssl":
+                server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port)
+            else:
+                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port)
+                if settings.smtp_encryption == "tls":
+                    server.starttls()
+
+            if settings.smtp_username and settings.smtp_password:
+                server.login(settings.smtp_username, settings.smtp_password)
+            
+            server.send_message(msg)
+            server.quit()
+            return {"success": True, "message": "Email sent successfully."}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to send: {str(e)}")
+
+@app.get("/api/public/setup/{token}")
+def get_public_client_config(token: str):
+    with Session(engine) as session:
+        magic_token = session.get(MagicToken, token)
+        if not magic_token:
+            raise HTTPException(status_code=403, detail="Invalid token")
+        
+        if datetime.utcnow() > magic_token.expires_at or magic_token.used:
+             # Optionally update 'used' if one-time. But request was 48h access.
+             raise HTTPException(status_code=403, detail="Token expired")
+             
+        client = session.get(vpn_manager.Client, magic_token.client_id)
+        if not client:
+             raise HTTPException(status_code=404, detail="Client not found")
+        
+        # Generate Config
+        config_content, qr_path = vpn_manager.get_client_config(client.name, client.instance_id)
+        
+        return {
+            "client_name": client.name,
+            "instance_name": f"VPN-{client.instance_id}", 
+            "config": config_content
+        }
+
+# --- Auth Endpoints ---
+
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    with Session(engine) as session:
+        user = session.get(User, form_data.username)
+        if not user or not auth.verify_password(form_data.password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = auth.create_access_token(
+            data={"sub": user.username, "role": user.role},
+            expires_delta=access_token_expires
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/api/users/me", response_model=UserResponse)
+async def read_users_me(current_user: User = Depends(auth.get_current_user)):
+    # For 'me' endpoint, we might want to include instance_ids as well
+    with Session(engine) as session:
+        user_with_instances = session.get(User, current_user.username)
+        if not user_with_instances:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        instance_ids = [inst.id for inst in user_with_instances.assigned_instances]
+        return UserResponse(
+            username=user_with_instances.username,
+            role=user_with_instances.role,
+            is_active=user_with_instances.is_active,
+            instance_ids=instance_ids
         )
 
-# --- Applicazione FastAPI ---
-app = FastAPI(
-    title="OpenVPN Management API",
-    description="API per gestire istanze multiple di OpenVPN.",
-    version="2.0.0",
-)
+@app.get("/api/users", response_model=List[UserResponse], dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.ADMIN_READ_ONLY]))])
+async def read_users():
+    with Session(engine) as session:
+        users = session.exec(select(User)).all()
+        response = []
+        for user in users:
+            # Eager load instance_ids logic via relationship or query
+            # Since we defined relationship assigned_instances, we can access it
+            instance_ids = [inst.id for inst in user.assigned_instances]
+            response.append(UserResponse(
+                username=user.username,
+                role=user.role,
+                is_active=user.is_active,
+                instance_ids=instance_ids
+            ))
+        return response
+
+@app.post("/api/users", response_model=UserResponse, dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+async def create_user(user: UserCreate):
+    with Session(engine) as session:
+        if session.get(User, user.username):
+             raise HTTPException(status_code=400, detail="Username already registered")
+        hashed_password = auth.get_password_hash(user.password)
+        db_user = User(username=user.username, hashed_password=hashed_password, role=user.role)
+        session.add(db_user)
+        
+        # If role is Technician or Viewer (Scoped) and instance_ids are provided
+        assigned_ids = []
+        if user.role in [UserRole.TECHNICIAN, UserRole.VIEWER] and user.instance_ids:
+             # Verify instances exist
+             from models import Instance
+             for instance_id in user.instance_ids:
+                 if not session.get(Instance, instance_id):
+                      raise HTTPException(status_code=404, detail=f"Instance {instance_id} not found")
+                 
+                 link = UserInstance(user_id=user.username, instance_id=instance_id)
+                 session.add(link)
+                 assigned_ids.append(instance_id)
+
+        session.commit()
+        session.refresh(db_user)
+        
+        # Construct response manually to include instance_ids
+        return UserResponse(
+            username=db_user.username,
+            role=db_user.role,
+            is_active=db_user.is_active,
+            instance_ids=assigned_ids
+        )
+
+@app.patch("/api/users/{username}", response_model=UserResponse, dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+async def update_user(username: str, user_update: UserUpdate):
+    with Session(engine) as session:
+        db_user = session.get(User, username)
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_data = user_update.dict(exclude_unset=True)
+        instance_ids_to_update = None
+        
+        if "password" in user_data:
+            password = user_data.pop("password")
+            db_user.hashed_password = auth.get_password_hash(password)
+            
+        if "instance_ids" in user_data:
+            instance_ids_to_update = user_data.pop("instance_ids")
+
+        for key, value in user_data.items():
+            setattr(db_user, key, value)
+            
+        session.add(db_user)
+        
+        # Handle Instance Assignments Update
+        if instance_ids_to_update is not None:
+            # 1. Remove existing links
+            from sqlmodel import delete
+            stmt = delete(UserInstance).where(UserInstance.user_id == username)
+            session.exec(stmt)
+            
+            # 2. Add new links if role allows
+            if db_user.role in [UserRole.TECHNICIAN, UserRole.VIEWER]:
+                from models import Instance
+                for i_id in instance_ids_to_update:
+                     if session.get(Instance, i_id):
+                        session.add(UserInstance(user_id=username, instance_id=i_id))
+
+        session.commit()
+        session.refresh(db_user)
+        
+        # Return updated response
+        # Need to re-fetch assigned instances to be sure
+        updated_instance_ids = [inst.id for inst in db_user.assigned_instances]
+        return UserResponse(
+            username=db_user.username,
+            role=db_user.role,
+            is_active=db_user.is_active,
+            instance_ids=updated_instance_ids
+        )
+
+@app.delete("/api/users/{username}", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+async def delete_user(username: str):
+    with Session(engine) as session:
+        user = session.get(User, username)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        session.delete(user)
+        session.commit()
+        return {"success": True}
+
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Initialize system components on startup.
+    - Setup DB.
+    - Setup IP tables chains and rules.
+    """
+    # Create DB tables
+    create_db_and_tables()
+
+    # Seed Default Admin if no users exist
+    with Session(engine) as session:
+        if not session.exec(select(User)).first():
+            print("Startup: No users found. Creating default 'admin' user.")
+            admin_user = User(
+                username="admin", 
+                hashed_password=auth.get_password_hash("admin"),
+                role=UserRole.ADMIN
+            )
+            session.add(admin_user)
+            session.commit()
+    
+    # Verify/Execute OpenVPN rules application
+    try:
+        iptables_manager.apply_all_openvpn_rules()
+        print("Startup: OpenVPN firewall rules applied.")
+    except Exception as e:
+        print(f"Startup Error: Failed to apply OpenVPN rules: {e}")
+        
+    # Re-apply Machine Firewall rules to ensure they are placed correctly (after VPN rules)
+    try:
+        machine_firewall_manager.apply_all_rules()
+        print("Startup: Machine firewall rules applied.")
+    except Exception as e:
+        print(f"Startup Error: Failed to apply Machine firewall rules: {e}")
 
 # --- Middleware CORS ---
 origins = ["*"]
@@ -120,27 +747,46 @@ app.add_middleware(
 
 # --- Endpoints Istanze ---
 
-@app.get("/api/instances", dependencies=[Depends(get_api_key)])
-async def get_instances():
-    """Restituisce la lista di tutte le istanze OpenVPN con il conteggio dei client connessi."""
-    instances = instance_manager.get_all_instances()
+@app.get("/api/instances", dependencies=[Depends(auth.get_current_user)])
+async def get_instances(current_user: User = Depends(auth.get_current_user)):
+    """Restituisce la lista di tutte le istanze OpenVPN, filtrate per permessi."""
+    
+    # Logic: Admin, Partner, Admin ReadOnly -> ALL instances
+    # Technician, Viewer -> Assigned instances only
+    
+    # Logic: Admin, Partner, Admin ReadOnly -> ALL instances
+    # Technician, Viewer -> Assigned instances only
+    
+    instances = get_user_instances(current_user)
+    
+    response_data = []
     for inst in instances:
+        # Convert to dict to append extra fields not in DB model
+        inst_dict = inst.dict()
         if inst.status == "running":
             connected = vpn_manager.get_connected_clients(inst.name)
-            inst.connected_clients = len(connected)
+            inst_dict["connected_clients"] = len(connected)
         else:
-            inst.connected_clients = 0
-    return instances
+            inst_dict["connected_clients"] = 0
+        response_data.append(inst_dict)
+    return response_data
 
-@app.get("/api/instances/{instance_id}", dependencies=[Depends(get_api_key)])
-async def get_instance(instance_id: str):
+@app.get("/api/instances/{instance_id}", dependencies=[Depends(auth.get_current_user)])
+async def get_instance(instance_id: str, current_user: User = Depends(auth.get_current_user)):
     """Restituisce i dettagli di una specifica istanza."""
+    
+    # Check access
+    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY]:
+        user_instances = get_user_instances(current_user)
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
+
     instance = instance_manager.get_instance_by_id(instance_id)
     if not instance:
         raise HTTPException(status_code=404, detail="Instance not found")
     return instance
 
-@app.post("/api/instances", dependencies=[Depends(get_api_key)])
+@app.post("/api/instances", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER]))])
 async def create_instance(request: InstanceRequest):
     """Crea una nuova istanza OpenVPN."""
     try:
@@ -148,7 +794,7 @@ async def create_instance(request: InstanceRequest):
             name=request.name,
             port=request.port,
             subnet=request.subnet,
-            protocol=request.protocol,
+            # protocol=request.protocol, # WireGuard is always UDP
             tunnel_mode=request.tunnel_mode,
             routes=[route.dict() for route in request.routes],
             dns_servers=request.dns_servers
@@ -157,10 +803,13 @@ async def create_instance(request: InstanceRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error creating instance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/instances/{instance_id}")
-def delete_instance(instance_id: str, api_key: str = Depends(get_api_key)): # Changed verify_api_key to get_api_key for consistency
+@app.delete("/api/instances/{instance_id}", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER]))])
+def delete_instance(instance_id: str):
     try:
         instance_manager.delete_instance(instance_id)
         return {"success": True, "message": "Instance deleted"}
@@ -169,8 +818,8 @@ def delete_instance(instance_id: str, api_key: str = Depends(get_api_key)): # Ch
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.patch("/api/instances/{instance_id}/routes")
-def update_instance_routes(instance_id: str, request: RouteUpdateRequest, api_key: str = Depends(get_api_key)): # Changed verify_api_key to get_api_key for consistency
+@app.patch("/api/instances/{instance_id}/routes", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER]))])
+def update_instance_routes(instance_id: str, request: RouteUpdateRequest):
     try:
         updated_instance = instance_manager.update_instance_routes(
             instance_id=instance_id,
@@ -184,7 +833,7 @@ def update_instance_routes(instance_id: str, request: RouteUpdateRequest, api_ke
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.patch("/api/instances/{instance_id}/firewall-policy", dependencies=[Depends(get_api_key)])
+@app.patch("/api/instances/{instance_id}/firewall-policy", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER]))])
 async def update_instance_firewall_policy_endpoint(instance_id: str, request: FirewallPolicyRequest):
     """Aggiorna la policy di default del firewall per una specifica istanza."""
     try:
@@ -200,10 +849,26 @@ async def update_instance_firewall_policy_endpoint(instance_id: str, request: Fi
 
 # --- Endpoints Statistiche ---
 
-@app.get("/api/stats/top-clients", dependencies=[Depends(get_api_key)])
-async def get_top_clients():
-    """Restituisce i top 5 client per traffico totale (tutte le istanze)."""
-    instances = instance_manager.get_all_instances()
+
+def get_user_instances(user: User) -> List[Instance]:
+    """Helper to get instances accessible by a specific user."""
+    global_access_roles = [UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY]
+    
+    if user.role in global_access_roles:
+        return instance_manager.get_all_instances()
+    else:
+        with Session(engine) as session:
+            from models import UserInstance, Instance
+            stmt = select(Instance).join(UserInstance).where(UserInstance.user_id == user.username)
+            return session.exec(stmt).all()
+
+@app.get("/api/stats/top-clients", dependencies=[Depends(auth.get_current_user)])
+async def get_top_clients(current_user: User = Depends(auth.get_current_user)):
+    """Restituisce i top 5 client per traffico totale (filtrati per permessi)."""
+    
+    # Use helper to get only accessible instances
+    instances = get_user_instances(current_user)
+    
     all_clients = []
 
     for inst in instances:
@@ -233,7 +898,7 @@ async def get_top_clients():
 
 # --- Endpoints Network ---
 
-@app.get("/api/network/interfaces", dependencies=[Depends(get_api_key)])
+@app.get("/api/network/interfaces", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def get_network_interfaces():
     """Restituisce la lista delle interfacce di rete disponibili."""
     try:
@@ -244,9 +909,17 @@ async def get_network_interfaces():
 
 # --- Endpoints Client (Scoped per Istanza) ---
 
-@app.get("/api/instances/{instance_id}/clients", dependencies=[Depends(get_api_key)])
-async def get_clients(instance_id: str):
+@app.get("/api/instances/{instance_id}/clients", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY, UserRole.TECHNICIAN, UserRole.VIEWER]))])
+async def get_clients(instance_id: str, current_user: User = Depends(auth.get_current_user)):
     """Ottiene la lista dei client per una specifica istanza."""
+    
+    # Check access for restricted roles
+    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY]:
+        user_instances = get_user_instances(current_user)
+        # Check if the requested instance_id is one of the user's assigned instances
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
+
     try:
         clients = vpn_manager.list_clients(instance_id)
         return clients
@@ -255,9 +928,15 @@ async def get_clients(instance_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/instances/{instance_id}/clients", dependencies=[Depends(get_api_key)])
-async def create_client(instance_id: str, request: ClientRequest):
+@app.post("/api/instances/{instance_id}/clients", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
+async def create_client(instance_id: str, request: ClientRequest, current_user: User = Depends(auth.get_current_user)):
     """Crea un nuovo client per una specifica istanza."""
+    
+    # Check access for Technician
+    if current_user.role == UserRole.TECHNICIAN:
+        user_instances = get_user_instances(current_user)
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
     client_name = request.client_name
     if not client_name or not re.fullmatch(CLIENT_NAME_PATTERN, client_name):
         raise HTTPException(status_code=400, detail="Nome client non valido.")
@@ -268,9 +947,15 @@ async def create_client(instance_id: str, request: ClientRequest):
 
     return {"message": f"Client '{client_name}' creato con successo."}
 
-@app.get("/api/instances/{instance_id}/clients/{client_name}/download", dependencies=[Depends(get_api_key)])
-async def download_client_config(instance_id: str, client_name: str):
-    """Scarica il file .ovpn per un client."""
+@app.get("/api/instances/{instance_id}/clients/{client_name}/download", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
+async def download_client_config(instance_id: str, client_name: str, current_user: User = Depends(auth.get_current_user)):
+    """Scarica il file .conf per un client."""
+    
+    # Check access for Technician
+    if current_user.role == UserRole.TECHNICIAN:
+        user_instances = get_user_instances(current_user)
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
     # Verifica esistenza istanza (opzionale, ma buona pratica)
     if not instance_manager.get_instance(instance_id):
         raise HTTPException(status_code=404, detail="Instance not found")
@@ -278,19 +963,25 @@ async def download_client_config(instance_id: str, client_name: str):
     if not client_name or not re.fullmatch(CLIENT_NAME_PATTERN, client_name):
         raise HTTPException(status_code=400, detail="Nome client non valido.")
     
-    config_content, error = vpn_manager.get_client_config(client_name)
+    config_content, error = vpn_manager.get_client_config(client_name, instance_id)
     if error:
         raise HTTPException(status_code=404, detail=error)
 
     return PlainTextResponse(
         content=config_content,
-        media_type="application/x-openvpn-profile",
-        headers={"Content-Disposition": f"attachment; filename={client_name}.ovpn"}
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={client_name}.conf"}
     )
 
-@app.delete("/api/instances/{instance_id}/clients/{client_name}", dependencies=[Depends(get_api_key)])
-async def revoke_client(instance_id: str, client_name: str):
+@app.delete("/api/instances/{instance_id}/clients/{client_name}", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
+async def revoke_client(instance_id: str, client_name: str, current_user: User = Depends(auth.get_current_user)):
     """Revoca un client."""
+    
+    # Check access for Technician
+    if current_user.role == UserRole.TECHNICIAN:
+        user_instances = get_user_instances(current_user)
+        if not any(inst.id == instance_id for inst in user_instances):
+             raise HTTPException(status_code=403, detail="Access denied to this instance.")
     if not client_name or not re.fullmatch(CLIENT_NAME_PATTERN, client_name):
         raise HTTPException(status_code=400, detail="Nome client non valido.")
 
@@ -303,23 +994,23 @@ async def revoke_client(instance_id: str, client_name: str):
 
 # --- Endpoints Gruppi e Firewall ---
 
-@app.get("/api/groups", dependencies=[Depends(get_api_key)])
+@app.get("/api/groups", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY, UserRole.TECHNICIAN, UserRole.VIEWER]))])
 async def list_groups(instance_id: Optional[str] = None):
     return instance_firewall_manager.get_groups(instance_id)
 
-@app.post("/api/groups", dependencies=[Depends(get_api_key)])
+@app.post("/api/groups", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
 async def create_group(request: GroupRequest):
     try:
         return instance_firewall_manager.create_group(request.name, request.instance_id, request.description)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.delete("/api/groups/{group_id}", dependencies=[Depends(get_api_key)])
+@app.delete("/api/groups/{group_id}", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
 async def delete_group(group_id: str):
     instance_firewall_manager.delete_group(group_id)
     return {"success": True}
 
-@app.post("/api/groups/{group_id}/members", dependencies=[Depends(get_api_key)])
+@app.post("/api/groups/{group_id}/members", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
 async def add_group_member(group_id: str, request: GroupMemberRequest):
     try:
         instance_firewall_manager.add_member_to_group(group_id, request.client_identifier, request.subnet_info)
@@ -327,7 +1018,7 @@ async def add_group_member(group_id: str, request: GroupMemberRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/groups/{group_id}/members/{client_identifier}", dependencies=[Depends(get_api_key)])
+@app.delete("/api/groups/{group_id}/members/{client_identifier}", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
 async def remove_group_member(group_id: str, client_identifier: str, instance_name: str):
     try:
         instance_firewall_manager.remove_member_from_group(group_id, client_identifier, instance_name)
@@ -337,18 +1028,22 @@ async def remove_group_member(group_id: str, client_identifier: str, instance_na
 
 # --- Endpoints Firewall Rules ---
 
-@app.get("/api/firewall/rules", dependencies=[Depends(get_api_key)])
+@app.get("/api/firewall/rules", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.ADMIN_READ_ONLY, UserRole.TECHNICIAN, UserRole.VIEWER]))])
 async def list_rules(group_id: Optional[str] = None):
     return instance_firewall_manager.get_rules(group_id)
 
-@app.post("/api/firewall/rules", dependencies=[Depends(get_api_key)])
+@app.post("/api/firewall/rules", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
 async def create_rule(request: RuleRequest):
     try:
         return instance_firewall_manager.add_rule(request.dict())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+<<<<<<< HEAD
 @app.put("/api/firewall/rules/{rule_id}", dependencies=[Depends(get_api_key)])
+=======
+@app.put("/api/firewall/rules/{rule_id}", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
+>>>>>>> wireguard
 async def update_rule(rule_id: str, request: RuleRequest):
     try:
         # Note: The group_id is part of the request model, but we also pass rule_id from path
@@ -367,12 +1062,16 @@ async def update_rule(rule_id: str, request: RuleRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+<<<<<<< HEAD
 @app.delete("/api/firewall/rules/{rule_id}", dependencies=[Depends(get_api_key)])
+=======
+@app.delete("/api/firewall/rules/{rule_id}", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
+>>>>>>> wireguard
 async def delete_rule(rule_id: str):
     instance_firewall_manager.delete_rule(rule_id)
     return {"success": True}
 
-@app.post("/api/firewall/rules/order", dependencies=[Depends(get_api_key)])
+@app.post("/api/firewall/rules/order", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
 async def reorder_rules(orders: List[RuleOrderRequest]):
     try:
         data = [{"id": x.id, "order": x.order} for x in orders]
@@ -383,7 +1082,7 @@ async def reorder_rules(orders: List[RuleOrderRequest]):
 
 # --- Endpoints Firewall (Machine-level) ---
 
-@app.get("/api/machine-firewall/rules", response_model=List[MachineFirewallRuleModel], dependencies=[Depends(get_api_key)])
+@app.get("/api/machine-firewall/rules", response_model=List[MachineFirewallRuleModel], dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.ADMIN_READ_ONLY]))])
 async def list_machine_firewall_rules():
     """List all machine-level firewall rules."""
     try:
@@ -392,7 +1091,7 @@ async def list_machine_firewall_rules():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/machine-firewall/rules", response_model=MachineFirewallRuleModel, dependencies=[Depends(get_api_key)])
+@app.post("/api/machine-firewall/rules", response_model=MachineFirewallRuleModel, dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def add_machine_firewall_rule_endpoint(rule_data: MachineFirewallRuleModel):
     """Add a new machine-level firewall rule."""
     try:
@@ -401,7 +1100,7 @@ async def add_machine_firewall_rule_endpoint(rule_data: MachineFirewallRuleModel
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/machine-firewall/rules/{rule_id}", response_model=MachineFirewallRuleModel, dependencies=[Depends(get_api_key)])
+@app.put("/api/machine-firewall/rules/{rule_id}", response_model=MachineFirewallRuleModel, dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def update_machine_firewall_rule_endpoint(rule_id: str, rule_data: MachineFirewallRuleModel):
     """Update a machine-level firewall rule."""
     try:
@@ -412,7 +1111,7 @@ async def update_machine_firewall_rule_endpoint(rule_id: str, rule_data: Machine
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/machine-firewall/rules/{rule_id}", dependencies=[Depends(get_api_key)])
+@app.delete("/api/machine-firewall/rules/{rule_id}", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def delete_machine_firewall_rule_endpoint(rule_id: str):
     """Delete a machine-level firewall rule."""
     try:
@@ -421,7 +1120,7 @@ async def delete_machine_firewall_rule_endpoint(rule_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.patch("/api/machine-firewall/rules/apply", dependencies=[Depends(get_api_key)])
+@app.patch("/api/machine-firewall/rules/apply", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def apply_machine_firewall_rules_endpoint(rules_order: List[MachineFirewallRuleOrderRequest]):
     """Apply a new order or set of machine-level firewall rules."""
     try:
@@ -433,7 +1132,7 @@ async def apply_machine_firewall_rules_endpoint(rules_order: List[MachineFirewal
 
 # --- Endpoints Network Interface (Machine-level) ---
 
-@app.get("/api/machine-network/interfaces", dependencies=[Depends(get_api_key)])
+@app.get("/api/machine-network/interfaces", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.ADMIN_READ_ONLY]))])
 async def get_all_machine_network_interfaces():
     """Get all machine network interfaces with detailed information."""
     try:
@@ -442,7 +1141,7 @@ async def get_all_machine_network_interfaces():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/machine-network/interfaces/{interface_name}/config", dependencies=[Depends(get_api_key)])
+@app.get("/api/machine-network/interfaces/{interface_name}/config", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def get_machine_network_interface_config(interface_name: str):
     """Get the current Netplan configuration for a specific interface."""
     try:
@@ -460,7 +1159,7 @@ async def get_machine_network_interface_config(interface_name: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/machine-network/interfaces/{interface_name}/config", dependencies=[Depends(get_api_key)])
+@app.post("/api/machine-network/interfaces/{interface_name}/config", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def update_machine_network_interface_config(interface_name: str, config_data: Dict):
     """Update the Netplan configuration for a specific interface and apply it."""
     try:
@@ -488,17 +1187,82 @@ async def update_machine_network_interface_config(interface_name: str, config_da
         current_netplan_full_config["network"]["ethernets"][interface_name] = config_data
 
         if not network_utils.write_netplan_config(config_file_path, current_netplan_full_config):
-            raise HTTPException(status_code=500, detail="Failed to write Netplan config file.")
+             raise HTTPException(status_code=500, detail="Failed to write netplan configuration.")
+             
+        # Apply Logic: netplan apply
+        # WARNING: This might cut network connection!
+        # We should run it async or warn user.
+        # network_utils.apply_netplan() 
         
-        success, error = network_utils.apply_netplan_config()
-        if not success:
-            raise HTTPException(status_code=500, detail=f"Failed to apply Netplan config: {error}")
-
-        return {"success": True, "message": f"Netplan config for {interface_name} updated and applied."}
+        return {"success": True, "message": "Interface configuration updated."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating Netplan config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/machine-network/netplan-apply", dependencies=[Depends(get_api_key)])
+# --- Backup Endpoints ---
+
+@app.get("/api/settings/backup", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def get_backup_settings():
+    with Session(engine) as session:
+        settings = session.get(BackupSettings, 1)
+        if not settings:
+            return {}
+        return settings
+
+@app.post("/api/settings/backup", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def update_backup_settings(settings_update: BackupSettingsUpdate):
+    with Session(engine) as session:
+        settings = session.get(BackupSettings, 1)
+        if not settings:
+            settings = BackupSettings(id=1, **settings_update.dict(exclude_unset=True))
+        else:
+            settings_data = settings_update.dict(exclude_unset=True)
+            for key, value in settings_data.items():
+                if key == "remote_password" and value == "":
+                    continue
+                setattr(settings, key, value)
+            settings.updated_at = datetime.utcnow()
+        
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+        
+        # Update Scheduler
+        update_scheduler(settings)
+        
+        return settings
+
+@app.post("/api/backup/now", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def trigger_backup_manual(request: ManualBackupRequest = None):
+    scheduler.add_job(run_backup_job, args=[True])
+    return {"success": True, "message": "Backup triggered in background."}
+
+@app.post("/api/settings/backup/test", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def test_backup_connection(settings_update: BackupSettingsUpdate):
+    temp_settings = BackupSettings(**settings_update.dict(exclude_unset=True))
+    
+    # If password is empty, try to fetch from DB
+    if not temp_settings.remote_password:
+        with Session(engine) as session:
+             saved_settings = session.get(BackupSettings, 1)
+             if saved_settings and saved_settings.remote_password:
+                 temp_settings.remote_password = saved_settings.remote_password
+
+    test_file = "test_connection.txt"
+    with open(test_file, 'w') as f:
+        f.write("VPN Manager Backup Test Connection")
+    
+    try:
+        success = upload_manager.upload_backup(test_file, temp_settings)
+        if success:
+            return {"success": True, "message": "Connection Successful!"}
+        else:
+            raise HTTPException(status_code=400, detail="Connection Failed. Check logs.")
+    finally:
+        if os.path.exists(test_file):
+            os.remove(test_file)
+
+
+@app.post("/api/machine-network/netplan-apply", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
 async def apply_global_netplan_config():
     """Applies the current Netplan configuration globally."""
     try:
@@ -509,6 +1273,59 @@ async def apply_global_netplan_config():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/api/backup/download", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def download_backup():
+    try:
+        zip_path = backup_logic.create_backup_zip()
+        if not os.path.exists(zip_path):
+             raise HTTPException(status_code=500, detail="Backup creation failed")
+        
+        # Return as downloadable file
+        return FileResponse(
+            path=zip_path, 
+            filename=os.path.basename(zip_path), 
+            media_type='application/zip',
+            background=BackgroundTask(lambda: os.remove(zip_path)) # Cleanup after send
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/backup/restore", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+async def restore_backup_endpoint(file: UploadFile = File(...)):
+    """Restores the system from a backup zip file."""
+    
+    # Save uploaded file temporarily
+    filename = f"restore_{secrets.token_hex(4)}.zip"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+             content = await file.read()
+             buffer.write(content)
+        
+        # Verify zip
+        if not zipfile.is_zipfile(file_path):
+             raise HTTPException(status_code=400, detail="Invalid zip file")
+
+        # Perform Restore
+        backup_logic.restore_backup(file_path)
+        
+        # Trigger Firewall Reload to apply restored rules
+        # Re-apply OpenVPN rules since DB changed
+        try:
+            iptables_manager.apply_all_openvpn_rules()
+            machine_firewall_manager.apply_all_rules()
+        except Exception as ignored:
+            print(f"Post-restore re-apply error: {ignored}")
+            
+        return {"success": True, "message": "Restore completed. Please restart the service to ensure full consistency."}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 @app.get("/")
 async def root():

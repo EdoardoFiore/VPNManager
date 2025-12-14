@@ -1,5 +1,5 @@
 [Unit]
-Description=Restore iptables rules for OpenVPN
+Description=Restore iptables rules for VPN Management System
 Before=network-pre.target
 Wants=network-pre.target
 

@@ -1,0 +1,190 @@
+from typing import Optional, List, Dict
+from datetime import datetime
+from sqlmodel import Field, SQLModel, Relationship, JSON, Column
+import uuid
+import enum
+
+# --- Enums ---
+class UserRole(str, enum.Enum):
+    ADMIN = "admin"
+    ADMIN_READ_ONLY = "admin_readonly"
+    PARTNER = "partner"
+    TECHNICIAN = "technician"  # Formerly OPERATOR
+    VIEWER = "viewer"
+
+# --- Models ---
+
+class UserInstance(SQLModel, table=True):
+    """Many-to-Many link between User (Operator) and Instance"""
+    user_id: str = Field(foreign_key="user.username", primary_key=True)
+    instance_id: str = Field(foreign_key="instance.id", primary_key=True)
+
+class User(SQLModel, table=True):
+    username: str = Field(primary_key=True)
+    hashed_password: str
+    role: UserRole = Field(default=UserRole.VIEWER)
+    is_active: bool = True
+    last_login: Optional[datetime] = None
+    
+    # Relationships
+    assigned_instances: List["Instance"] = Relationship(back_populates="assigned_users", link_model=UserInstance)
+
+class InstanceBase(SQLModel):
+    name: str
+    port: int = Field(unique=True)
+    subnet: str = Field(unique=True)
+    interface: str = Field(unique=True)
+    tunnel_mode: str = "full"
+    routes: List[Dict] = Field(default=[], sa_column=Column(JSON))
+    dns_servers: List[str] = Field(default=["8.8.8.8", "1.1.1.1"], sa_column=Column(JSON))
+    firewall_default_policy: str = "ACCEPT"
+    status: str = "stopped"
+    type: str = "wireguard"
+
+class Instance(InstanceBase, table=True):
+    id: str = Field(primary_key=True)
+    private_key: str
+    public_key: str
+    
+    # Relationships
+    clients: List["Client"] = Relationship(back_populates="instance")
+    groups: List["Group"] = Relationship(back_populates="instance")
+    assigned_users: List[User] = Relationship(back_populates="assigned_instances", link_model=UserInstance)
+
+class InstanceRead(InstanceBase):
+    id: str
+    public_key: str
+    connected_clients: int = 0
+
+class Client(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    instance_id: str = Field(foreign_key="instance.id")
+    name: str
+    private_key: str
+    public_key: str
+    preshared_key: str
+    allocated_ip: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Relationships
+    instance: Instance = Relationship(back_populates="clients")
+    group_links: List["GroupMember"] = Relationship(back_populates="client")
+
+
+class Group(SQLModel, table=True):
+    id: str = Field(primary_key=True) # e.g. "amministrazione_devs"
+    instance_id: str = Field(foreign_key="instance.id")
+    name: str
+    description: str = ""
+
+    # Relationships
+    instance: Instance = Relationship(back_populates="groups")
+    client_links: List["GroupMember"] = Relationship(back_populates="group")
+    rules: List["FirewallRule"] = Relationship(back_populates="group")
+
+class GroupRead(SQLModel):
+    id: str
+    instance_id: str
+    name: str
+    description: str
+    members: List[str] = []
+
+
+
+class GroupMember(SQLModel, table=True):
+    """Junction table for Many-to-Many between Groups and Clients"""
+    group_id: str = Field(foreign_key="group.id", primary_key=True)
+    client_id: uuid.UUID = Field(foreign_key="client.id", primary_key=True)
+
+    group: Group = Relationship(back_populates="client_links")
+    client: Client = Relationship(back_populates="group_links")
+
+
+class FirewallRule(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    group_id: str = Field(foreign_key="group.id")
+    action: str
+    protocol: str
+    port: Optional[str] = None
+    destination: str
+    description: str = ""
+    order: int = 0
+
+    group: Group = Relationship(back_populates="rules")
+
+
+class MachineFirewallRule(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    chain: str
+    action: str
+    protocol: Optional[str] = None
+    source: Optional[str] = None
+    destination: Optional[str] = None
+    port: Optional[str] = None
+    in_interface: Optional[str] = None
+    out_interface: Optional[str] = None
+    state: Optional[str] = None
+    comment: Optional[str] = None
+    table_name: str = Field(default="filter", alias="table") # 'table' is reserved SQL keyword
+    order: int = 0
+
+
+# --- New Models for Email Onboarding ---
+
+class SMTPSettings(SQLModel, table=True):
+    """Singleton table for SMTP Configuration (only id=1 used)"""
+    id: int = Field(default=1, primary_key=True)
+    smtp_host: str
+    smtp_port: int
+    smtp_encryption: str = "tls"  # none, tls, ssl
+    smtp_username: Optional[str] = None
+    # Password should be stored carefully. For now storing plain/hashed? 
+    # Storing plain for function, but ideally encrypted.
+    smtp_password: Optional[str] = None 
+    sender_email: str
+    sender_name: str = "VPN Manager"
+    public_url: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class MagicToken(SQLModel, table=True):
+    """Temporary token for public access to client configuration"""
+    token: str = Field(primary_key=True)
+    client_id: uuid.UUID = Field(foreign_key="client.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime
+    used: bool = False
+
+    # Relationship to get client details (useful for generating config)
+    # Note: SQLModel Relationship usually requires definitions on both sides.
+    # We might not need back_populates on Client if we query manually.
+
+class SystemSettings(SQLModel, table=True):
+    """Singleton table for Portal Customization (only id=1 used)"""
+    id: int = Field(default=1, primary_key=True)
+    company_name: str = "VPN Manager"
+    support_url: Optional[str] = None
+    primary_color: str = "#0054a6"
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class BackupSettings(SQLModel, table=True):
+    """Singleton table for Backup Configuration (only id=1 used)"""
+    id: int = Field(default=1, primary_key=True)
+    enabled: bool = False
+    frequency: str = "daily" # daily, weekly
+    time: str = "03:00"
+    
+    # Remote Settings
+    remote_protocol: str = "sftp" # ftp, sftp
+    remote_host: str = ""
+    remote_port: int = 22
+    remote_user: str = ""
+    remote_password: str = ""
+    remote_path: str = "/"
+    
+    last_run_status: Optional[str] = None
+    last_run_time: Optional[datetime] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+

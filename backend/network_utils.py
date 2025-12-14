@@ -48,7 +48,7 @@ def get_network_interfaces() -> List[Dict[str, str]]:
             interface_name = parts[1].rstrip(':')
             
             # Skip loopback and common virtual/internal interfaces
-            if interface_name.startswith(('lo', 'tun', 'tap', 'docker', 'veth', 'br-', 'lxc', 'bond')):
+            if interface_name.startswith(('lo', 'tun', 'tap', 'docker', 'veth', 'br-', 'lxc', 'bond', 'wg')):
                 continue
             
             # Only process inet (IPv4) addresses for now

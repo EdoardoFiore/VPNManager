@@ -7,9 +7,11 @@ require_once 'includes/header.php';
     <h2>Istanze OpenVPN</h2>
     <div class="d-flex align-items-center gap-2">
         <span class="text-muted small me-2" id="connection-status"></span>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-create-instance">
-            <i class="ti ti-plus icon"></i> Nuova Istanza
-        </button>
+        <?php if (in_array($currentRole, ['admin', 'partner'])): ?>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-create-instance">
+                <i class="ti ti-plus icon"></i> Nuova Istanza
+            </button>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -54,7 +56,8 @@ require_once 'includes/header.php';
                 <form id="createInstanceForm">
                     <div class="mb-3">
                         <label class="form-label">Nome Istanza</label>
-                        <input type="text" class="form-control" name="name" id="instanceNameInput" placeholder="Es: vpn-ufficio" required>
+                        <input type="text" class="form-control" name="name" id="instanceNameInput"
+                            placeholder="Es: vpn-ufficio" required>
                         <div class="invalid-feedback">Il nome può contenere solo lettere, numeri e trattini.</div>
                         <small class="form-hint">Solo lettere, numeri e trattini.</small>
                     </div>
@@ -62,7 +65,8 @@ require_once 'includes/header.php';
                         <div class="col-lg-6">
                             <div class="mb-3">
                                 <label class="form-label">Porta UDP</label>
-                                <input type="number" class="form-control" name="port" placeholder="1194" required>
+                                <input type="number" class="form-control" name="port"
+                                    placeholder="Es: 51820 (Default), 51821-51830" required>
                             </div>
                         </div>
                         <div class="col-lg-6">
@@ -109,6 +113,9 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+<script>
+    const currentUserRole = '<?= $currentRole ?>';
+</script>
 <?php
 $extra_scripts = ['js/dashboard.js'];
 require_once 'includes/footer.php';

@@ -45,6 +45,9 @@ function renderInstanceDetails() {
 async function fetchAndRenderClients() {
     if (!currentInstance) return;
 
+    // Ensure SMTP status is fresh to avoid race conditions
+    await checkSMTPStatus();
+
     try {
         const response = await fetch(`${API_AJAX_HANDLER}?action=get_clients&instance_id=${currentInstance.id}`);
         const result = await response.json();
@@ -72,12 +75,26 @@ async function fetchAndRenderClients() {
                         </td>
                         <td>
                             <div class="d-flex gap-2 justify-content-end">
+                                ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
+                                
+                                ${smtpConfigured ? `
+                                <button class="btn btn-info btn-sm btn-icon" onclick="shareClient('${fullName}')" title="Invia via Email">
+                                    <i class="ti ti-mail"></i>
+                                </button>` : `
+                                <button class="btn btn-ghost-warning btn-sm btn-icon" onclick="showNotification('warning', 'Configura i parametri SMTP nelle Impostazioni per abilitare l\\'invio via email.')" title="SMTP non configurato (Clicca per info)">
+                                    <i class="ti ti-mail-exclamation"></i>
+                                </button>`}
+                                
+                                <button class="btn btn-secondary btn-sm btn-icon" onclick="showQRCode('${fullName}')" title="Mostra QR Code">
+                                    <i class="ti ti-qrcode"></i>
+                                </button>
                                 <button class="btn btn-primary btn-sm btn-icon" onclick="downloadClient('${fullName}')" title="Scarica Configurazione">
                                     <i class="ti ti-download"></i>
                                 </button>
                                 <button class="btn btn-danger btn-sm btn-icon" onclick="revokeClient('${fullName}')" title="Revoca Client">
                                     <i class="ti ti-trash"></i>
                                 </button>
+                                ` : ''}
                             </div>
                         </td>
                     </tr>
@@ -99,17 +116,19 @@ async function fetchAndRenderClients() {
                             </td>
                             <td>
                                 <div>${client.real_ip || '-'}</div>
-                                <div class="small text-muted">VPN: ${client.virtual_ip || '-'}</div>
+                                <div class="small text-muted">VPN: ${client.allocated_ip || '-'}</div>
                             </td>
                             <td class="text-muted">
                                 <div><i class="ti ti-arrow-down icon-sm text-green"></i> ${formatBytes(client.bytes_received)}</div>
                                 <div><i class="ti ti-arrow-up icon-sm text-blue"></i> ${formatBytes(client.bytes_sent)}</div>
                             </td>
-                            <td>${formatDateTime(client.connected_since)}</td>
+
                             <td>
+                                ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
                                 <button class="btn btn-danger btn-sm btn-icon" onclick="revokeClient('${fullName}')">
                                     <i class="ti ti-trash"></i>
                                 </button>
+                                ` : ''}
                             </td>
                         </tr>
                     `;
@@ -128,6 +147,41 @@ async function fetchAndRenderClients() {
         }
     } catch (e) {
         showNotification('danger', 'Errore di connessione: ' + e.message);
+    }
+}
+
+async function showQRCode(clientName) {
+    if (!currentInstance) return;
+
+    try {
+        // Show new Mobile Modal
+        const el = document.getElementById('modal-connect-mobile');
+        const modal = bootstrap.Modal.getOrCreateInstance(el);
+        modal.show();
+
+        const container = document.getElementById('qrcode-container');
+        container.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+
+        // Fetch raw config text
+        const url = `${API_AJAX_HANDLER}?action=download_client&instance_id=${currentInstance.id}&client_name=${clientName}`;
+        const response = await fetch(url);
+
+        if (!response.ok) throw new Error("Impossibile recuperare la configurazione.");
+
+        const configText = await response.text();
+
+        // Render QR
+        container.innerHTML = '';
+        new QRCode(container, {
+            text: configText,
+            width: 200,
+            height: 200,
+            correctLevel: QRCode.CorrectLevel.M
+        });
+
+    } catch (e) {
+        const container = document.getElementById('qrcode-container');
+        if (container) container.innerHTML = `<span class="text-danger">Errore: ${e.message}</span>`;
     }
 }
 
@@ -169,8 +223,102 @@ async function createClient() {
 
 function downloadClient(clientName) {
     if (!currentInstance) return;
-    window.location.href = `${API_AJAX_HANDLER}?action=download_client&instance_id=${currentInstance.id}&client_name=${clientName}`;
+
+    // Show Desktop Modal
+    const modal = new bootstrap.Modal(document.getElementById('modal-connect-desktop'));
+    modal.show();
+
+    // Bind the download button inside the modal
+    const btn = document.getElementById('btn-download-config-action');
+    btn.onclick = () => {
+        window.location.href = `${API_AJAX_HANDLER}?action=download_client&instance_id=${currentInstance.id}&client_name=${clientName}`;
+    };
 }
+
+let smtpConfigured = false;
+async function checkSMTPStatus() {
+    try {
+        const response = await fetch(`${API_AJAX_HANDLER}?action=get_smtp_settings`);
+        const result = await response.json();
+        // If result.body is the settings object directly (as returned by API Main.py)
+        // Main.py returns `settings` model or {}.
+        // Ajax handler returns `json_encode($response)`.
+        // If $response is object, JS sees object.
+        // Wait. `get_smtp_settings` in `main.py` returns `settings`.
+        // `ajax_handler` does NOT wrap in `['success'=>true, 'body'=>...]` for `get_smtp_settings` case?
+        // Let's check `ajax_handler`.
+        // Case `get_smtp_settings`: `$response = get_smtp_settings(); echo json_encode($response);`.
+        // `api_client` `get_smtp_settings` returns `api_request(..., 'GET')`.
+        // `api_request` returns `['success'=>..., 'body'=>...]`.
+        // So `result` in JS is that.
+        // So `result.body.smtp_host`.
+        if (result.success && result.body && result.body.smtp_host) {
+            smtpConfigured = true;
+        }
+    } catch (e) { console.error(e); }
+}
+// Init check
+document.addEventListener('DOMContentLoaded', checkSMTPStatus);
+
+function shareClient(clientName) {
+    if (!smtpConfigured) {
+        showNotification('warning', 'SMTP non configurato. Contatta l\'amministratore.');
+        return;
+    }
+
+    let displayName = clientName;
+    if (currentInstance && clientName.startsWith(currentInstance.name + "_")) {
+        displayName = clientName.replace(currentInstance.name + "_", "");
+    }
+    document.getElementById('share-client-name').textContent = displayName;
+    document.getElementById('share-client-email').value = '';
+
+    // Bind verify button
+    const btn = document.getElementById('btn-share-client-confirm');
+    btn.onclick = () => performShareClient(clientName);
+
+    const el = document.getElementById('modal-share-client');
+    const modal = bootstrap.Modal.getOrCreateInstance(el);
+    modal.show();
+}
+
+async function performShareClient(clientName) {
+    const emailInput = document.getElementById('share-client-email');
+    const email = emailInput.value.trim();
+    if (!email) {
+        emailInput.classList.add('is-invalid');
+        return;
+    }
+
+    const btn = document.getElementById('btn-share-client-confirm');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Invio...';
+    btn.disabled = true;
+
+    try {
+        const formData = new FormData();
+        formData.append('action', 'share_client_config');
+        formData.append('instance_id', currentInstance.id);
+        formData.append('client_name', clientName);
+        formData.append('email', email);
+
+        const response = await fetch(API_AJAX_HANDLER, { method: 'POST', body: formData });
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification('success', 'Email inviata con successo.');
+            bootstrap.Modal.getInstance(document.getElementById('modal-share-client')).hide();
+        } else {
+            showNotification('danger', 'Errore: ' + (result.body.detail || 'Sconosciuto'));
+        }
+    } catch (e) {
+        showNotification('danger', e.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
 
 function revokeClient(clientName) {
     let displayName = clientName;
@@ -394,7 +542,7 @@ async function saveRoutes() {
     // Helper functions for validation
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
     const cidrRegex = /^([0-9]{1,3}\.){3}[0-9]{1,3}\/([0-9]|[1-2][0-9]|3[0-2])$/;
-    
+
     // --- Clear previous validation states ---
     document.querySelectorAll('#routes-edit-mode .is-invalid').forEach(el => el.classList.remove('is-invalid'));
 
@@ -407,7 +555,7 @@ async function saveRoutes() {
                 if (!ipRegex.test(ip)) {
                     isValid = false;
                     dnsInput.classList.add('is-invalid');
-                    break; 
+                    break;
                 }
             }
         }
@@ -420,7 +568,7 @@ async function saveRoutes() {
             const routeId = input.getAttribute('data-edit-route-network');
             const network = input.value.trim();
             const interfaceSelect = document.querySelector(`[data-edit-route-interface="${routeId}"]`);
-            
+
             if (network === '' || !cidrRegex.test(network)) {
                 isValid = false;
                 input.classList.add('is-invalid');
@@ -428,9 +576,9 @@ async function saveRoutes() {
 
             if (!interfaceSelect || interfaceSelect.value === '') {
                 isValid = false;
-                if(interfaceSelect) interfaceSelect.classList.add('is-invalid');
+                if (interfaceSelect) interfaceSelect.classList.add('is-invalid');
             }
-            
+
             if (network && interfaceSelect && interfaceSelect.value) {
                 routes.push({ network: network, interface: interfaceSelect.value });
             }
@@ -441,6 +589,62 @@ async function saveRoutes() {
         showNotification('danger', 'Uno o più campi non sono validi. Controlla e riprova.');
         return;
     }
+
+    // Check if Tunnel Mode Changed
+    if (tunnelMode !== currentInstance.tunnel_mode) {
+        const modalElement = document.getElementById('modal-tunnel-change-confirm');
+        const modalBody = document.getElementById('modal-tunnel-change-body-content');
+
+        // Determine direction
+        const isToSplit = tunnelMode === 'split';
+        const isToFull = tunnelMode === 'full';
+
+        let extraInfo = '';
+
+        if (isToSplit) {
+            extraInfo = `
+                <div class="alert alert-info mt-3">
+                    <i class="ti ti-info-circle icon me-2"></i>
+                    <strong>Firewall Policy:</strong> La policy di default verrà impostata automaticamente su <strong>DROP</strong>.
+                    <br><small class="text-muted">Questo serve a bloccare tutto il traffico non esplicitamente permesso dalle rotte specificate, garantendo la sicurezza in modalità Split Tunnel.</small>
+                </div>
+            `;
+        } else if (isToFull) {
+            extraInfo = `
+                <div class="alert alert-info mt-3">
+                    <i class="ti ti-info-circle icon me-2"></i>
+                    <strong>Nota Firewall:</strong> Se la policy attuale è DROP, ricorda che in Full Tunnel i client potrebbero non riuscire a navigare su Internet se non configuri regole di permesso appropriate (MASQUERADE/Forwarding).
+                    <br><small class="text-muted">Il sistema non cambierà automaticamente la policy in questo caso.</small>
+                </div>
+            `;
+        }
+
+        modalBody.innerHTML = `
+            <p>Stai cambiando la modalità del tunnel da <strong>${currentInstance.tunnel_mode.toUpperCase()}</strong> a <strong>${tunnelMode.toUpperCase()}</strong>.</p>
+            
+            <div class="alert alert-warning">
+                <i class="ti ti-alert-triangle icon me-2"></i>
+                IMPORTANTE: I client <strong>NON</strong> si aggiorneranno da soli.
+            </div>
+            <p>È necessario <strong>riscaricare la configurazione</strong> (o scansionare il QR) su <strong>TUTTI</strong> i client per applicare le nuove regole di routing.</p>
+            
+            ${extraInfo}
+            
+            <p class="mt-3">Vuoi procedere con le modifiche?</p>
+        `;
+
+        const modal = new bootstrap.Modal(modalElement);
+        document.getElementById('confirm-tunnel-change-btn').onclick = () => performRouteSave(tunnelMode, routes, dnsServers);
+        modal.show();
+        return;
+    }
+
+    // If no change, proceed directly
+    performRouteSave(tunnelMode, routes, dnsServers);
+}
+
+async function performRouteSave(tunnelMode, routes, dnsServers) {
+    if (!currentInstance) return;
 
     const payload = {
         action: 'update_instance_routes',

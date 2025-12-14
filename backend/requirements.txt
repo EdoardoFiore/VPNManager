@@ -3,3 +3,9 @@ uvicorn[standard]
 python-dotenv
 python-multipart
 PyYAML
+sqlmodel
+passlib[bcrypt]
+bcrypt==3.2.2
+python-jose[cryptography]
+APScheduler
+paramiko
