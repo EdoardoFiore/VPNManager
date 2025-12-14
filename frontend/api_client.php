@@ -422,3 +422,23 @@ function upload_logo($file, $type)
         'body' => $body ?: $response
     ];
 }
+
+function get_backup_settings()
+{
+    return api_request('/settings/backup', 'GET');
+}
+
+function update_backup_settings($data)
+{
+    return api_request('/settings/backup', 'POST', $data);
+}
+
+function test_backup_connection($data)
+{
+    return api_request('/settings/backup/test', 'POST', $data);
+}
+
+function trigger_manual_backup()
+{
+    return api_request('/backup/now', 'POST');
+}

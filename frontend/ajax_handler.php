@@ -419,6 +419,26 @@ switch ($action) {
         echo json_encode($response);
         break;
 
+    case 'get_backup_settings':
+        echo json_encode(get_backup_settings());
+        break;
+
+    case 'update_backup_settings':
+        $json_data = json_decode($input, true);
+        $data = $json_data ?: $_POST;
+        echo json_encode(update_backup_settings($data));
+        break;
+
+    case 'test_backup_connection':
+        $json_data = json_decode($input, true);
+        $data = $json_data ?: $_POST;
+        echo json_encode(test_backup_connection($data));
+        break;
+
+    case 'trigger_manual_backup':
+        echo json_encode(trigger_manual_backup());
+        break;
+
     default:
 
         echo json_encode(['success' => false, 'body' => ['detail' => 'Azione non riconosciuta.']]);

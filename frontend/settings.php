@@ -30,6 +30,9 @@ if ($currentRole !== 'admin') {
                 <li class="nav-item">
                     <a href="#tabs-smtp" class="nav-link" data-bs-toggle="tab">Configurazione SMTP</a>
                 </li>
+                <li class="nav-item">
+                    <a href="#tabs-backup" class="nav-link" data-bs-toggle="tab">Backup & Ripristino</a>
+                </li>
             </ul>
         </div>
         <div class="card-body">
@@ -79,8 +82,22 @@ if ($currentRole !== 'admin') {
                                     <h3 class="card-title text-muted">Anteprima Branding</h3>
                                     <div class="my-4">
                                         <!-- Placeholder or current logo -->
-                                        <img src="static/logo.svg" id="preview-logo"
-                                            style="max-height: 60px; max-width: 100%; object-fit: contain;">
+                                        <div id="preview-logo-container"
+                                            class="d-flex justify-content-center align-items-center"
+                                            style="height: 60px;">
+                                            <img src="" id="preview-logo-img" class="d-none"
+                                                style="max-height: 60px; max-width: 100%; object-fit: contain;">
+                                            <svg id="preview-logo-default" xmlns="http://www.w3.org/2000/svg" width="48"
+                                                height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon text-primary">
+                                                <path
+                                                    d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                                                <circle cx="12" cy="11" r="3" />
+                                                <line x1="12" y1="14" x2="12" y2="15" />
+                                                <circle cx="12" cy="16" r="1" fill="currentColor" />
+                                            </svg>
+                                        </div>
                                         <h2 class="mt-2" id="preview-company-name">VPN Manager</h2>
                                     </div>
                                     <button class="btn btn-primary" id="preview-btn">Esempio Bottone</button>
@@ -180,13 +197,110 @@ if ($currentRole !== 'admin') {
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<div id="notification-container"></div>
+                <!-- BACKUP Tab -->
+                <div class="tab-pane" id="tabs-backup">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <form id="backup-form">
+                                <div class="mb-3">
+                                    <label class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" name="backup_enabled">
+                                        <span class="form-check-label">Abilita Backup Recorrenti</span>
+                                    </label>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Frequenza</label>
+                                            <select class="form-select" name="backup_frequency">
+                                                <option value="daily">Giornaliero (Daily)</option>
+                                                <option value="weekly">Settimanale (Weekly)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Orario (HH:MM)</label>
+                                            <input type="time" class="form-control" name="backup_time" value="03:00">
+                                        </div>
+                                    </div>
+                                </div>
 
-<script src="js/settings.js"></script>
+                                <h3 class="mt-4">Destinazione Remota</h3>
+                                <div class="mb-3">
+                                    <label class="form-label">Protocollo</label>
+                                    <select class="form-select" name="remote_protocol">
+                                        <option value="sftp">SFTP (SSH)</option>
+                                        <option value="ftp">FTP</option>
+                                    </select>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <div class="mb-3">
+                                            <label class="form-label">Host Remoto</label>
+                                            <input type="text" class="form-control" name="remote_host"
+                                                placeholder="backup.example.com">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Porta</label>
+                                            <input type="number" class="form-control" name="remote_port" value="22">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Username</label>
+                                    <input type="text" class="form-control" name="remote_user" placeholder="backupuser">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Password</label>
+                                    <input type="password" class="form-control" name="remote_password"
+                                        placeholder="********">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Percorso Remoto</label>
+                                    <input type="text" class="form-control" name="remote_path"
+                                        placeholder="/var/backups/vpn">
+                                </div>
 
-<?php require_once 'includes/footer.php'; ?>
+                                <div class="d-flex gap-2 mt-4">
+                                    <button type="submit" class="btn btn-primary" id="btn-save-backup">
+                                        <i class="ti ti-device-floppy me-2"></i> Salva Configurazione
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" id="btn-test-backup">
+                                        <i class="ti ti-plug me-2"></i> Test Connessione
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="col-md-6">
+                            <!-- Status & Manual Backup -->
+                            <div class="card mb-3">
+                                <div class="card-status-top bg-green"></div>
+                                <div class="card-body">
+                                    <h3 class="card-title">Stato Backup</h3>
+                                    <dl class="row">
+                                        <dt class="col-5">Ultimo Backup:</dt>
+                                        <dd class="col-7" id="backup-last-time">-</dd>
+                                        <dt class="col-5">Esito:</dt>
+                                        <dd class="col-7" id="backup-last-status">-</dd>
+                                    </dl>
+                                    <p class="text-muted small">I backup includono il database SQLite e le
+                                        configurazioni WireGuard.</p>
+                                    <button class="btn btn-outline-primary w-100" id="btn-backup-now">
+                                        <i class="ti ti-cloud-upload me-2"></i> Esegui Backup Adesso
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="notification-container"></div>
+
+                <script src="js/settings.js"></script>
+
+                <?php require_once 'includes/footer.php'; ?>

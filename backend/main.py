@@ -17,13 +17,20 @@ import firewall_manager as instance_firewall_manager
 import iptables_manager
 from machine_firewall_manager import machine_firewall_manager
 from database import create_db_and_tables, engine
-from models import User, UserRole, UserInstance, Instance, SMTPSettings, MagicToken, SystemSettings
+from models import User, UserRole, UserInstance, Instance, SMTPSettings, MagicToken, SystemSettings, BackupSettings
 import auth
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import secrets
 from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import backup_logic
+import upload_manager
+
+# Scheduler instance
+scheduler = BackgroundScheduler()
 
 # --- Pydantic Models for Auth ---
 class Token(BaseModel):
@@ -47,6 +54,21 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
     instance_ids: List[str] = []
+
+class BackupSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    frequency: Optional[str] = None
+    time: Optional[str] = None
+    remote_protocol: Optional[str] = None
+    remote_host: Optional[str] = None
+    remote_port: Optional[int] = None
+    remote_user: Optional[str] = None
+    remote_password: Optional[str] = None
+    remote_path: Optional[str] = None
+
+class ManualBackupRequest(BaseModel):
+    note: Optional[str] = None
+
 
 # --- Pydantic Models for App ---
 # --- Pydantic Models for App ---
@@ -209,12 +231,64 @@ class EmailShareRequest(BaseModel):
 # Regex per validare i nomi dei client (permette alfanumerici, underscore, trattini e punti)
 CLIENT_NAME_PATTERN = r"^[a-zA-Z0-9_.-]+$"
 
+# --- Scheduler Logic ---
+def run_backup_job():
+    with Session(engine) as session:
+        settings = session.get(BackupSettings, 1)
+        if not settings or not settings.enabled: return
+        
+        try:
+            zip_path = backup_logic.create_backup_zip()
+            settings.last_run_status = "Success (Local)"
+            
+            if settings.remote_protocol in ['ftp', 'sftp']:
+                success = upload_manager.upload_backup(zip_path, settings)
+                if success:
+                     settings.last_run_status = f"Success ({settings.remote_protocol.upper()})"
+                else:
+                     settings.last_run_status = "Failed (Upload)"
+            
+            settings.last_run_time = datetime.utcnow()
+            # Clean up local zip if desired?
+            # os.remove(zip_path) 
+            
+        except Exception as e:
+             settings.last_run_status = f"Failed: {str(e)}"
+        
+        session.add(settings)
+        session.commit()
+
+def update_scheduler(settings: BackupSettings):
+    scheduler.remove_all_jobs()
+    if settings.enabled:
+        try:
+             h, m = map(int, settings.time.split(':'))
+             trigger_args = {'hour': h, 'minute': m}
+             if settings.frequency == 'weekly':
+                 trigger_args['day_of_week'] = 'sun'
+             
+             scheduler.add_job(run_backup_job, CronTrigger(**trigger_args))
+        except Exception as e:
+             print(f"Error scheduling backup: {e}")
+
 # --- App Init ---
 app = FastAPI(
     title="VPN Manager API",
     description="WireGuard VPN Management with RBAC.",
     version="3.0.0",
 )
+
+@app.on_event("startup")
+def on_startup():
+    scheduler.start()
+    try:
+        with Session(engine) as session:
+            settings = session.get(BackupSettings, 1)
+            if settings:
+                update_scheduler(settings)
+    except Exception as e:
+        print(f"Startup scheduler error: {e}")
+
 
 # --- SMTP Settings Endpoints ---
 
@@ -1100,6 +1174,70 @@ async def update_machine_network_interface_config(interface_name: str, config_da
         current_netplan_full_config["network"]["ethernets"][interface_name] = config_data
 
         if not network_utils.write_netplan_config(config_file_path, current_netplan_full_config):
+             raise HTTPException(status_code=500, detail="Failed to write netplan configuration.")
+             
+        # Apply Logic: netplan apply
+        # WARNING: This might cut network connection!
+        # We should run it async or warn user.
+        # network_utils.apply_netplan() 
+        
+        return {"success": True, "message": "Interface configuration updated."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Backup Endpoints ---
+
+@app.get("/api/settings/backup", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def get_backup_settings():
+    with Session(engine) as session:
+        settings = session.get(BackupSettings, 1)
+        if not settings:
+            return {}
+        return settings
+
+@app.post("/api/settings/backup", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def update_backup_settings(settings_update: BackupSettingsUpdate):
+    with Session(engine) as session:
+        settings = session.get(BackupSettings, 1)
+        if not settings:
+            settings = BackupSettings(id=1, **settings_update.dict(exclude_unset=True))
+        else:
+            settings_data = settings_update.dict(exclude_unset=True)
+            for key, value in settings_data.items():
+                setattr(settings, key, value)
+            settings.updated_at = datetime.utcnow()
+        
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+        
+        # Update Scheduler
+        update_scheduler(settings)
+        
+        return settings
+
+@app.post("/api/backup/now", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def trigger_backup_manual(request: ManualBackupRequest = None):
+    scheduler.add_job(run_backup_job)
+    return {"success": True, "message": "Backup triggered in background."}
+
+@app.post("/api/settings/backup/test", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
+def test_backup_connection(settings_update: BackupSettingsUpdate):
+    temp_settings = BackupSettings(**settings_update.dict(exclude_unset=True))
+    test_file = "test_connection.txt"
+    with open(test_file, 'w') as f:
+        f.write("VPN Manager Backup Test Connection")
+    
+    try:
+        success = upload_manager.upload_backup(test_file, temp_settings)
+        if success:
+            return {"success": True, "message": "Connection Successful!"}
+        else:
+            raise HTTPException(status_code=400, detail="Connection Failed. Check logs.")
+    finally:
+        if os.path.exists(test_file):
+            os.remove(test_file)
+
             raise HTTPException(status_code=500, detail="Failed to write Netplan config file.")
         
         success, error = network_utils.apply_netplan_config()

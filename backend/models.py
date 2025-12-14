@@ -166,6 +166,24 @@ class SystemSettings(SQLModel, table=True):
     primary_color: str = "#0054a6"
     logo_url: Optional[str] = None
     favicon_url: Optional[str] = None
-    custom_css: Optional[str] = None
+
+class BackupSettings(SQLModel, table=True):
+    """Singleton table for Backup Configuration (only id=1 used)"""
+    id: int = Field(default=1, primary_key=True)
+    enabled: bool = False
+    frequency: str = "daily" # daily, weekly
+    time: str = "03:00"
+    
+    # Remote Settings
+    remote_protocol: str = "sftp" # ftp, sftp
+    remote_host: str = ""
+    remote_port: int = 22
+    remote_user: str = ""
+    remote_password: str = ""
+    remote_path: str = "/"
+    
+    last_run_status: Optional[str] = None
+    last_run_time: Optional[datetime] = None
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
 
