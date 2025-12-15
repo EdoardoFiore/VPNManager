@@ -1,7 +1,7 @@
 # Automated WireGuard Manager with Web Interface
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Lang: IT](https://img.shields.io/badge/Lang-IT-red.svg)](README.md)
+[![Lang: IT](https://img.shields.io/badge/Lang-IT-red.svg)](README_IT.md)
 
 A complete system to automate the deployment and management of WireGuard servers on Ubuntu 24.
 This project modernizes VPN management using **WireGuard** (faster, leaner, and more secure than OpenVPN) and offers a modern web dashboard for daily management, built with recent technologies like Python FastAPI, SQLModel, and Tabler.

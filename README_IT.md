@@ -1,8 +1,7 @@
 # Gestore Automatizzato per WireGuard con Interfaccia Web
 
 [![Licenza: MIT](https://img.shields.io/badge/Licenza-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Lang: EN](https://img.shields.io/badge/Lang-EN-blue.svg)](README_EN.md)
-
+[![Lang: EN](https://img.shields.io/badge/Lang-EN-blue.svg)](README.md)
 
 Un sistema completo per automatizzare il deployment e la gestione di server WireGuard su Ubuntu 24.
 Questo progetto modernizza la gestione delle VPN utilizzando **WireGuard** (più veloce, snello e sicuro di OpenVPN) e offre una dashboard web moderna per la gestione quotidiana, costruita con tecnologie recenti come Python FastAPI, SQLModel e Tabler.
@@ -70,9 +69,9 @@ Per chi vuole capire cosa succede "sotto il cofano":
 
 ### Stack Tecnologico
 *   **VPN Note**: WireGuard (Kernel Module).
-*   **Backend**: Python 3.12+ con **FastAPI** e **SQLModel** (ORM per SQLite).
+*   **Backend**: Python 3.12+ con **FastAPI** and **SQLModel** (ORM per SQLite).
 *   **Frontend**: PHP (Logic Layer) + HTML5/JS (Tabler UI) + AJAX per comunicare con le API.
-*   **Server Web**: Nginx (Reverse Proxy & Auth).
+*   **Web Server**: Nginx (Reverse Proxy & Auth).
 
 ### Posizionamento File
 
