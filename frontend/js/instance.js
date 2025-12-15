@@ -15,10 +15,10 @@ async function loadInstanceDetails(instanceId) {
             fetchAndRenderClients();
             displayRoutes();
         } else {
-            showNotification('danger', 'Errore caricamento istanza: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('loading_instance_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -29,12 +29,12 @@ function renderInstanceDetails() {
 
     // Render Port Badge (Soft Color: Blue Lt)
     document.getElementById('current-instance-port').innerHTML = `
-        <span class="badge bg-blue-lt">Port: ${currentInstance.port}</span>
+        <span class="badge bg-blue-lt">${__('port')}: ${currentInstance.port}</span>
     `;
 
     // Render Subnet Badge (Soft Color: Green Lt)
     document.getElementById('current-instance-subnet').innerHTML = `
-        <span class="badge bg-green-lt">Subnet: ${currentInstance.subnet}</span>
+        <span class="badge bg-green-lt">${__('vpn_subnet')}: ${currentInstance.subnet}</span>
     `;
 
     // DNS badge is handled in Routes card logic now
@@ -81,7 +81,7 @@ async function fetchAndRenderClients() {
                                 <button class="btn btn-info btn-sm btn-icon" onclick="shareClient('${fullName}')" title="Invia via Email">
                                     <i class="ti ti-mail"></i>
                                 </button>` : `
-                                <button class="btn btn-ghost-warning btn-sm btn-icon" onclick="showNotification('warning', 'Configura i parametri SMTP nelle Impostazioni per abilitare l\\'invio via email.')" title="SMTP non configurato (Clicca per info)">
+                                <button class="btn btn-ghost-warning btn-sm btn-icon" onclick="showNotification('warning', __('smtp_not_configured_warning'))" title="${__('smtp_not_configured_warning')}">
                                     <i class="ti ti-mail-exclamation"></i>
                                 </button>`}
                                 
@@ -136,17 +136,17 @@ async function fetchAndRenderClients() {
             });
 
             if (clients.length === 0) {
-                availBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">Nessun client.</td></tr>';
+                availBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">' + __('client_list_empty') + '</td></tr>';
             }
             if (connBody.innerHTML === '') {
-                connBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nessun client connesso.</td></tr>';
+                connBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">' + __('connected_client_list_empty') + '</td></tr>';
             }
 
         } else {
-            showNotification('danger', 'Errore caricamento client: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('loading_clients_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -166,7 +166,7 @@ async function showQRCode(clientName) {
         const url = `${API_AJAX_HANDLER}?action=download_client&instance_id=${currentInstance.id}&client_name=${clientName}`;
         const response = await fetch(url);
 
-        if (!response.ok) throw new Error("Impossibile recuperare la configurazione.");
+        if (!response.ok) throw new Error(__('config_download_error'));
 
         const configText = await response.text();
 
@@ -181,7 +181,7 @@ async function showQRCode(clientName) {
 
     } catch (e) {
         const container = document.getElementById('qrcode-container');
-        if (container) container.innerHTML = `<span class="text-danger">Errore: ${e.message}</span>`;
+        if (container) container.innerHTML = `<span class="text-danger">${__('qrcode_error')} ${e.message}</span>`;
     }
 }
 
@@ -194,7 +194,7 @@ async function createClient() {
     const nameRegex = /^[a-zA-Z0-9_.-]+$/;
     if (name === '' || !nameRegex.test(name)) {
         input.classList.add('is-invalid');
-        showNotification('danger', 'Il nome del client non è valido.');
+        showNotification('danger', __('client_name_invalid'));
         return;
     }
     // --- END VALIDATION ---
@@ -210,14 +210,14 @@ async function createClient() {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Client creato.');
+            showNotification('success', __('client_created'));
             input.value = '';
             fetchAndRenderClients();
         } else {
-            showNotification('danger', 'Errore creazione: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('creation_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -262,7 +262,7 @@ document.addEventListener('DOMContentLoaded', checkSMTPStatus);
 
 function shareClient(clientName) {
     if (!smtpConfigured) {
-        showNotification('warning', 'SMTP non configurato. Contatta l\'amministratore.');
+        showNotification('warning', __('smtp_not_configured_warning'));
         return;
     }
 
@@ -306,10 +306,10 @@ async function performShareClient(clientName) {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Email inviata con successo.');
+            showNotification('success', __('email_sent_success'));
             bootstrap.Modal.getInstance(document.getElementById('modal-share-client')).hide();
         } else {
-            showNotification('danger', 'Errore: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('error') + ': ' + (result.body.detail || __('error')));
         }
     } catch (e) {
         showNotification('danger', e.message);
@@ -342,13 +342,13 @@ async function performRevoke(clientName) {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Client revocato.');
+            showNotification('success', __('client_revoked_success'));
             fetchAndRenderClients();
         } else {
-            showNotification('danger', 'Errore revoca: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('revoke_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -359,7 +359,7 @@ function displayRoutes() {
 
     const tunnelModeDisplay = document.getElementById('tunnel-mode-display');
     if (tunnelModeDisplay) {
-        tunnelModeDisplay.textContent = currentInstance.tunnel_mode === 'full' ? 'Full Tunnel' : 'Split Tunnel';
+        tunnelModeDisplay.textContent = currentInstance.tunnel_mode === 'full' ? __('full_tunnel') : __('split_tunnel');
         tunnelModeDisplay.className = `badge bg-${currentInstance.tunnel_mode === 'full' ? 'primary' : 'warning'} ms-2`;
     }
 
@@ -388,9 +388,9 @@ function displayRoutes() {
         list.innerHTML = `
             <div class="list-group-item">
                 <div class="d-flex w-100 justify-content-between">
-                    <h5 class="mb-1">Full Tunnel</h5>
+                    <h5 class="mb-1">${__('full_tunnel')}</h5>
                 </div>
-                <p class="mb-1 text-muted">Tutto il traffico passa attraverso la VPN.</p>
+                <p class="mb-1 text-muted">${__('full_tunnel_desc')}</p>
             </div>
         `;
     } else {
@@ -411,7 +411,7 @@ function displayRoutes() {
                 `;
             });
         } else {
-            list.innerHTML = `<div class="p-3 text-muted text-center">Nessuna rotta personalizzata configurata.</div>`;
+            list.innerHTML = `<div class="p-3 text-muted text-center">${__('no_custom_routes_msg')}</div>`;
         }
     }
 }
@@ -444,10 +444,10 @@ function renderRouteEditContainer() {
         }
         container.innerHTML += `
             <div class="mb-3">
-                <label class="form-label">DNS Servers</label>
+                <label class="form-label">${__('dns_servers')}</label>
                 <input type="text" class="form-control" id="dns-servers-edit-input" value="${dnsValue}" placeholder="Es: 1.1.1.1, 8.8.8.8">
-                <div class="invalid-feedback">Uno o più indirizzi IP non sono validi.</div>
-                <small class="form-hint">Lascia vuoto per usare i default (Google).</small>
+                <div class="invalid-feedback">${__('dns_invalid_error')}</div>
+                <small class="form-hint">${__('dns_hint')}</small>
             </div>
         `;
     }
@@ -488,13 +488,13 @@ async function addRouteEdit(network = '', interfaceName = '') {
         <div class="row mb-2" id="edit-route-${routeId}">
             <div class="col-md-5">
                 <input type="text" class="form-control" placeholder="192.168.1.0/24" data-edit-route-network="${routeId}" value="${network}">
-                <div class="invalid-feedback">Formato CIDR non valido (es. 192.168.1.0/24).</div>
+                <div class="invalid-feedback">${__('cidr_invalid_error')}</div>
             </div>
             <div class="col-md-5">
                 <select class="form-select" data-edit-route-interface="${routeId}" id="edit-route-interface-${routeId}">
-                    <option value="">Seleziona Interfaccia</option>
+                    <option value="">${__('select_interface_error')}</option>
                 </select>
-                <div class="invalid-feedback">Seleziona un'interfaccia.</div>
+                <div class="invalid-feedback">${__('select_interface_error')}</div>
             </div>
             <div class="col-md-2">
                 <button type="button" class="btn btn-danger btn-sm" onclick="removeRouteEdit(${routeId})">
@@ -586,7 +586,7 @@ async function saveRoutes() {
     }
 
     if (!isValid) {
-        showNotification('danger', 'Uno o più campi non sono validi. Controlla e riprova.');
+        showNotification('danger', __('invalid_fields_error'));
         return;
     }
 
@@ -605,32 +605,32 @@ async function saveRoutes() {
             extraInfo = `
                 <div class="alert alert-info mt-3">
                     <i class="ti ti-info-circle icon me-2"></i>
-                    <strong>Firewall Policy:</strong> La policy di default verrà impostata automaticamente su <strong>DROP</strong>.
-                    <br><small class="text-muted">Questo serve a bloccare tutto il traffico non esplicitamente permesso dalle rotte specificate, garantendo la sicurezza in modalità Split Tunnel.</small>
+                    <strong>Firewall Policy:</strong> ${__('split_tunnel_info_policy')}
+                    <br><small class="text-muted">${__('split_tunnel_info_desc')}</small>
                 </div>
             `;
         } else if (isToFull) {
             extraInfo = `
                 <div class="alert alert-info mt-3">
                     <i class="ti ti-info-circle icon me-2"></i>
-                    <strong>Nota Firewall:</strong> Se la policy attuale è DROP, ricorda che in Full Tunnel i client potrebbero non riuscire a navigare su Internet se non configuri regole di permesso appropriate (MASQUERADE/Forwarding).
-                    <br><small class="text-muted">Il sistema non cambierà automaticamente la policy in questo caso.</small>
+                    <strong>Nota Firewall:</strong> ${__('full_tunnel_info_policy')}
+                    <br><small class="text-muted">${__('full_tunnel_info_desc')}</small>
                 </div>
             `;
         }
 
         modalBody.innerHTML = `
-            <p>Stai cambiando la modalità del tunnel da <strong>${currentInstance.tunnel_mode.toUpperCase()}</strong> a <strong>${tunnelMode.toUpperCase()}</strong>.</p>
+            <p>${__('tunnel_change_modal_body_1')} <strong>${currentInstance.tunnel_mode.toUpperCase()}</strong> ${__('tunnel_change_modal_body_2')} <strong>${tunnelMode.toUpperCase()}</strong>.</p>
             
             <div class="alert alert-warning">
                 <i class="ti ti-alert-triangle icon me-2"></i>
-                IMPORTANTE: I client <strong>NON</strong> si aggiorneranno da soli.
+                ${__('tunnel_change_important')}
             </div>
-            <p>È necessario <strong>riscaricare la configurazione</strong> (o scansionare il QR) su <strong>TUTTI</strong> i client per applicare le nuove regole di routing.</p>
+            <p>${__('tunnel_change_redownload')}</p>
             
             ${extraInfo}
             
-            <p class="mt-3">Vuoi procedere con le modifiche?</p>
+            <p class="mt-3">${__('tunnel_change_proceed')}</p>
         `;
 
         const modal = new bootstrap.Modal(modalElement);
@@ -663,15 +663,15 @@ async function performRouteSave(tunnelMode, routes, dnsServers) {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Configurazione aggiornata!');
+            showNotification('success', __('config_updated_success'));
             // Reload details to verify
             loadInstanceDetails(currentInstance.id);
             cancelRouteEdit();
         } else {
-            showNotification('danger', 'Errore aggiornamento: ' + (result.body?.detail || 'Sconosciuto'));
+            showNotification('danger', __('update_error') + (result.body?.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -692,10 +692,10 @@ async function deleteInstanceAction() {
         if (result.success) {
             window.location.href = 'index.php'; // Redirect to dashboard
         } else {
-            showNotification('danger', 'Errore eliminazione: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('delete_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 

@@ -5,7 +5,7 @@ require_once 'includes/header.php';
 
 // Enforce Admin Role
 if (($_SESSION['role'] ?? '') !== 'admin') {
-    die('<div class="container text-center mt-5"><h1>403 Forbidden</h1><p>Access restricted to Administrators.</p></div>');
+    die('<div class="container text-center mt-5"><h1>403 Forbidden</h1><p>' . __('access_restricted') . '</p></div>');
 }
 
 $error = '';
@@ -21,16 +21,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     // Validate: Technician and Viewer require at least one instance_id
     if (in_array($role, ['technician', 'viewer']) && empty($instance_ids)) {
-        $error = "Binding to at least one instance is required for Technicians and Viewers.";
+        $error = __('binding_error');
     } elseif ($username && $password) {
         $result = create_user($username, $password, $role, $instance_ids);
         if ($result['success']) {
-            $success = "User '$username' created successfully.";
+            $success = __('user_created');
         } else {
-            $error = $result['body']['detail'] ?? 'Failed to create user.';
+            $error = $result['body']['detail'] ?? __('error');
         }
     } else {
-        $error = "Username and Password are required.";
+        $error = __('missing_fields');
     }
 }
 
@@ -48,17 +48,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     if ($username && $role) {
         if (in_array($role, ['technician', 'viewer']) && empty($instance_ids)) {
-            $error = "Binding to at least one instance is required for Technicians and Viewers.";
+            $error = __('binding_error');
         } else {
             $result = update_user($username, $data);
             if ($result['success']) {
-                $success = "User '$username' updated successfully.";
+                $success = __('user_updated');
             } else {
-                $error = $result['body']['detail'] ?? 'Failed to update user.';
+                $error = $result['body']['detail'] ?? __('error');
             }
         }
     } else {
-        $error = "Missing required fields for update.";
+        $error = __('missing_fields');
     }
 }
 
@@ -70,9 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     if ($username && $new_password) {
         $result = update_user($username, ['password' => $new_password]);
         if ($result['success']) {
-            $success = "Password updated.";
+            $success = __('user_updated');
         } else {
-            $error = $result['body']['detail'] ?? 'Failed.';
+            $error = $result['body']['detail'] ?? __('error');
         }
     }
 }
@@ -91,7 +91,7 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
             <div class="row align-items-center">
                 <div class="col">
                     <h2 class="page-title">
-                        Gestione Utenti
+                        <?= __('user_management') ?>
                     </h2>
                 </div>
                 <div class="col-auto ms-auto d-print-none">
@@ -104,7 +104,7 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                             <line x1="12" y1="5" x2="12" y2="19" />
                             <line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
-                        Nuovo Utente
+                        <?= __('new_user') ?>
                     </button>
                 </div>
             </div>
@@ -127,7 +127,7 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                             </svg>
                         </div>
                         <div>
-                            <h4 class="alert-title">Errore</h4>
+                            <h4 class="alert-title"><?= __('error') ?></h4>
                             <div class="text-secondary"><?= htmlspecialchars($error) ?></div>
                         </div>
                     </div>
@@ -145,7 +145,7 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                             </svg>
                         </div>
                         <div>
-                            <h4 class="alert-title">Successo</h4>
+                            <h4 class="alert-title"><?= __('success') ?></h4>
                             <div class="text-secondary"><?= htmlspecialchars($success) ?></div>
                         </div>
                     </div>
@@ -157,11 +157,11 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                     <table class="table card-table table-vcenter text-nowrap datatable">
                         <thead>
                             <tr>
-                                <th>Username</th>
-                                <th>Role</th>
-                                <th>Instances</th>
-                                <th>Status</th>
-                                <th class="w-1">Actions</th>
+                                <th><?= __('username_label') ?></th>
+                                <th><?= __('role_label') ?></th>
+                                <th><?= __('instances_label') ?></th>
+                                <th><?= __('status_label') ?></th>
+                                <th class="w-1"><?= __('actions_label') ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -202,9 +202,9 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                                     </td>
                                     <td>
                                         <?php if ($user['is_active']): ?>
-                                            <span class="status status-green">Active</span>
+                                            <span class="status status-green"><?= __('active_status') ?></span>
                                         <?php else: ?>
-                                            <span class="status status-red">Inactive</span>
+                                            <span class="status status-red"><?= __('inactive_status') ?></span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
@@ -223,7 +223,7 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                                             <?php if ($user['username'] !== 'admin' && $user['username'] !== $_SESSION['username']): ?>
                                                 <a href="?delete=<?= urlencode($user['username']) ?>"
                                                     class="btn btn-danger btn-sm"
-                                                    onclick="return confirm('Are you sure?')">Delete</a>
+                                                    onclick="return confirm('<?= __('confirm_delete') ?>')"><?= __('delete_btn') ? __('delete_btn') : 'Delete' ?></a>
                                             <?php endif; ?>
                                         </div>
                                     </td>
@@ -246,25 +246,25 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                 <!-- Username is hidden for edit, displayed for create -->
 
                 <div class="modal-header">
-                    <h5 class="modal-title" id="modal-user-title">Nuovo Utente</h5>
+                    <h5 class="modal-title" id="modal-user-title"><?= __('new_user') ?></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Username</label>
+                        <label class="form-label"><?= __('username_label') ?></label>
                         <input type="text" class="form-control" name="username" id="user-username" required>
                         <div class="form-control-plaintext" id="user-username-display"
                             style="display: none; font-weight: bold;"></div>
-                        <small class="form-hint" id="username-hint">Non potrà essere cambiato successivamente.</small>
+                        <small class="form-hint" id="username-hint"><?= __('username_hint_lock') ?></small>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" id="password-label">Password</label>
+                        <label class="form-label" id="password-label"><?= __('password_label') ?></label>
                         <input type="password" class="form-control" name="password" id="user-password" required>
                         <small class="form-hint" id="password-hint" style="display: none;">Lascia vuoto per mantenere la
                             password attuale.</small>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Ruolo</label>
+                        <label class="form-label"><?= __('role_label') ?></label>
                         <select class="form-select" name="role" id="user-role-select" onchange="toggleInstanceSelect()">
                             <option value="viewer">Viewer (Scoped Read-Only)</option>
                             <option value="technician">Technician (Scoped Management)</option>
@@ -276,7 +276,7 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                     </div>
                     <!-- Instance Select (Checkbox List) -->
                     <div class="mb-3" id="instance-select-container" style="display: none;">
-                        <label class="form-label">Assegna Istanze</label>
+                        <label class="form-label"><?= __('assign_instances') ?></label>
                         <div class="card p-2" style="max-height: 200px; overflow-y: auto;">
                             <?php foreach ($instances as $inst): ?>
                                 <label class="form-check">
@@ -289,12 +289,12 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                                 </label>
                             <?php endforeach; ?>
                         </div>
-                        <small class="form-hint">Seleziona le istanze a cui questo utente può accedere.</small>
+                        <small class="form-hint"><?= __('assign_instances_desc') ?></small>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
-                    <button type="submit" class="btn btn-primary" id="modal-submit-btn">Salva</button>
+                    <button type="button" class="btn me-auto" data-bs-dismiss="modal"><?= __('cancel') ?></button>
+                    <button type="submit" class="btn btn-primary" id="modal-submit-btn"><?= __('save_btn') ? __('save_btn') : 'Salva' ?></button>
                 </div>
             </form>
         </div>
@@ -344,8 +344,8 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
     function resetUserModal() {
         document.getElementById('user-form').reset();
         document.getElementById('form-action').value = 'create';
-        document.getElementById('modal-user-title').textContent = 'Nuovo Utente';
-        document.getElementById('modal-submit-btn').textContent = 'Crea Utente';
+        document.getElementById('modal-user-title').textContent = '<?= __('new_user') ?>';
+        document.getElementById('modal-submit-btn').textContent = '<?= __('create_user') ?>';
 
         // Username Editable
         document.getElementById('user-username').style.display = 'block';
@@ -379,8 +379,8 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
 
         // Set Edit Mode
         document.getElementById('form-action').value = 'update_user_full';
-        document.getElementById('modal-user-title').textContent = 'Modifica Utente';
-        document.getElementById('modal-submit-btn').textContent = 'Aggiorna Utente';
+        document.getElementById('modal-user-title').textContent = '<?= __('edit_user') ?>';
+        document.getElementById('modal-submit-btn').textContent = '<?= __('update_user') ?>';
 
         // Username Readonly
         const usernameInput = document.getElementById('user-username');

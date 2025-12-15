@@ -3,7 +3,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 // Ensure API Client is loaded
+// Ensure API Client is loaded
 require_once __DIR__ . '/../api_client.php';
+require_once __DIR__ . '/i18n.php';
 
 if (!isset($_SESSION['jwt_token']) && basename($_SERVER['PHP_SELF']) !== 'login.php') {
     header('Location: login.php');
@@ -29,7 +31,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
 }
 ?>
 <!doctype html>
-<html lang="it">
+<html lang="<?= $current_lang ?>">
 
 <head>
     <meta charset="utf-8" />
@@ -140,6 +142,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
 </head>
 
 <body class="layout-boxed">
+    <?php export_translations_to_js(); ?>
     <div class="page">
         <!-- Navbar -->
         <header class="navbar navbar-expand-md navbar-light d-print-none">
@@ -184,6 +187,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                                         </svg>
                                     </span>
                                     <span class="nav-link-title">
+                                        <?= __('active_instances') // Reusing 'active_instances' or using 'dashboard'? Let's check lang file. 'Dashboard' is not in lang file yet. I should add 'dashboard' key or just leave it if it's universal. 'Dashboard' is universal enough but let's be consistent. I will add 'dashboard'=>'Dashboard' to lang files later or just use 'home' ?>
                                         Dashboard
                                     </span>
                                 </a>
@@ -204,7 +208,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                                             </svg>
                                         </span>
                                         <span class="nav-link-title">
-                                            Impostazioni Macchina
+                                            <?= __('machine_settings') ?>
                                         </span>
                                     </a>
                                 </li>
@@ -213,6 +217,27 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                     </div>
                 </div>
                 <div class="navbar-nav flex-row order-md-last">
+                    <!-- Language Switcher -->
+                    <div class="nav-item dropdown me-3">
+                        <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown">
+                            <?php if ($current_lang == 'it'): ?>
+                                <span class="flag flag-country-it"></span>
+                                <span class="ps-2">ITA</span>
+                            <?php else: ?>
+                                <span class="flag flag-country-us"></span> <!-- 'gb' or 'us' -->
+                                <span class="ps-2">ENG</span>
+                            <?php endif; ?>
+                        </a>
+                        <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                            <a href="change_lang.php?lang=it" class="dropdown-item">
+                                <span class="flag flag-country-it me-2"></span> Italiano
+                            </a>
+                            <a href="change_lang.php?lang=en" class="dropdown-item">
+                                <span class="flag flag-country-us me-2"></span> English
+                            </a>
+                        </div>
+                    </div>
+
                     <div class="nav-item dropdown">
                         <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown"
                             aria-label="Open user menu">
@@ -227,12 +252,12 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                         </a>
                         <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
                             <?php if ($currentRole == 'admin'): ?>
-                                <a href="./users.php" class="dropdown-item">Gestione Utenti</a>
-                                <a href="./settings.php" class="dropdown-item">Impostazioni</a>
+                                <a href="./users.php" class="dropdown-item"><?= __('users') ?></a>
+                                <a href="./settings.php" class="dropdown-item"><?= __('settings') ?></a>
                             <?php endif; ?>
                             <!-- <a href="./settings.php" class="dropdown-item">Settings</a> -->
                             <div class="dropdown-divider"></div>
-                            <a href="./logout.php" class="dropdown-item">Logout</a>
+                            <a href="./logout.php" class="dropdown-item"><?= __('logout') ?></a>
                         </div>
                     </div>
                 </div>

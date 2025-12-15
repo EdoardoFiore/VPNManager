@@ -939,13 +939,13 @@ async def create_client(instance_id: str, request: ClientRequest, current_user: 
              raise HTTPException(status_code=403, detail="Access denied to this instance.")
     client_name = request.client_name
     if not client_name or not re.fullmatch(CLIENT_NAME_PATTERN, client_name):
-        raise HTTPException(status_code=400, detail="Nome client non valido.")
+        raise HTTPException(status_code=400, detail="Client name is not valid.")
 
     success, error = vpn_manager.create_client(instance_id, client_name)
     if not success:
         raise HTTPException(status_code=500, detail=error)
 
-    return {"message": f"Client '{client_name}' creato con successo."}
+    return {"message": f"Client '{client_name}' successfully created."}
 
 @app.get("/api/instances/{instance_id}/clients/{client_name}/download", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
 async def download_client_config(instance_id: str, client_name: str, current_user: User = Depends(auth.get_current_user)):
@@ -961,7 +961,7 @@ async def download_client_config(instance_id: str, client_name: str, current_use
         raise HTTPException(status_code=404, detail="Instance not found")
 
     if not client_name or not re.fullmatch(CLIENT_NAME_PATTERN, client_name):
-        raise HTTPException(status_code=400, detail="Nome client non valido.")
+        raise HTTPException(status_code=400, detail="Client name is not valid.")
     
     config_content, error = vpn_manager.get_client_config(client_name, instance_id)
     if error:
@@ -983,7 +983,7 @@ async def revoke_client(instance_id: str, client_name: str, current_user: User =
         if not any(inst.id == instance_id for inst in user_instances):
              raise HTTPException(status_code=403, detail="Access denied to this instance.")
     if not client_name or not re.fullmatch(CLIENT_NAME_PATTERN, client_name):
-        raise HTTPException(status_code=400, detail="Nome client non valido.")
+        raise HTTPException(status_code=400, detail="Client name is not valid.")
 
     success, message = vpn_manager.revoke_client(instance_id, client_name)
     if not success:

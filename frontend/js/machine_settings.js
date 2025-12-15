@@ -161,7 +161,7 @@ async function loadMachineFirewallRules() {
 
     bodies.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.innerHTML = '<tr><td colspan="10" class="text-center text-muted">Caricamento regole...</td></tr>';
+        if (el) el.innerHTML = '<tr><td colspan="10" class="text-center text-muted">' + __('loading_rules') + '</td></tr>';
     });
 
     try {
@@ -198,17 +198,17 @@ async function loadMachineFirewallRules() {
             });
 
         } else {
-            showNotification('danger', 'Errore caricamento regole firewall macchina: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('loading_rules_error') + ' ' + (result.body.detail || __('error')));
             bodies.forEach(id => {
                 const el = document.getElementById(id);
-                if (el) el.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore caricamento.</td></tr>';
+                if (el) el.innerHTML = '<tr><td colspan="10" class="text-center text-danger">' + __('loading_rules_error_short') + '</td></tr>';
             });
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione caricando regole firewall macchina: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
         bodies.forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore.</td></tr>';
+            if (el) el.innerHTML = '<tr><td colspan="10" class="text-center text-danger">' + __('error') + '</td></tr>';
         });
     }
 }
@@ -261,7 +261,7 @@ function renderMachineFirewallRules() {
     Object.values(bodies).forEach(el => { if (el) el.innerHTML = ''; });
 
     if (machineFirewallRules.length === 0) {
-        Object.values(bodies).forEach(el => { if (el) el.innerHTML = '<tr><td colspan="10" class="text-center text-muted">Nessuna regola definita.</td></tr>'; });
+        Object.values(bodies).forEach(el => { if (el) el.innerHTML = '<tr><td colspan="10" class="text-center text-muted">' + __('no_rules_defined') + '</td></tr>'; });
         return;
     }
 
@@ -341,7 +341,7 @@ function renderMachineFirewallRules() {
     Object.values(bodies).forEach(el => {
         if (el && el.children.length === 0) {
             const colSpan = (el === bodies.other || el === bodies.forward) ? 10 : 9;
-            el.innerHTML = `<tr><td colspan="${colSpan}" class="text-center text-muted">Nessuna regola in questa sezione.</td></tr>`;
+            el.innerHTML = `<tr><td colspan="${colSpan}" class="text-center text-muted">${__('no_rules_in_section')}</td></tr>`;
         }
     });
 }
@@ -364,7 +364,7 @@ async function addMachineFirewallRule() {
 
     // Basic validation
     if (!ruleData.chain || !ruleData.action) {
-        showNotification('danger', 'Chain e Azione sono campi obbligatori.');
+        showNotification('danger', __('chain_action_required'));
         return;
     }
 
@@ -377,21 +377,21 @@ async function addMachineFirewallRule() {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Regola firewall globale aggiunta con successo.');
+            showNotification('success', __('global_rule_added_success'));
             bootstrap.Modal.getInstance(document.getElementById('modal-add-machine-rule')).hide();
             await loadMachineFirewallRules();
         } else {
-            showNotification('danger', 'Errore aggiunta regola: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('add_rule_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
 function confirmDeleteMachineRule(ruleId) {
     const rule = machineFirewallRules.find(r => r.id === ruleId);
     if (!rule) {
-        showNotification('danger', 'Regola non trovata per l\'eliminazione.');
+        showNotification('danger', __('rule_not_found_delete'));
         return;
     }
 
@@ -402,12 +402,12 @@ function confirmDeleteMachineRule(ruleId) {
     if (rule.action === 'MASQUERADE') badgeClass = 'bg-info';
 
     const ruleDescriptionHtml = `
-        <strong>Azione:</strong> <span class="badge ${badgeClass}">${rule.action}</span><br>
-        <strong>Chain:</strong> ${rule.chain}<br>
-        <strong>Protocollo:</strong> ${rule.protocol ? rule.protocol.toUpperCase() : 'ANY'}<br>
-        <strong>Destinazione:</strong> <code>${rule.destination || 'ANY'}</code><br>
-        <strong>Porta:</strong> ${rule.port || '*'}<br>
-        <strong>Sorgente:</strong> <code>${rule.source || 'ANY'}</code>
+        <strong>${__('action_label')}:</strong> <span class="badge ${badgeClass}">${rule.action}</span><br>
+        <strong>${__('chain_label')}:</strong> ${rule.chain}<br>
+        <strong>${__('protocol_label')}:</strong> ${rule.protocol ? rule.protocol.toUpperCase() : 'ANY'}<br>
+        <strong>${__('destination_label')}:</strong> <code>${rule.destination || 'ANY'}</code><br>
+        <strong>${__('port_label')}:</strong> ${rule.port || '*'}<br>
+        <strong>${__('source_label')}:</strong> <code>${rule.source || 'ANY'}</code>
     `;
 
     document.getElementById('delete-machine-rule-summary').innerHTML = ruleDescriptionHtml;
@@ -423,13 +423,13 @@ async function performDeleteMachineRule(ruleId) {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Regola firewall globale eliminata.');
+            showNotification('success', __('global_rule_deleted_success'));
             await loadMachineFirewallRules();
         } else {
-            showNotification('danger', 'Errore eliminazione regola: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('delete_rule_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -448,14 +448,14 @@ async function applyMachineFirewallRules() {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Modifiche alle regole firewall globali applicate con successo.');
+            showNotification('success', __('apply_global_rules_success'));
         } else {
-            showNotification('danger', 'Errore applicazione regole: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('apply_rules_error') + (result.body.detail || __('error')));
             // If applying fails, reload the state from the server to prevent UI inconsistencies
             await loadMachineFirewallRules();
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
         await loadMachineFirewallRules();
     }
 }
@@ -478,7 +478,7 @@ function toggleMachinePortInput(protocol, modalType) {
 
 async function loadNetworkInterfaces() {
     const tbody = document.getElementById('network-interfaces-table-body');
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Caricamento interfacce...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">' + __('loading_interfaces') + '</td></tr>';
 
     try {
         const response = await fetch(`${API_AJAX_HANDLER}?action=get_machine_network_interfaces`);
@@ -488,12 +488,12 @@ async function loadNetworkInterfaces() {
             networkInterfaces = result.body;
             renderNetworkInterfaces();
         } else {
-            showNotification('danger', 'Errore caricamento interfacce di rete: ' + (result.body.detail || 'Sconosciuto'));
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Errore caricamento.</td></tr>';
+            showNotification('danger', __('loading_interfaces_error') + (result.body.detail || __('error')));
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">' + __('loading_rules_error_short') + '</td></tr>';
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione caricando interfacce di rete: ' + e.message);
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Errore di connessione.</td></tr>';
+        showNotification('danger', __('connection_error') + e.message);
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">' + __('connection_error') + '</td></tr>';
     }
 }
 
@@ -502,7 +502,7 @@ function renderNetworkInterfaces() {
     tbody.innerHTML = '';
 
     if (networkInterfaces.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nessuna interfaccia di rete trovata.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">' + __('no_interfaces_found') + '</td></tr>';
         return;
     }
 
@@ -544,7 +544,7 @@ function renderNetworkInterfaces() {
 async function openEditNetworkInterfaceModal(interfaceName) {
     currentEditingInterface = networkInterfaces.find(iface => iface.name === interfaceName);
     if (!currentEditingInterface) {
-        showNotification('danger', `Interfaccia ${interfaceName} non trovata.`);
+        showNotification('danger', __('interface_not_found') + ` ${interfaceName}`);
         return;
     }
 
@@ -583,10 +583,10 @@ async function openEditNetworkInterfaceModal(interfaceName) {
             new bootstrap.Modal(document.getElementById('modal-edit-network-interface')).show();
 
         } else {
-            showNotification('danger', 'Errore caricamento configurazione Netplan: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('netplan_config_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione caricando configurazione Netplan: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -626,7 +626,7 @@ async function saveNetworkInterfaceConfig() {
             const val = input.value.trim();
             if (val) {
                 if (!/^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(val)) {
-                    showNotification('danger', `Indirizzo IP non valido: ${val}`);
+                    showNotification('danger', `${__('invalid_ip_error')} ${val}`);
                     return;
                 }
                 ipAddresses.push(val);
@@ -664,14 +664,14 @@ async function saveNetworkInterfaceConfig() {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Configurazione interfaccia salvata e applicata con successo.');
+            showNotification('success', __('interface_config_saved_success'));
             bootstrap.Modal.getInstance(document.getElementById('modal-edit-network-interface')).hide();
             loadNetworkInterfaces();
         } else {
-            showNotification('danger', 'Errore salvataggio configurazione: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('save_config_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -681,7 +681,7 @@ async function saveNetworkInterfaceConfig() {
 function openEditMachineRuleModal(ruleId) {
     const rule = machineFirewallRules.find(r => r.id === ruleId);
     if (!rule) {
-        showNotification('danger', 'Regola non trovata per la modifica.');
+        showNotification('danger', __('rule_not_found_edit'));
         return;
     }
 
@@ -763,7 +763,7 @@ async function updateMachineFirewallRule() {
     };
 
     if (!ruleData.chain || !ruleData.action) {
-        showNotification('danger', 'Chain e Azione sono campi obbligatori.');
+        showNotification('danger', __('chain_action_required'));
         return;
     }
 
@@ -776,14 +776,14 @@ async function updateMachineFirewallRule() {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Regola firewall aggiornata con successo.');
+            showNotification('success', __('rule_updated_success'));
             bootstrap.Modal.getInstance(document.getElementById('modal-edit-machine-rule')).hide();
             await loadMachineFirewallRules();
         } else {
-            showNotification('danger', 'Errore aggiornamento regola: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('update_rule_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 

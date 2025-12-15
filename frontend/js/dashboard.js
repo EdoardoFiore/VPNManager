@@ -10,7 +10,7 @@ async function loadInstances() {
         if (result.success) {
             const instances = result.body;
             if (instances.length === 0) {
-                container.innerHTML = '<div class="col-12 text-center text-muted p-5">Nessuna istanza configurata. Creane una nuova.</div>';
+                container.innerHTML = '<div class="col-12 text-center text-muted p-5">' + __('no_instances_config') + '</div>';
                 return;
             }
 
@@ -29,12 +29,12 @@ async function loadInstances() {
                                     <div><strong>Subnet:</strong> ${inst.subnet}</div>
                                     <div class="mt-2 text-dark">
                                         <span class="badge ${inst.tunnel_mode === 'full' ? 'bg-primary-lt' : 'bg-warning-lt'}">
-                                            ${inst.tunnel_mode === 'full' ? 'Full Tunnel' : 'Split Tunnel'}
+                                            ${inst.tunnel_mode === 'full' ? __('full_tunnel') : __('split_tunnel')}
                                         </span>
                                     </div>
                                     <div class="d-flex align-items-center mt-2">
                                         <i class="ti ti-users me-1"></i>
-                                        <strong>${inst.connected_clients || 0}</strong> &nbsp;Client Attivi
+                                        <strong>${inst.connected_clients || 0}</strong> &nbsp;${__('active_clients')}
                                     </div>
                                 </div>
                             </div>
@@ -44,10 +44,10 @@ async function loadInstances() {
                 container.innerHTML += html;
             });
         } else {
-            showNotification('danger', 'Errore caricamento istanze: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('loading_instances_error') + ' ' + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -95,7 +95,7 @@ function addRoute() {
             </div>
             <div class="col-md-5">
                 <select class="form-select" data-route-interface="${routeId}" id="route-interface-${routeId}">
-                    <option value="">Seleziona Interfaccia</option>
+                    <option value="">${__('select_interface_placeholder')}</option>
                 </select>
             </div>
             <div class="col-md-2">
@@ -140,7 +140,7 @@ async function createInstance() {
     const nameRegex = /^[a-zA-Z0-9-]+$/;
     if (instanceNameInput.value.trim() === '' || !nameRegex.test(instanceNameInput.value)) {
         instanceNameInput.classList.add('is-invalid');
-        showNotification('danger', 'Il nome dell\'istanza non è valido.');
+        showNotification('danger', __('instance_name_invalid'));
         return;
     }
     // --- END VALIDATION ---
@@ -190,7 +190,7 @@ async function createInstance() {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Istanza creata con successo!');
+            showNotification('success', __('instance_created_success'));
 
             const modalEl = document.getElementById('modal-create-instance');
             const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -208,10 +208,10 @@ async function createInstance() {
             routeCounter = 0;
             loadInstances();
         } else {
-            showNotification('danger', 'Errore creazione: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('creation_error') + ' ' + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -247,7 +247,7 @@ async function loadTopClients() {
         if (result.success) {
             const clients = result.body;
             if (clients.length === 0) {
-                container.innerHTML = '<div class="text-muted text-center py-3">Nessun client attivo al momento.</div>';
+                container.innerHTML = '<div class="text-muted text-center py-3">' + __('no_active_clients') + '</div>';
                 return;
             }
 
@@ -277,7 +277,7 @@ async function loadTopClients() {
                             </div>
                             <div class="text-end">
                                 <span class="fw-bold text-dark">${formatBytes(client.total_bytes)}</span>
-                                <div class="text-muted small">Connesso: ${timeStr}</div>
+                                <div class="text-muted small">${__('connected_label')} ${timeStr}</div>
                             </div>
                         </div>
                         <div class="progress progress-sm">

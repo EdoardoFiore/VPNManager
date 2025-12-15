@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once 'api_client.php';
+require_once 'includes/i18n.php'; // Include i18n
+
 
 // Fetch Branding
 $brandName = 'VPN Manager';
@@ -44,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = $result['error'];
         }
     } else {
-        $error = 'Inserisci username e password.';
+        $error = __('login_error_missing');
     }
 }
 ?>
@@ -110,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <div class="card card-md">
                 <div class="card-body">
-                    <h2 class="h2 text-center mb-4">Accedi al tuo account</h2>
+                    <h2 class="h2 text-center mb-4"><?= __('login_header') ?></h2>
                     <?php if ($error): ?>
                         <div class="alert alert-danger" role="alert">
                             <?= htmlspecialchars($error) ?>
@@ -118,19 +120,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php endif; ?>
                     <form action="./login.php" method="post" autocomplete="off" novalidate>
                         <div class="mb-3">
-                            <label class="form-label">Username</label>
-                            <input type="text" name="username" class="form-control" placeholder="admin"
+                            <label class="form-label"><?= __('username_label') ?></label>
+                            <input type="text" name="username" class="form-control" placeholder="<?= __('login_placeholder_user') ?>"
                                 autocomplete="off" required>
                         </div>
                         <div class="mb-2">
                             <label class="form-label">
-                                Password
+                                <?= __('password_label') ?>
                             </label>
-                            <input type="password" name="password" class="form-control" placeholder="Tua password"
+                            <input type="password" name="password" class="form-control" placeholder="<?= __('login_placeholder_pass') ?>"
                                 autocomplete="off" required>
                         </div>
                         <div class="form-footer">
-                            <button type="submit" class="btn btn-primary w-100">Accedi</button>
+                            <button type="submit" class="btn btn-primary w-100"><?= __('login_btn') ?></button>
                         </div>
                     </form>
                 </div>

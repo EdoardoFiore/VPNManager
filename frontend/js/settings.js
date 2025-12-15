@@ -162,7 +162,7 @@ async function saveSystemSettings() {
     const form = document.getElementById('system-settings-form');
     const btn = form.querySelector('button[type="submit"]');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Salvataggio...';
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> ' + __('saving');
     btn.disabled = true;
 
     try {
@@ -181,7 +181,7 @@ async function saveSystemSettings() {
         });
         const textResult = await textResponse.json();
 
-        if (!textResult.success) throw new Error(textResult.body.detail || 'Errore salvataggio dati.');
+        if (!textResult.success) throw new Error(textResult.body.detail || __('save_data_error'));
 
 
         // 2. Logo Upload
@@ -194,7 +194,7 @@ async function saveSystemSettings() {
 
             const logoResponse = await fetch(API_AJAX_HANDLER, { method: 'POST', body: formData });
             const logoResult = await logoResponse.json();
-            if (!logoResult.success) throw new Error('Errore upload logo: ' + (logoResult.body.detail));
+            if (!logoResult.success) throw new Error(__('logo_upload_error') + ' ' + (logoResult.body.detail));
 
             // Update preview immediately
             if (logoResult.body.url) {
@@ -208,7 +208,7 @@ async function saveSystemSettings() {
             }
         }
 
-        showNotification('success', 'Personalizzazione salvata! Ricaricamento...');
+        showNotification('success', __('customization_saved'));
         setTimeout(() => location.reload(), 1500);
 
     } catch (e) {
@@ -237,12 +237,12 @@ async function loadSMTPSettings() {
             form.querySelector('[name="public_url"]').value = data.public_url || '';
             // Password logic: likely don't show it back, or show placeholder
             if (data.smtp_password) {
-                form.querySelector('[name="smtp_password"]').placeholder = "******** (Salvata)";
+                form.querySelector('[name="smtp_password"]').placeholder = __('password_saved_placeholder');
             }
         }
     } catch (e) {
         console.error("Error loading settings:", e);
-        showNotification('danger', 'Errore nel caricamento delle impostazioni.');
+        showNotification('danger', __('settings_load_error'));
     }
 }
 
@@ -268,26 +268,26 @@ async function saveSMTPSettings() {
 
         const result = await response.json();
         if (result.success) {
-            showNotification('success', 'Impostazioni SMTP salvate.');
+            showNotification('success', __('smtp_settings_saved'));
         } else {
-            showNotification('danger', 'Errore salvataggio: ' + (result.body.detail || result.error));
+            showNotification('danger', __('save_error') + ' ' + (result.body.detail || result.error));
         }
 
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
 async function testSMTPSettings() {
     const email = document.getElementById('test-email-dest').value;
     if (!email) {
-        showNotification('warning', 'Inserisci una email destinatario.');
+        showNotification('warning', __('enter_dest_email'));
         return;
     }
 
     const btn = document.getElementById('btn-test-smtp');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Invio...';
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> ' + __('sending');
     btn.disabled = true;
 
     try {
@@ -302,12 +302,12 @@ async function testSMTPSettings() {
 
         const result = await response.json();
         if (result.success) {
-            showNotification('success', 'Email di test inviata con successo!');
+            showNotification('success', __('test_email_success'));
         } else {
-            showNotification('danger', 'Errore invio: ' + (result.body.detail || result.error));
+            showNotification('danger', __('send_error') + ' ' + (result.body.detail || result.error));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -337,7 +337,7 @@ async function loadBackupSettings() {
                 form.querySelector('[name="remote_path"]').value = data.remote_path || '/';
 
                 // Status Update
-                const lastStatus = data.last_run_status || 'Mai eseguito';
+                const lastStatus = data.last_run_status || __('never_executed');
                 const lastTime = data.last_run_time ? new Date(data.last_run_time).toLocaleString() : '-';
 
                 const statusEl = document.getElementById('backup-last-status');
@@ -350,7 +350,7 @@ async function loadBackupSettings() {
                 if (btnRemote) {
                     if (!data.remote_host || !data.remote_user) {
                         btnRemote.disabled = true;
-                        btnRemote.title = "Configura Host e Utente remoto per abilitare.";
+                        btnRemote.title = __('backup_remote_hint');
                     } else {
                         btnRemote.disabled = false;
                         btnRemote.title = "";
@@ -367,7 +367,7 @@ async function saveBackupSettings() {
     const form = document.getElementById('backup-form');
     const btn = document.getElementById('btn-save-backup');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Salvataggio...';
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> ' + __('saving');
     btn.disabled = true;
 
     try {
@@ -395,13 +395,13 @@ async function saveBackupSettings() {
 
         const result = await res.json();
         if (result.success) {
-            showNotification('success', 'Configurazione Backup salvata!');
+            showNotification('success', __('backup_config_saved'));
             loadBackupSettings(); // Reload to refresh status
         } else {
-            throw new Error(result.error || (result.body && result.body.detail) || 'Errore sconosciuto');
+            throw new Error(result.error || (result.body && result.body.detail) || __('unknown_error'));
         }
     } catch (e) {
-        showNotification('danger', 'Errore salvataggio: ' + e.message);
+        showNotification('danger', __('save_error') + ' ' + e.message);
     } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -434,12 +434,12 @@ async function testBackupConnection() {
 
         const result = await res.json();
         if (result.success) {
-            showNotification('success', 'Connessione Riuscita!');
+            showNotification('success', __('connection_success'));
         } else {
-            showNotification('danger', 'Test Fallito: ' + (result.body?.detail || result.error || 'Errore'));
+            showNotification('danger', __('test_failed') + ' ' + (result.body?.detail || result.error || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore Test: ' + e.message);
+        showNotification('danger', __('test_error') + ' ' + e.message);
     } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -455,19 +455,19 @@ function triggerRemoteBackup() {
 async function executeRemoteBackup() {
     const btn = document.getElementById('btn-backup-remote');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Avvio...';
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> ' + __('starting');
     btn.disabled = true;
     try {
         const response = await fetch(`${API_AJAX_HANDLER}?action=trigger_manual_backup`);
         const result = await response.json();
         if (result.success) {
-            showNotification('success', 'Backup avviato in background (Remoto).');
+            showNotification('success', __('backup_started_remote'));
             setTimeout(loadBackupSettings, 2000);
         } else {
-            showNotification('danger', 'Errore avvio backup: ' + (result.body?.detail || 'Sconosciuto'));
+            showNotification('danger', __('backup_start_error') + ' ' + (result.body?.detail || __('unknown_error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore backup: ' + e.message);
+        showNotification('danger', __('backup_error') + ' ' + e.message);
     } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -487,7 +487,7 @@ async function executeRestoreLogic(form) {
     if (fileInput.files.length === 0) return;
 
     btn.disabled = true;
-    btn.innerHTML = 'Ripristino in corso...';
+    btn.innerHTML = __('restore_in_progress');
     progressBar.classList.remove('d-none');
 
     const formData = new FormData();
@@ -504,18 +504,18 @@ async function executeRestoreLogic(form) {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Ripristino Completato! Ricarica la pagina.');
-            alert("Ripristino completato con successo. La pagina verrà ricaricata.");
+            showNotification('success', __('restore_completed_reload'));
+            alert(__('restore_success_alert'));
             window.location.reload();
         } else {
-            showNotification('danger', 'Errore Ripristino: ' + (result.body?.detail || result.error || 'Errore sconosciuto'));
+            showNotification('danger', __('restore_error') + ' ' + (result.body?.detail || result.error || __('unknown_error')));
         }
 
     } catch (e) {
-        showNotification('danger', 'Errore durante il ripristino: ' + e.message);
+        showNotification('danger', __('restore_process_error') + ' ' + e.message);
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="ti ti-history me-2"></i> Ripristina Backup';
+        btn.innerHTML = '<i class="ti ti-history me-2"></i> ' + __('restore_backup_btn');
         progressBar.classList.add('d-none');
         form.reset();
     }

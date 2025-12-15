@@ -24,10 +24,10 @@ class WireGuardManager:
             )
             return result.stdout.strip()
         except FileNotFoundError:
-            logger.error("Comando 'wg' non trovato. Assicurati che WireGuard sia installato e 'wg-tools' sia nel PATH.")
+            logger.error("WireGuard tools (wg) not found. Make sure WireGuard is installed and 'wg-tools' is in PATH.")
             raise RuntimeError("WireGuard tools (wg) not found.")
         except subprocess.CalledProcessError as e:
-            logger.error(f"Errore nell'esecuzione del comando 'wg {' '.join(args)}': {e.stderr.strip()}")
+            logger.error(f"Failed to execute wg command 'wg {' '.join(args)}': {e.stderr.strip()}")
             raise RuntimeError(f"Failed to execute wg command: {e.stderr.strip()}")
 
     @staticmethod
@@ -72,9 +72,9 @@ AllowedIPs = {allowed_ips}
         try:
             with open(config_file_path, "a") as f:
                 f.write(peer_config)
-            logger.info(f"Peer con chiave pubblica {public_key[:8]}... aggiunto a {config_file_path}")
+            logger.info(f"Peer with public key {public_key[:8]}... added to {config_file_path}")
         except IOError as e:
-            logger.error(f"Impossibile scrivere il file di configurazione WireGuard {config_file_path}: {e}")
+            logger.error(f"Failed to write WireGuard config file {config_file_path}: {e}")
             raise RuntimeError(f"Failed to write WireGuard config file: {e}")
 
     @staticmethod
@@ -111,13 +111,13 @@ AllowedIPs = {allowed_ips}
 
             with open(config_file_path, "w") as f:
                 f.writelines(new_lines)
-            logger.info(f"Peer con chiave pubblica {public_key[:8]}... rimosso da {config_file_path}")
+            logger.info(f"Peer with public key {public_key[:8]}... removed from {config_file_path}")
 
         except IOError as e:
-            logger.error(f"Impossibile leggere/scrivere il file di configurazione WireGuard {config_file_path}: {e}")
+            logger.error(f"Unable to read/write WireGuard config file {config_file_path}: {e}")
             raise RuntimeError(f"Failed to modify WireGuard config file: {e}")
         except Exception as e:
-            logger.error(f"Errore generico durante la rimozione del peer: {e}")
+            logger.error(f"Generic error during peer removal: {e}")
             raise RuntimeError(f"Failed to remove peer: {e}")
 
     @staticmethod
@@ -145,12 +145,12 @@ AllowedIPs = {allowed_ips}
                 capture_output=True,
                 text=True
             )
-            logger.info(f"Interfaccia WireGuard '{interface_name}' ricaricata a caldo.")
+            logger.info(f"WireGuard interface '{interface_name}' hot-reloaded.")
         except FileNotFoundError:
-            logger.error("Comandi 'wg' o 'wg-quick' non trovati.")
+            logger.error("WireGuard tools (wg or wg-quick) not found.")
             raise RuntimeError("WireGuard tools not found.")
         except subprocess.CalledProcessError as e:
-            logger.error(f"Errore nel ricaricamento a caldo dell'interfaccia '{interface_name}': {e.stderr.strip()}")
+            logger.error(f"Failed to hot-reload WireGuard interface '{interface_name}': {e.stderr.strip()}")
             raise RuntimeError(f"Failed to hot-reload WireGuard interface: {e.stderr.strip()}")
 
     @staticmethod
@@ -163,5 +163,5 @@ AllowedIPs = {allowed_ips}
         except subprocess.CalledProcessError:
             return False
         except FileNotFoundError:
-            logger.error("Comando 'wg' non trovato.")
+            logger.error("WireGuard command 'wg' not found.")
             return False

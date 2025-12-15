@@ -66,7 +66,7 @@ function renderGroupsList() {
     list.innerHTML = '';
 
     if (allGroups.length === 0) {
-        list.innerHTML = '<div class="list-group-item text-muted text-center">Nessun gruppo creato.</div>';
+        list.innerHTML = '<div class="list-group-item text-muted text-center">' + __('no_groups_created') + '</div>';
         return;
     }
 
@@ -95,7 +95,7 @@ async function createGroup() {
     const name = document.getElementById('group-name-input').value;
     const desc = document.getElementById('group-desc-input').value;
 
-    if (!name) return alert("Inserisci un nome.");
+    if (!name) return alert(__("enter_group_name"));
 
     const response = await fetch(`${API_AJAX_HANDLER}`, {
         method: 'POST',
@@ -114,13 +114,13 @@ async function createGroup() {
         document.getElementById('group-name-input').value = '';
         loadGroups();
     } else {
-        alert("Errore: " + result.body.detail);
+        alert(__("error") + ": " + result.body.detail);
     }
 }
 
 async function deleteCurrentGroup() {
     if (!currentGroupId) return;
-    if (!confirm("Sei sicuro? Questo rimuoverà tutte le regole e rilascerà gli IP statici dei membri.")) return;
+    if (!confirm(__("group_delete_confirm"))) return;
 
     const response = await fetch(`${API_AJAX_HANDLER}`, {
         method: 'POST',
@@ -137,7 +137,7 @@ async function deleteCurrentGroup() {
         document.getElementById('no-group-selected').style.display = 'block';
         loadGroups();
     } else {
-        alert("Errore: " + result.body.detail);
+        alert(__("error") + ": " + result.body.detail);
     }
 }
 
@@ -147,7 +147,7 @@ function selectGroup(groupId) {
 
     const group = allGroups.find(g => g.id === groupId);
     if (group) {
-        document.getElementById('selected-group-title').textContent = `Membri di: ${group.name}`;
+        document.getElementById('selected-group-title').textContent = `${__('members_of')}: ${group.name}`;
         document.getElementById('group-details-container').style.display = 'block';
         document.getElementById('no-group-selected').style.display = 'none';
         renderMembers(group);
@@ -163,7 +163,7 @@ function renderMembers(group) {
 
     const members = group.members || group.client_links || [];
     if (members.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">Nessun membro.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">' + __('group_no_members') + '</td></tr>';
         return;
     }
 
@@ -197,7 +197,7 @@ async function openAddMemberModal() {
     modal.show();
 
     const select = document.getElementById('member-select');
-    select.innerHTML = '<option value="">Caricamento...</option>';
+    select.innerHTML = '<option value="">' + __('loading_options') + '</option>';
     select.disabled = true;
 
     try {
@@ -215,7 +215,7 @@ async function openAddMemberModal() {
         const clients = clientData.body || [];
 
         availableClientData = [];
-        select.innerHTML = '<option value="">Seleziona un utente...</option>';
+        select.innerHTML = '<option value="">' + __('select_user_placeholder') + '</option>';
         let optionsAdded = 0;
 
         // 3. Populate dropdown, excluding existing members
@@ -253,14 +253,14 @@ async function openAddMemberModal() {
         });
 
         if (optionsAdded === 0) {
-            select.innerHTML = '<option value="" disabled>Nessun client disponibile o tutti già in un gruppo.</option>';
+            select.innerHTML = '<option value="" disabled>' + __('no_available_clients') + '</option>';
             select.disabled = true;
         } else {
             select.disabled = false;
         }
 
     } catch (e) {
-        select.innerHTML = '<option value="">Errore caricamento</option>';
+        select.innerHTML = '<option value="">' + __('member_loading_error') + '</option>';
         console.error(e);
     }
 }
@@ -293,7 +293,7 @@ async function addMember() {
         loadGroups(); // Reload to refresh member list
 
     } else {
-        alert("Errore: " + result.body.detail);
+        alert(__("error") + ": " + result.body.detail);
     }
 }
 
@@ -329,7 +329,7 @@ async function performRevokeMember(clientId) {
     if (result.success) {
         loadGroups(); // Reload
     } else {
-        alert("Errore rimozione: " + (result.body.detail || "Sconosciuto"));
+        alert(__("revoke_member_error") + (result.body.detail || __('error')));
     }
 }
 
@@ -337,7 +337,7 @@ async function performRevokeMember(clientId) {
 
 async function loadRules(groupId) {
     const tbody = document.getElementById('rules-table-body');
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center">Caricamento...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center">' + __('loading_rules_short') + '</td></tr>';
 
     try {
         const response = await fetch(`${API_AJAX_HANDLER}?action=get_rules&group_id=${groupId}`);
@@ -382,11 +382,11 @@ async function loadRules(groupId) {
             }
 
         } else {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Errore caricamento regole.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">' + __('rules_load_error') + '</td></tr>';
         }
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Errore di connessione.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">' + __('connection_error') + '</td></tr>';
     }
 }
 
@@ -395,7 +395,7 @@ function renderRules(rules) {
     tbody.innerHTML = '';
 
     if (rules.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nessuna regola definita.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">' + __('no_rules_defined') + '</td></tr>';
         // DO NOT RETURN HERE - allow default policy row to be appended
     } else {
         rules.sort((a, b) => a.order - b.order);
@@ -437,14 +437,14 @@ function renderRules(rules) {
 
     let defaultPolicyDisplay = 'N/A';
     let defaultPolicyBadgeClass = 'bg-secondary';
-    let defaultPolicyTitle = 'Policy di default dell\'istanza (caricamento...)';
+    let defaultPolicyTitle = __('default_instance_policy_loading');
 
     if (currentInstance && currentInstance.firewall_default_policy) {
         const defaultPolicy = currentInstance.firewall_default_policy.toUpperCase();
         defaultPolicyDisplay = defaultPolicy;
         if (defaultPolicy === 'ACCEPT') defaultPolicyBadgeClass = 'bg-success';
         if (defaultPolicy === 'DROP') defaultPolicyBadgeClass = 'bg-danger';
-        defaultPolicyTitle = 'Regola di default dell\'istanza. Non modificabile qui.';
+        defaultPolicyTitle = __('default_instance_policy_desc');
     }
 
     trDefault.innerHTML = `
@@ -540,7 +540,7 @@ async function createRule() {
     }
 
     if (!isValid) {
-        showNotification('danger', 'Uno o più campi della regola non sono validi.');
+        showNotification('danger', __('rule_fields_invalid'));
         return;
     }
     // --- END VALIDATION ---
@@ -579,7 +579,7 @@ async function createRule() {
         }
         loadRules(currentGroupId);
     } else {
-        showNotification('danger', 'Errore: ' + (result.body.detail || 'Sconosciuto'));
+        showNotification('danger', __('error') + ': ' + (result.body.detail || __('error')));
     }
 }
 
@@ -634,10 +634,10 @@ async function performDeleteRule(ruleId) {
     });
 
     if ((await response.json()).success) {
-        showNotification('success', 'Regola firewall eliminata.');
+        showNotification('success', __('rule_deleted_success'));
         loadRules(currentGroupId);
     } else {
-        showNotification('danger', 'Errore eliminazione regola.');
+        showNotification('danger', __('delete_rule_error_short'));
     }
 }
 
@@ -645,7 +645,7 @@ async function performDeleteRule(ruleId) {
 function openEditRuleModal(ruleId) {
     const rule = window.currentRules.find(r => r.id === ruleId);
     if (!rule) {
-        showNotification('danger', 'Regola non trovata per la modifica.');
+        showNotification('danger', __('rule_not_found_edit'));
         return;
     }
 
@@ -714,7 +714,7 @@ async function updateRule() {
     }
 
     if (!isValid) {
-        showNotification('danger', 'Uno o più campi della regola non sono validi.');
+        showNotification('danger', __('rule_fields_invalid'));
         return;
     }
     // --- END VALIDATION ---
@@ -742,14 +742,14 @@ async function updateRule() {
 
         const result = await response.json();
         if (result.success) {
-            showNotification('success', 'Regola firewall aggiornata con successo.');
+            showNotification('success', __('rule_updated_success'));
             bootstrap.Modal.getInstance(document.getElementById('modal-edit-rule')).hide();
             loadRules(currentGroupId);
         } else {
-            showNotification('danger', 'Errore aggiornamento regola: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('update_rule_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }
 
@@ -774,23 +774,23 @@ async function applyRuleOrder() {
 
         const result = await response.json();
         if (result.success) {
-            showNotification('success', 'Ordinamento delle regole salvato.');
+            showNotification('success', __('order_saved_success'));
             // We can optionally reload to be safe, but the local state should be correct.
             loadRules(currentGroupId);
         } else {
-            showNotification('danger', `Errore durante il salvataggio dell'ordine: ${result.body.detail || 'Sconosciuto'}`);
+            showNotification('danger', `${__('order_save_error')} ${result.body.detail || __('error')}`);
             // Fallback to reload from server on error
             loadRules(currentGroupId);
         }
     } catch (e) {
-        showNotification('danger', `Errore di connessione: ${e.message}`);
+        showNotification('danger', `${__('connection_error')} ${e.message}`);
         loadRules(currentGroupId);
     }
 }
 
 async function saveInstanceFirewallPolicy() {
     if (!currentInstance) {
-        showNotification("danger", "Errore: Istanza non selezionata.");
+        showNotification("danger", __('instance_not_selected'));
         return;
     }
 
