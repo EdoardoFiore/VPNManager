@@ -171,33 +171,6 @@ async function loadMachineFirewallRules() {
         if (result.success) {
             machineFirewallRules = result.body;
             renderMachineFirewallRules();
-<<<<<<< HEAD
-            
-            // Initialize SortableJS after rendering the table
-            if (sortableInstance) {
-                sortableInstance.destroy();
-            }
-            sortableInstance = new Sortable(tbody, {
-                animation: 150,
-                ghostClass: 'sortable-ghost',
-                handle: '.ti-grip-vertical',
-                onEnd: function(evt) {
-                    // Get the moved item
-                    const movedItem = machineFirewallRules.splice(evt.oldIndex, 1)[0];
-                    // Insert it at the new index
-                    machineFirewallRules.splice(evt.newIndex, 0, movedItem);
-
-                    // Re-assign order based on the new array index
-                    machineFirewallRules.forEach((rule, index) => {
-                        rule.order = index;
-                    });
-                    
-                    // The UI is already updated by SortableJS, but we can re-render to be safe
-                    renderMachineFirewallRules();
-                    
-                    // Save the new order to the backend
-                    applyMachineFirewallRules();
-=======
 
             // Initialize SortableJS for all tables
             // Destroy old instances
@@ -221,7 +194,6 @@ async function loadMachineFirewallRules() {
                         }
                     });
                     sortableInstances.push(sortable);
->>>>>>> wireguard
                 }
             });
 
@@ -298,11 +270,7 @@ function renderMachineFirewallRules() {
 
     machineFirewallRules.forEach((rule, index) => {
         const tr = document.createElement('tr');
-<<<<<<< HEAD
-        tr.setAttribute('data-id', rule.id); // Add data-id for SortableJS
-=======
         tr.setAttribute('data-id', rule.id);
->>>>>>> wireguard
 
         let badgeClass = 'bg-secondary';
         if (rule.action === 'ACCEPT') badgeClass = 'bg-success';
@@ -310,22 +278,6 @@ function renderMachineFirewallRules() {
         if (rule.action === 'REJECT') badgeClass = 'bg-warning';
         if (rule.action === 'MASQUERADE') badgeClass = 'bg-info';
 
-<<<<<<< HEAD
-        tr.innerHTML = `
-            <td class="w-1" style="cursor: grab;">
-                <i class="ti ti-grip-vertical"></i>
-            </td>
-            <td><span class="badge ${badgeClass}">${rule.action}</span></td>
-            <td>${rule.table}</td>
-            <td>${rule.chain}</td>
-            <td>${rule.protocol ? rule.protocol.toUpperCase() : 'ANY'}</td>
-            <td><code>${rule.source || 'ANY'}</code></td>
-            <td><code>${rule.destination || 'ANY'}</code></td>
-            <td>${rule.port || '*'}</td>
-            <td>${rule.in_interface || '*'}</td>
-            <td>${rule.out_interface || '*'}</td>
-            <td>${rule.comment || ''}</td>
-=======
         // Determine destination table
         let targetBody = bodies.other;
         if (rule.table === 'filter' || !rule.table) {
@@ -368,7 +320,6 @@ function renderMachineFirewallRules() {
 
         if (window.userRole !== 'admin_readonly') {
             innerHTML += `
->>>>>>> wireguard
             <td class="text-end">
                 <button class="btn btn-sm btn-ghost-primary" onclick="openEditMachineRuleModal('${rule.id}')" title="Modifica">
                     <i class="ti ti-edit"></i>

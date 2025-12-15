@@ -1039,11 +1039,7 @@ async def create_rule(request: RuleRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-<<<<<<< HEAD
-@app.put("/api/firewall/rules/{rule_id}", dependencies=[Depends(get_api_key)])
-=======
 @app.put("/api/firewall/rules/{rule_id}", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
->>>>>>> wireguard
 async def update_rule(rule_id: str, request: RuleRequest):
     try:
         # Note: The group_id is part of the request model, but we also pass rule_id from path
@@ -1062,11 +1058,7 @@ async def update_rule(rule_id: str, request: RuleRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-<<<<<<< HEAD
-@app.delete("/api/firewall/rules/{rule_id}", dependencies=[Depends(get_api_key)])
-=======
 @app.delete("/api/firewall/rules/{rule_id}", dependencies=[Depends(auth.check_role([UserRole.ADMIN, UserRole.PARTNER, UserRole.TECHNICIAN]))])
->>>>>>> wireguard
 async def delete_rule(rule_id: str):
     instance_firewall_manager.delete_rule(rule_id)
     return {"success": True}

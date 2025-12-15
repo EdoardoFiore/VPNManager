@@ -348,38 +348,6 @@ async function loadRules(groupId) {
             renderRules(window.currentRules);
 
             // Initialize SortableJS
-<<<<<<< HEAD
-            if (sortableGroupRulesInstance) {
-                sortableGroupRulesInstance.destroy();
-            }
-            sortableGroupRulesInstance = new Sortable(tbody, {
-                animation: 150,
-                ghostClass: 'sortable-ghost',
-                handle: '.ti-grip-vertical',
-                filter: '.non-draggable-rule', // Add this line
-                onMove: function (evt) {
-                    // Prevent any item from being moved if the related element (the one it's trying to move over/next to) is the non-draggable rule
-                    if (evt.related.classList.contains('non-draggable-rule')) {
-                        return false;
-                    }
-                    // Also prevent the non-draggable rule itself from being moved if it somehow gets initiated
-                    if (evt.dragged.classList.contains('non-draggable-rule')) {
-                        return false;
-                    }
-                    return true; // Allow move otherwise
-                },
-                onEnd: function(evt) {
-                    // Get the moved item
-                    const movedItem = window.currentRules.splice(evt.oldIndex, 1)[0];
-                    // Insert it at the new index
-                    window.currentRules.splice(evt.newIndex, 0, movedItem);
-                    
-                    // The UI is already updated by SortableJS, we just need to save the new order.
-                    applyRuleOrder();
-                }
-            });
-            
-=======
             // Initialize SortableJS only for authorized roles
             if (['admin', 'partner', 'technician'].includes(currentUserRole)) {
                 if (sortableGroupRulesInstance) {
@@ -413,7 +381,6 @@ async function loadRules(groupId) {
                 });
             }
 
->>>>>>> wireguard
         } else {
             tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Errore caricamento regole.</td></tr>';
         }
@@ -450,24 +417,16 @@ function renderRules(rules) {
                 <td><code>${rule.destination}</code></td>
                 <td>${rule.port || '*'}</td>
                 <td class="text-end">
-<<<<<<< HEAD
-=======
                     ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
->>>>>>> wireguard
                     <button class="btn btn-sm btn-ghost-primary" onclick="openEditRuleModal('${rule.id}')" title="Modifica">
                         <i class="ti ti-edit"></i>
                     </button>
                     <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteRule('${rule.id}')" title="Elimina">
                         <i class="ti ti-trash"></i>
                     </button>
-<<<<<<< HEAD
-                </td>
-            `;
-=======
                     ` : ''}
                 </td>
         `;
->>>>>>> wireguard
             tbody.appendChild(tr);
         });
     }
@@ -475,21 +434,6 @@ function renderRules(rules) {
     // Always add a virtual rule for the instance's default firewall policy at the end
     const trDefault = document.createElement('tr');
     trDefault.className = 'table-secondary non-draggable-rule'; // Style to distinguish it and make non-draggable
-<<<<<<< HEAD
-    
-    let defaultPolicyDisplay = 'N/A';
-    let defaultPolicyBadgeClass = 'bg-secondary';
-    let defaultPolicyTitle = 'Policy di default dell\'istanza (caricamento...)';
-
-    if (currentInstance && currentInstance.firewall_default_policy) {
-        const defaultPolicy = currentInstance.firewall_default_policy.toUpperCase();
-        defaultPolicyDisplay = defaultPolicy;
-        if (defaultPolicy === 'ACCEPT') defaultPolicyBadgeClass = 'bg-success';
-        if (defaultPolicy === 'DROP') defaultPolicyBadgeClass = 'bg-danger';
-        defaultPolicyTitle = 'Regola di default dell\'istanza. Non modificabile qui.';
-    }
-
-=======
 
     let defaultPolicyDisplay = 'N/A';
     let defaultPolicyBadgeClass = 'bg-secondary';
@@ -503,7 +447,6 @@ function renderRules(rules) {
         defaultPolicyTitle = 'Regola di default dell\'istanza. Non modificabile qui.';
     }
 
->>>>>>> wireguard
     trDefault.innerHTML = `
         <td></td>
         <td><span class="badge ${defaultPolicyBadgeClass}">${defaultPolicyDisplay}</span></td>
@@ -513,11 +456,7 @@ function renderRules(rules) {
         <td class="text-end">
             <span class="text-muted" title="${defaultPolicyTitle}">Default Instance Policy</span>
         </td>
-<<<<<<< HEAD
-    `;
-=======
         `;
->>>>>>> wireguard
     tbody.appendChild(trDefault);
 
     // Store current rules to handle reordering logic locally before saving
@@ -545,11 +484,6 @@ function togglePortInput(protocol, modalType = 'add') {
     const portInput = document.getElementById(portInputId);
 
     if (!portContainer) return;
-<<<<<<< HEAD
-    
-=======
-
->>>>>>> wireguard
     if (protocol === 'tcp' || protocol === 'udp') {
         portContainer.style.display = 'block';
     } else {
@@ -658,11 +592,7 @@ function openCreateRuleModal() {
     document.getElementById('rule-port').value = '';
     document.getElementById('rule-desc').value = '';
     // Ensure port input visibility is correct for default protocol
-<<<<<<< HEAD
-    togglePortInput('tcp', 'add'); 
-=======
     togglePortInput('tcp', 'add');
->>>>>>> wireguard
 
     new bootstrap.Modal(document.getElementById('modal-add-rule')).show();
 }
@@ -718,22 +648,6 @@ function openEditRuleModal(ruleId) {
         showNotification('danger', 'Regola non trovata per la modifica.');
         return;
     }
-<<<<<<< HEAD
-    
-    window.currentEditingRule = rule; // Store the rule being edited
-
-    // Populate the form fields
-    document.getElementById('rule-id').value = rule.id;
-    document.getElementById('edit-rule-action').value = rule.action;
-    document.getElementById('edit-rule-proto').value = rule.protocol;
-    document.getElementById('edit-rule-dest').value = rule.destination;
-    document.getElementById('edit-rule-port').value = rule.port || '';
-    document.getElementById('edit-rule-desc').value = rule.description || '';
-
-    // Adjust port input visibility based on protocol
-    togglePortInput(rule.protocol, 'edit');
-
-=======
 
     window.currentEditingRule = rule; // Store the rule being edited
 
@@ -748,7 +662,6 @@ function openEditRuleModal(ruleId) {
     // Adjust port input visibility based on protocol
     togglePortInput(rule.protocol, 'edit');
 
->>>>>>> wireguard
     new bootstrap.Modal(document.getElementById('modal-edit-rule')).show();
 }
 
@@ -863,11 +776,7 @@ async function applyRuleOrder() {
         if (result.success) {
             showNotification('success', 'Ordinamento delle regole salvato.');
             // We can optionally reload to be safe, but the local state should be correct.
-<<<<<<< HEAD
-            loadRules(currentGroupId); 
-=======
             loadRules(currentGroupId);
->>>>>>> wireguard
         } else {
             showNotification('danger', `Errore durante il salvataggio dell'ordine: ${result.body.detail || 'Sconosciuto'}`);
             // Fallback to reload from server on error

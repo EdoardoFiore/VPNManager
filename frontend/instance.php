@@ -261,14 +261,10 @@ require_once 'includes/header.php';
                         <div class="card-header">
                             <h3 class="card-title">Regole Firewall</h3>
                             <div class="card-actions">
-<<<<<<< HEAD
-                                <button class="btn btn-sm btn-primary" onclick="openCreateRuleModal()">Aggiungi Regola</button>
-=======
                                 <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
                                     <button class="btn btn-sm btn-primary" onclick="openCreateRuleModal()">Aggiungi
                                         Regola</button>
                                 <?php endif; ?>
->>>>>>> wireguard
                             </div>
                         </div>
                         <div class="card-table table-responsive">
@@ -369,12 +365,8 @@ require_once 'includes/header.php';
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Protocollo</label>
-<<<<<<< HEAD
-                            <select class="form-select" id="rule-proto" name="protocol" onchange="togglePortInput(this.value, 'add')">
-=======
                             <select class="form-select" id="rule-proto" name="protocol"
                                 onchange="togglePortInput(this.value, 'add')">
->>>>>>> wireguard
                                 <option value="tcp">TCP</option>
                                 <option value="udp">UDP</option>
                                 <option value="icmp">ICMP</option>
@@ -384,25 +376,16 @@ require_once 'includes/header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Destinazione (CIDR o IP)</label>
-<<<<<<< HEAD
-                        <input type="text" class="form-control" id="rule-dest" name="destination" placeholder="0.0.0.0/0 per tutto, o 192.168.1.50">
-=======
                         <input type="text" class="form-control" id="rule-dest" name="destination"
                             placeholder="0.0.0.0/0 per tutto, o 192.168.1.50">
->>>>>>> wireguard
                         <div class="invalid-feedback">Destinazione non valida. Inserisci un IP, un CIDR o 'any'.</div>
                     </div>
                     <div class="mb-3" id="port-container">
                         <label class="form-label">Porta (Opzionale)</label>
-<<<<<<< HEAD
-                        <input type="text" class="form-control" id="rule-port" name="port" placeholder="80, 443, 1000:2000">
-                        <div class="invalid-feedback">Porta non valida. Inserisci un numero (1-65535) o un intervallo (es. 1000:2000).</div>
-=======
                         <input type="text" class="form-control" id="rule-port" name="port"
                             placeholder="80, 443, 1000:2000">
                         <div class="invalid-feedback">Porta non valida. Inserisci un numero (1-65535) o un intervallo
                             (es. 1000:2000).</div>
->>>>>>> wireguard
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Descrizione</label>
@@ -440,12 +423,8 @@ require_once 'includes/header.php';
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Protocollo</label>
-<<<<<<< HEAD
-                            <select class="form-select" id="edit-rule-proto" name="protocol" onchange="togglePortInput('edit')">
-=======
                             <select class="form-select" id="edit-rule-proto" name="protocol"
                                 onchange="togglePortInput('edit')">
->>>>>>> wireguard
                                 <option value="tcp">TCP</option>
                                 <option value="udp">UDP</option>
                                 <option value="icmp">ICMP</option>
@@ -455,25 +434,16 @@ require_once 'includes/header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Destinazione (CIDR o IP)</label>
-<<<<<<< HEAD
-                        <input type="text" class="form-control" id="edit-rule-dest" name="destination" placeholder="0.0.0.0/0 per tutto, o 192.168.1.50">
-=======
                         <input type="text" class="form-control" id="edit-rule-dest" name="destination"
                             placeholder="0.0.0.0/0 per tutto, o 192.168.1.50">
->>>>>>> wireguard
                         <div class="invalid-feedback">Destinazione non valida. Inserisci un IP, un CIDR o 'any'.</div>
                     </div>
                     <div class="mb-3" id="edit-port-container">
                         <label class="form-label">Porta (Opzionale)</label>
-<<<<<<< HEAD
-                        <input type="text" class="form-control" id="edit-rule-port" name="port" placeholder="80, 443, 1000:2000">
-                        <div class="invalid-feedback">Porta non valida. Inserisci un numero (1-65535) o un intervallo (es. 1000:2000).</div>
-=======
                         <input type="text" class="form-control" id="edit-rule-port" name="port"
                             placeholder="80, 443, 1000:2000">
                         <div class="invalid-feedback">Porta non valida. Inserisci un numero (1-65535) o un intervallo
                             (es. 1000:2000).</div>
->>>>>>> wireguard
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Descrizione</label>

@@ -188,38 +188,6 @@ def delete_rule(rule_id: str):
             session.commit()
             apply_firewall_rules()
 
-<<<<<<< HEAD
-def update_rule(rule_id: str, group_id: str, action: str, protocol: str, destination: str, port: Optional[str] = None, description: str = "") -> Rule:
-    rules = _load_rules()
-    rule_to_update = next((r for r in rules if r.id == rule_id and r.group_id == group_id), None)
-
-    if not rule_to_update:
-        raise ValueError(f"Rule with ID {rule_id} not found in group {group_id}")
-
-    # Update fields
-    rule_to_update.action = action
-    rule_to_update.protocol = protocol
-    rule_to_update.destination = destination
-    rule_to_update.port = port
-    rule_to_update.description = description
-    
-    # Re-validate the updated rule (especially port based on protocol)
-    try:
-        updated_rule_data = rule_to_update.dict()
-        validated_rule = Rule(**updated_rule_data) # This will run validators
-    except ValueError as e:
-        raise ValueError(f"Invalid rule data after update: {e}")
-
-    _save_rules(rules)
-    apply_firewall_rules()
-    return validated_rule
-
-def get_rules(group_id: Optional[str] = None) -> List[Rule]:
-    rules = _load_rules()
-    if group_id:
-        return [r for r in rules if r.group_id == group_id]
-    return rules
-=======
 def update_rule(rule_id: str, group_id: str, action: str, protocol: str, destination: str, port: str = None, description: str = ""):
     with Session(engine) as session:
         rule = session.get(FirewallRule, uuid.UUID(rule_id))
@@ -239,7 +207,6 @@ def update_rule(rule_id: str, group_id: str, action: str, protocol: str, destina
         res = rule.dict()
         res['id'] = str(res['id'])
         return res
->>>>>>> wireguard
 
 def update_rule_order(orders: List[Dict]):
     with Session(engine) as session:
@@ -279,49 +246,14 @@ def _run_iptables(cmd: List[str]):
 def apply_firewall_rules():
     logger.info("Applying Firewall Rules (SQLModel)...")
     
-<<<<<<< HEAD
-    # 2. Define all chain names
-    main_chain = "VPN_MAIN_FWD"
-    instance_chains = [f"VI_{inst.id}" for inst in instances]
-    group_chains = [f"VIG_{g.id}" for g in groups]
-    all_chains = [main_chain] + instance_chains + group_chains
-
-    # 3. Reset all managed chains
-    logger.info("Flushing and deleting existing managed chains...")
-    for chain in all_chains:
-        _run_iptables(["iptables", "-F", chain], suppress_errors=True)
-    for chain in all_chains:
-        _run_iptables(["iptables", "-X", chain], suppress_errors=True)
-
-    # 4. Re-create all chains
-    logger.info("Creating new chains...")
-    for chain in all_chains:
-        _run_iptables(["iptables", "-N", chain], suppress_errors=True)
-=======
     with Session(engine) as session:
         instances = session.exec(select(Instance)).all()
         groups = session.exec(select(Group)).all()
->>>>>>> wireguard
         
         main_chain = "VPN_MAIN_FWD"
         instance_chains = [f"VI_{i.id}" for i in instances]
         group_chains = [f"VIG_{g.id}" for g in groups]
         
-<<<<<<< HEAD
-        # Insert rules in reverse order with -I to maintain the correct sequence
-        for rule in reversed(group_rules):
-            # A member's packet only reaches this chain if it's from that member.
-            # So, we only need to specify destination, proto, port.
-            proto_arg = f"-p {rule.protocol}" if rule.protocol != "all" else ""
-            port_arg = f"--dport {rule.port}" if rule.port and rule.protocol in ["tcp", "udp"] else ""
-            dest_arg = f"-d {rule.destination}" if rule.destination and rule.destination != "0.0.0.0/0" else ""
-            
-            cmd = ["iptables", "-I", group_chain_name] # Use -I to insert at the top
-            if proto_arg: cmd.extend(proto_arg.split())
-            if port_arg: cmd.extend(port_arg.split())
-            if dest_arg: cmd.extend(dest_arg.split())
-            cmd.extend(["-j", rule.action.upper()])
-=======
         iptables_manager._create_or_flush_chain(main_chain)
         for chain in instance_chains + group_chains:
             iptables_manager._create_or_flush_chain(chain)
@@ -332,7 +264,6 @@ def apply_firewall_rules():
         for group in groups:
             chain = f"VIG_{group.id}"
             rules = session.exec(select(FirewallRule).where(FirewallRule.group_id == group.id).order_by(FirewallRule.order)).all()
->>>>>>> wireguard
             
             # Apply in order (append)
             # WAIT: iptables_manager usually does -I for reverse.
