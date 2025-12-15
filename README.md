@@ -1,121 +1,122 @@
-# Gestore Automatizzato per WireGuard con Interfaccia Web
+# Automated WireGuard Manager with Web Interface
 
-[![Licenza: MIT](https://img.shields.io/badge/Licenza-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Lang: IT](https://img.shields.io/badge/Lang-IT-red.svg)](README.md)
 
-Un sistema completo per automatizzare il deployment e la gestione di server WireGuard su Ubuntu 24.
-Questo progetto modernizza la gestione delle VPN utilizzando **WireGuard** (più veloce, snello e sicuro di OpenVPN) e offre una dashboard web moderna per la gestione quotidiana, costruita con tecnologie recenti come Python FastAPI, SQLModel e Tabler.
+A complete system to automate the deployment and management of WireGuard servers on Ubuntu 24.
+This project modernizes VPN management using **WireGuard** (faster, leaner, and more secure than OpenVPN) and offers a modern web dashboard for daily management, built with recent technologies like Python FastAPI, SQLModel, and Tabler.
 
-Che tu sia un amministratore di sistema esperto o un appassionato che vuole proteggere la propria navigazione, questo sistema ti permette di essere operativo in pochi minuti con una VPN di nuova generazione.
+Whether you are an expert sysadmin or an enthusiast looking to protect your browsing, this system allows you to be operational in minutes with a next-generation VPN.
 
 ---
 
-## 🚀 Installazione Rapida
+## 🚀 Quick Installation
 
-L'installazione è progettata per essere "Zero Config": cloni la repository, lanci lo script e il sistema fa il resto.
+The installation is designed to be "Zero Config": clone the repository, run the script, and the system handles the rest.
 
-### Prerequisiti
+### Prerequisites
 
-*   **OS**: Una macchina (fisica o virtuale) con **Ubuntu 24.04 LTS** (consigliato) o Debian 12.
-*   **Privilegi**: Accesso root (`sudo`).
-*   **Rete**:
-    *   **IP Pubblico**: Ideale.
-    *   **NAT**: Se sei dietro un router, devi inoltrare la porta UDP utilizzata dall'istanza (default `51820` per la prima istanza) e TCP `80` (per la dashboard).
+*   **OS**: A machine (physical or virtual) with **Ubuntu 24.04 LTS** (recommended) or Debian 12.
+*   **Privileges**: Root access (`sudo`).
+*   **Network**:
+    *   **Public IP**: Ideal.
+    *   **NAT**: If you are behind a router, you must forward the UDP port used by the instance (default `51820` for the first instance) and TCP `80` (for the dashboard).
 
-### Passaggi
+### Steps
 
-1.  **Scarica il Progetto**
-    Accedi al tuo server e clona la repository:
+1.  **Download the Project**
+    Access your server and clone the repository:
     ```bash
     git clone https://github.com/EdoardoFiore/VPNManager.git
     cd VPNManager/scripts
     ```
 
-2.  **Avvia l'Installazione**
-    Esegui lo script di setup. Ti guiderà attraverso l'installazione delle dipendenze (WireGuard, Python, Nginx).
+2.  **Start Installation**
+    Run the setup script. It will guide you through installing dependencies (WireGuard, Python, Nginx).
     ```bash
     sudo bash setup-vpn-manager.sh
     ```
 
-3.  **Finito!**
-    Al termine, lo script ti fornirà l'URL per accedere alla dashboard (es. `http://TUO_IP_PUBBLICO`) e la chiave API generata.
+3.  **Finished!**
+    Upon completion, the script will provide the URL to access the dashboard (e.g., `http://YOUR_PUBLIC_IP`) and the generated API key.
 
 ---
 
-## ✨ Funzionalità Principali
+## ✨ Key Features
 
-*   **WireGuard Core**: Utilizza il protocollo WireGuard ad alte prestazioni, integrato nel kernel Linux.
-*   **Gestione Multi-Istanza**: Crea istanze multiple su porte diverse (es. `wg0` su 51820, `wg1` su 51821) per separare reti e scopi.
-*   **Dashboard Intuitiva**: Pannello web responsive basato su _Tabler_ per vedere stato, QR code e configurazioni.
-*   **Tunnel Mode Intelligente**:
-    *   **Full Tunnel**: Invia tutto il traffico Internet attraverso la VPN.
-    *   **Split Tunnel**: Specifica le sottoreti da ruotare (es. reti aziendali), lasciando il resto del traffico diretto.
-    *   **Auto-Secure**: In modalità Split Tunnel, il firewall imposta automaticamente una policy di default `DROP` per massima sicurezza.
-*   **Gestione Client**:
-    *   Generazione istantanea di chiavi (Pubblica/Privata/Preshared).
-    *   Visualizzazione QR Code per mobile.
-    *   Download configurazione `.conf`.
-*   **Firewall Avanzato (Iptables Wrapper)**:
-    *   **Machine Firewall**: Gestisci le regole di input/output globali della macchina server (es. permetti SSH solo da certi IP).
-    *   **Group Firewall**: Crea gruppi logici (es. "Admin", "Guest") e assegna regole di accesso specifiche.
-    *   Il backend gestisce automaticamente le chain `iptables` per garantire isolamento e sicurezza (es. `VPN_INPUT`, `VIG_<GroupID>`).
-*   **Database SQLite**: Tutte le configurazioni sono salvate in un db `database.db` gestito via SQLModel, sostituendo i vecchi file JSON per maggiore robustezza.
+*   **WireGuard Core**: Uses the high-performance WireGuard protocol, integrated into the Linux kernel.
+*   **Multi-Instance Management**: Create multiple instances on different ports (e.g., `wg0` on 51820, `wg1` on 51821) to separate networks and purposes.
+*   **Intuitive Dashboard**: Responsive web panel based on _Tabler_ to view status, QR codes, and configurations.
+*   **Smart Tunnel Mode**:
+    *   **Full Tunnel**: Route all Internet traffic through the VPN.
+    *   **Split Tunnel**: Specify subnets to route (e.g., corporate networks), leaving the rest of the traffic direct.
+    *   **Auto-Secure**: In Split Tunnel mode, the firewall automatically sets a `DROP` default policy for maximum security.
+*   **Client Management**:
+    *   Instant key generation (Public/Private/Preshared).
+    *   QR Code display for mobile devices.
+    *   `.conf` configuration download.
+*   **Advanced Firewall (Iptables Wrapper)**:
+    *   **Machine Firewall**: Manage global input/output rules for the server machine (e.g., allow SSH only from certain IPs).
+    *   **Group Firewall**: Create logical groups (e.g., "Admin", "Guest") and assign specific access rules.
+    *   The backend automatically manages `iptables` chains to ensure isolation and security (e.g., `VPN_INPUT`, `VIG_<GroupID>`).
+*   **SQLite Database**: All configurations are saved in a `database.db` managed via SQLModel, replacing old JSON files for greater robustness.
 
 ---
 
-## 🛠 Come Funziona (Backend e Architettura)
+## 🛠 How It Works (Backend & Architecture)
 
-Per chi vuole capire cosa succede "sotto il cofano":
+For those who want to understand what happens "under the hood":
 
-### Stack Tecnologico
-*   **VPN Note**: WireGuard (Kernel Module).
-*   **Backend**: Python 3.12+ con **FastAPI** e **SQLModel** (ORM per SQLite).
-*   **Frontend**: PHP (Logic Layer) + HTML5/JS (Tabler UI) + AJAX per comunicare con le API.
-*   **Server Web**: Nginx (Reverse Proxy & Auth).
+### Tech Stack
+*   **VPN Node**: WireGuard (Kernel Module).
+*   **Backend**: Python 3.12+ with **FastAPI** and **SQLModel** (ORM for SQLite).
+*   **Frontend**: PHP (Logic Layer) + HTML5/JS (Tabler UI) + AJAX for API communication.
+*   **Web Server**: Nginx (Reverse Proxy & Auth).
 
-### Posizionamento File
+### File Structure
 
-| Directory | Contenuto |
+| Directory | Content |
 | :--- | :--- |
-| `/opt/vpn-manager/backend` | API Server (Python). Contiene `main.py`, models, e i manager (WireGuard, Firewall). |
-| `/opt/vpn-manager/backend/data` | Database SQLite (`database.db`) e configurazioni WireGuard generate. |
-| `/opt/vpn-manager/frontend` | Interfaccia Web pubblica. |
-| `/etc/wireguard` | Directory di sistema dove vengono linkate le configurazioni attive. |
+| `/opt/vpn-manager/backend` | API Server (Python). Contains `main.py`, models, and managers (WireGuard, Firewall). |
+| `/opt/vpn-manager/backend/data` | SQLite Database (`database.db`) and generated WireGuard configurations. |
+| `/opt/vpn-manager/frontend` | Public Web Interface. |
+| `/etc/wireguard` | System directory where active configurations are linked. |
 
-### Processi e Servizi
+### Processes and Services
 
-1.  **Backend API** (`vpn-manager.service`): Servizio Systemd che esegue Uvicorn/FastAPI. Gestisce la logica, le chiamate di sistema (`wg`, `iptables`, `ip`) e il database.
-2.  **Web Server** (`nginx`): Serve la dashboard statica/PHP.
-3.  **WireGuard** (`wg-quick@<nome>`): Servizio nativo di WireGuard per ogni interfaccia attiva.
+1.  **Backend API** (`vpn-manager.service`): Systemd service running Uvicorn/FastAPI. Handles logic, system calls (`wg`, `iptables`, `ip`), and the database.
+2.  **Web Server** (`nginx`): Serves the static/PHP dashboard.
+3.  **WireGuard** (`wg-quick@<name>`): Native WireGuard service for each active interface.
 
 ---
 
-## 👥 Gestione Utenti (RBAC)
+## 👥 User Management (RBAC)
 
-Il sistema include un gestore utenti integrato con ruoli:
+The system includes a built-in user manager with roles:
 
-*   **Admin**: Accesso completo.
-*   **Admin Read Only**: Visualizzazione completa ma nessuna modifica.
-*   **Partner**: Accesso completo (simile ad Admin).
-*   **Technician**: Gestisce solo le istanze assegnate (Start/Stop, Client, Policy).
-*   **Viewer**: Sola lettura sulle istanze assegnate.
+*   **Admin**: Full access.
+*   **Admin Read Only**: Full view but no modifications.
+*   **Partner**: Full access (similar to Admin).
+*   **Technician**: Manages only assigned instances (Start/Stop, Client, Policy).
+*   **Viewer**: Read-only on assigned instances.
 
-L'accesso è gestito via JWT e non richiede più Nginx Basic Auth.
-Di default viene creato l'utente `admin` (la password viene impostata al primo avvio dello script).
+Access is managed via JWT and no longer requires Nginx Basic Auth.
+By default, the `admin` user is created (password is set during the first script run).
 
 ---
 
 ## 🆘 Troubleshooting
 
-*   **Dashboard irraggiungibile**: Controlla Nginx (`systemctl status nginx`).
-*   **Errore 500 / API Error**: Controlla i log del backend:
+*   **Dashboard Unreachable**: Check Nginx (`systemctl status nginx`).
+*   **Error 500 / API Error**: Check backend logs:
     ```bash
     journalctl -u vpn-manager -f
     ```
-*   **Client connesso ma no traffico**:
-    *   Verifica l'IP Forwarding (`sysctl net.ipv4.ip_forward`).
-    *   Controlla il Masquerading nelle regole firewall (`iptables -t nat -L -v`).
-    *   Se sei in Split Tunnel, controlla di non avere policy `DROP` che bloccano tutto senza regole di allow.
+*   **Client Connected but No Traffic**:
+    *   Verify IP Forwarding (`sysctl net.ipv4.ip_forward`).
+    *   Check Masquerading in firewall rules (`iptables -t nat -L -v`).
+    *   If in Split Tunnel, check that you don't have `DROP` policies blocking everything without allow rules.
 
 ---
 
-**Licenza**: MIT. Fanne buon uso!
+**License**: MIT. Enjoy!
