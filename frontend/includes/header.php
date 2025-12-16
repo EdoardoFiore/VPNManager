@@ -40,6 +40,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
     <title><?= __('dashboard') ?> - <?= htmlspecialchars($brandName) ?></title>
     <!-- CSS files -->
     <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler-flags.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
@@ -221,10 +222,8 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                         <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown">
                             <?php if ($current_lang == 'it'): ?>
                                 <span class="flag flag-country-it"></span>
-                                <span class="ps-2">ITA</span>
                             <?php else: ?>
-                                <span class="flag flag-country-us"></span> <!-- 'gb' or 'us' -->
-                                <span class="ps-2">ENG</span>
+                                <span class="flag flag-country-gb"></span> <!-- 'gb' or 'us' -->
                             <?php endif; ?>
                         </a>
                         <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
@@ -232,7 +231,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                                 <span class="flag flag-country-it me-2"></span> Italiano
                             </a>
                             <a href="change_lang.php?lang=en" class="dropdown-item">
-                                <span class="flag flag-country-us me-2"></span> English
+                                <span class="flag flag-country-gb me-2"></span> English
                             </a>
                         </div>
                     </div>
