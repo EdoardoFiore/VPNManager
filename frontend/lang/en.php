@@ -12,7 +12,7 @@ return [
     'loading' => 'Loading...',
     'error' => 'Error',
     'success' => 'Success',
-    
+
     // Header/Nav
     'instances' => 'Instances',
     'users' => 'Users',
@@ -21,12 +21,12 @@ return [
     'logout' => 'Logout',
     'profile' => 'Profile',
     'new_instance' => 'New Instance',
-    
+
     // Index / Dashboard
     'active_instances' => 'Active Instances',
     'top_users' => 'Top Users (Session)',
     'connection_status' => 'Connection Status',
-    
+
     // Instance Create Modal
     'create_instance_title' => 'New OpenVPN Instance',
     'instance_name' => 'Instance Name',
@@ -42,7 +42,7 @@ return [
     'create_btn' => 'Create Instance',
     'name_hint' => 'Letters, numbers, and hyphens only.',
     'invalid_name_format' => 'The name can only contain letters, numbers, and hyphens.', // Added
-    
+
     // Instance Details
     'instance_details' => 'Instance Details',
     'start' => 'Start',
@@ -55,21 +55,21 @@ return [
     'select_client_hint' => 'Only the clients of this instance are shown.',
     'logs' => 'Logs',
     'configuration' => 'Configuration',
-    
+
     // Clients
     'add_client' => 'Add Client',
     'client_name' => 'Client Name',
     'download_config' => 'Download Config',
     'show_qr' => 'Show QR',
     'revoke_client' => 'Revoke Client',
-    
+
     // Firewall
     'firewall_rules' => 'Firewall Rules',
     'add_group' => 'Add Group',
     'group_name' => 'Group Name',
     'description' => 'Description',
     'members' => 'Members',
-    
+
     // Machine Settings
     'input_chain' => 'Input (Inbound)',
     'output_chain' => 'Output (Outbound)',
@@ -82,7 +82,7 @@ return [
     'port' => 'Port',
     'action' => 'Action',
     'rule_order' => 'Order',
-    
+
     // Instance Page
     'back_to_dashboard' => 'Back to Dashboard',
     'client_management' => 'Client Management',
@@ -210,7 +210,7 @@ return [
     'username' => 'Username',
     'password' => 'Password',
     'login_btn' => 'Sign In',
-    
+
     // JS Alerts / Dynamic
     'confirm_delete_instance' => 'Are you sure you want to delete this instance?',
     'confirm_delete_client' => 'Are you sure you want to delete this client?',
@@ -297,18 +297,18 @@ return [
     'delete_rule_error_short' => 'Error deleting rule.',
     'firewall_policy_updated_success' => 'Default firewall policy updated successfully.',
     'save_policy_error' => 'Error saving policy: ',
-    
+
     // JS Logic
-    'sending' => 'Sending...', 
+    'sending' => 'Sending...',
     'dns_example_placeholder' => 'E.g. 1.1.1.1, 8.8.8.8',
     'default_google' => 'Default (Google)',
     'via' => 'via',
     'configure' => 'Configure',
-    'testing' => 'Testing...', 
-    
+    'testing' => 'Testing...',
+
     // Setup.php (Public Config)
     'vpn_configuration' => 'VPN Configuration',
-    'verifying_link' => 'Verifying link...', 
+    'verifying_link' => 'Verifying link...',
     'invalid_link_title' => 'Invalid or Expired Link',
     'invalid_link_message' => 'The link you used is invalid or expired. Please contact the administrator for a new one.',
     'hello' => 'Hello,',
@@ -327,7 +327,7 @@ return [
     'download_conf_step' => '2. Download the .conf file.',
     'import_tunnel_step' => '3. Open WireGuard > Import Tunnel from File.',
     'click_activate_step' => '4. Click "Activate".',
-    
+
     // Settings.php
     'system_settings_title' => 'System Settings',
     'general_customization' => 'General / Customization',
@@ -385,24 +385,24 @@ return [
     'are_you_sure' => 'Are you sure?',
     'restore_confirm_text' => 'This action will <strong>overwrite the existing database and configurations</strong>. The system will restart and you may lose unsaved data.',
     'restore_btn' => 'Restore',
-    'saving' => 'Saving...', 
-    'starting' => 'Starting...', 
-    
+    'saving' => 'Saving...',
+    'starting' => 'Starting...',
+
     // Roles
     'role_viewer' => 'Viewer (Scoped Read-Only)',
     'role_technician' => 'Technician (Scoped Management)',
     'role_partner' => 'Partner (Full VPN Mgmt)',
     'role_admin_readonly' => 'Admin Read Only (Global View)',
     'role_admin' => 'Admin (Full System)',
-    
+
     // Users
     'change_password_for' => 'Change Password for',
     'new_password' => 'New Password',
     'update_password_btn' => 'Update Password',
-    
+
     // Machine Settings
     'static_ip' => 'Static',
-    
+
     // Ajax Handler Errors
     'missing_instance_id' => 'Missing instance ID.',
     'missing_data' => 'Missing data.',
@@ -487,6 +487,8 @@ return [
     'user_updated' => 'User updated successfully.',
     'binding_error' => 'Binding to at least one instance is required for Technicians and Viewers.',
     'missing_fields' => 'Missing required fields.',
+    'custom_favicon_label' => 'Custom Favicon',
+    'favicon_help' => 'Upload a .ico, .png or .svg file for the browser icon. Max 2MB.',
 
 
 

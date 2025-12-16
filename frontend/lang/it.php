@@ -12,7 +12,7 @@ return [
     'loading' => 'Caricamento...',
     'error' => 'Errore',
     'success' => 'Successo',
-    
+
     // Header/Nav
     'instances' => 'Istanze',
     'users' => 'Utenti',
@@ -21,12 +21,12 @@ return [
     'logout' => 'Esci',
     'profile' => 'Profilo',
     'new_instance' => 'Nuova Istanza',
-    
+
     // Index / Dashboard
     'active_instances' => 'Istanze Attive',
     'top_users' => 'Top Users (Sessione)',
     'connection_status' => 'Stato Connessione',
-    
+
     // Instance Create Modal
     'create_instance_title' => 'Nuova Istanza OpenVPN',
     'instance_name' => 'Nome Istanza',
@@ -42,7 +42,7 @@ return [
     'create_btn' => 'Crea Istanza',
     'name_hint' => 'Solo lettere, numeri e trattini.',
     'invalid_name_format' => 'Il nome può contenere solo lettere, numeri e trattini.', // Added
-    
+
     // Instance Details
     'instance_details' => 'Dettaglio Istanza',
     'start' => 'Avvia',
@@ -55,21 +55,21 @@ return [
     'select_client_hint' => 'Vengono mostrati solo i client di questa istanza',
     'logs' => 'Log',
     'configuration' => 'Configurazione',
-    
+
     // Clients
     'add_client' => 'Aggiungi Client',
     'client_name' => 'Nome Client',
     'download_config' => 'Scarica Config',
     'show_qr' => 'Mostra QR',
     'revoke_client' => 'Revoca Client',
-    
+
     // Firewall
     'firewall_rules' => 'Regole Firewall',
     'add_group' => 'Aggiungi Gruppo',
     'group_name' => 'Nome Gruppo',
     'description' => 'Descrizione',
     'members' => 'Membri',
-    
+
     // Machine Settings
     'input_chain' => 'Input (Entrata)',
     'output_chain' => 'Output (Uscita)',
@@ -82,7 +82,7 @@ return [
     'port' => 'Porta',
     'action' => 'Azione',
     'rule_order' => 'Ordine',
-    
+
     // Instance Page
     'back_to_dashboard' => 'Torna alla Dashboard',
     'client_management' => 'Gestione Client',
@@ -194,7 +194,7 @@ return [
     'dns_servers_label' => 'Server DNS (separati da virgola)',
     'add_ip_btn' => 'Aggiungi IP',
     'save_apply_btn' => 'Salva e Applica',
-    
+
     // Tooltips / Popovers
     'table_help' => "Specifica la tabella iptables. 'filter' è per il filtraggio (default). 'nat' per la traduzione degli indirizzi. 'mangle' per la modifica. 'raw' per escludere connessioni dal tracciamento.",
     'chain_help' => "La catena di regole. Es: INPUT (pacchetti per il server), OUTPUT (dal server), FORWARD (da inoltrare), PREROUTING/POSTROUTING (per NAT).",
@@ -210,7 +210,7 @@ return [
     'username' => 'Username',
     'password' => 'Password',
     'login_btn' => 'Accedi',
-    
+
     // JS Alerts / Dynamic
     'confirm_delete_instance' => 'Sei sicuro di voler eliminare questa istanza?',
     'confirm_delete_client' => 'Sei sicuro di voler eliminare questo client?',
@@ -297,7 +297,7 @@ return [
     'delete_rule_error_short' => 'Errore eliminazione regola.',
     'save_policy_error' => 'Errore salvataggio policy: ',
     'firewall_policy_updated_success' => 'Policy firewall predefinita aggiornata con successo.',
-    
+
     // JS Logic
     'sending' => 'Invio...',
     'dns_example_placeholder' => 'Es: 1.1.1.1, 8.8.8.8',
@@ -305,7 +305,7 @@ return [
     'via' => 'via',
     'configure' => 'Configura',
     'testing' => 'Test...',
-    
+
     // Setup.php (Public Config)
     'vpn_configuration' => 'Configurazione VPN',
     'verifying_link' => 'Verifica del link in corso...',
@@ -327,7 +327,7 @@ return [
     'download_conf_step' => '2. Scarica il file .conf.',
     'import_tunnel_step' => '3. Apri WireGuard > Importa tunnel da file.',
     'click_activate_step' => '4. Clicca "Attiva".',
-    
+
     // Settings.php
     'system_settings_title' => 'Impostazioni di Sistema',
     'general_customization' => 'Generale / Personalizzazione',
@@ -385,24 +385,24 @@ return [
     'are_you_sure' => 'Sei sicuro?',
     'restore_confirm_text' => 'Questa azione <strong>sovrascriverà il database e le configurazioni esistenti</strong>. Il sistema verrà riavviato e potresti perdere i dati attuali non salvati.',
     'restore_btn' => 'Ripristina',
-    'saving' => 'Salvataggio...', 
-    'starting' => 'Avvio...', 
-    
+    'saving' => 'Salvataggio...',
+    'starting' => 'Avvio...',
+
     // Roles
     'role_viewer' => 'Viewer (Lettura Limitata)',
     'role_technician' => 'Tecnico (Gestione Limitata)',
     'role_partner' => 'Partner (Gestione VPN Completa)',
     'role_admin_readonly' => 'Admin Sola Lettura (Vista Globale)',
     'role_admin' => 'Admin (Sistema Completo)',
-    
+
     // Users
     'change_password_for' => 'Cambia Password per',
     'new_password' => 'Nuova Password',
     'update_password_btn' => 'Aggiorna Password',
-    
+
     // Machine Settings
     'static_ip' => 'Statico',
-    
+
     // Ajax Handler Errors
     'missing_instance_id' => 'ID istanza mancante.',
     'missing_data' => 'Dati mancanti.',
@@ -420,7 +420,7 @@ return [
     'missing_file_or_type' => 'File o tipo mancante.',
     'missing_file' => 'File mancante.',
     'unknown_action' => 'Azione non riconosciuta.',
-    'static_ip' => 'Statico',    
+    'static_ip' => 'Statico',
     // Dashboard & Settings
     'no_instances_config' => 'Nessuna istanza configurata. Creane una nuova.',
     'loading_instances_error' => 'Errore caricamento istanze:',
@@ -486,6 +486,8 @@ return [
     'user_updated' => 'Utente aggiornato con successo.',
     'binding_error' => 'È necessario associare almeno un\'istanza per Tecnici e Visualizzatori.',
     'missing_fields' => 'Campi mancanti.',
+    'custom_favicon_label' => 'Favicon Personalizzata',
+    'favicon_help' => "Carica un file .ico, .png o .svg per l'icona del browser. Max 2MB.",
 
 
 
