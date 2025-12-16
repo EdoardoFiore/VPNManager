@@ -236,7 +236,10 @@ def apply_all_vpn_rules(): # Renamed from apply_all_openvpn_rules
     logger.info("Applying all VPN firewall rules...")
     
     
-    # 1. Reset Top-Level VPN Chains
+    # 1. Full Cleanup: Flush main chains and DELETE custom zombie chains
+    flush_all_vpn_chains()
+    
+    # 2. Reset/Ensure Top-Level VPN Chains exist
     _create_or_flush_chain(VPN_INPUT_CHAIN, "filter")
     _create_or_flush_chain(VPN_OUTPUT_CHAIN, "filter")
     _create_or_flush_chain(VPN_NAT_POSTROUTING_CHAIN, "nat")
@@ -297,45 +300,57 @@ def flush_all_vpn_chains():
     """
     Completely removes all VPN-related chains (VIG_*, VI_*, VPN_*) to ensure a clean slate.
     Used during restore process.
+    Iterates over both 'filter' and 'nat' tables.
     """
-    logger.info("Flushing all VPN iptables chains...")
+    logger.info("Flushing all VPN iptables chains (filter + nat)...")
     
-    # 1. Flush the main anchor chains first to break references
-    main_chains = [VPN_INPUT_CHAIN, VPN_OUTPUT_CHAIN, VPN_MAIN_FWD_CHAIN, FW_INPUT_CHAIN, FW_OUTPUT_CHAIN, FW_FORWARD_CHAIN]
-    for chain in main_chains:
-        _run_iptables("filter", ["-F", chain], suppress_errors=True)
+    tables = ["filter", "nat"]
+    
+    # 0. Define main anchor chains per table to flush but not delete
+    main_chains_map = {
+        "filter": [VPN_INPUT_CHAIN, VPN_OUTPUT_CHAIN, VPN_MAIN_FWD_CHAIN, FW_INPUT_CHAIN, FW_OUTPUT_CHAIN, FW_FORWARD_CHAIN],
+        "nat": [VPN_NAT_POSTROUTING_CHAIN]
+    }
 
-    # 2. Get list of all custom chains
-    try:
-        res = subprocess.run(["/usr/sbin/iptables", "-t", "filter", "-S"], capture_output=True, text=True, check=True)
-        lines = res.stdout.splitlines()
-        
-        # Regex to find our custom chains definition: -N <CHAIN_NAME>
-        # We look for chains starting with VI_, VIG_, VPN_INPUT_, VPN_OUTPUT_
-        # Note: VPN_INPUT (exact) is a main chain, we don't delete it, only flush it.
-        # But per-instance chains like VPN_INPUT_customer1 must be deleted.
-        
-        chains_to_delete = []
-        for line in lines:
-            if line.startswith("-N"):
-                parts = line.split()
-                if len(parts) >= 2:
-                    chain_name = parts[1]
-                    if (chain_name.startswith("VI_") or 
-                        chain_name.startswith("VIG_") or 
-                        (chain_name.startswith("VPN_") and chain_name not in [VPN_INPUT_CHAIN, VPN_OUTPUT_CHAIN, VPN_MAIN_FWD_CHAIN, VPN_NAT_POSTROUTING_CHAIN])):
-                        chains_to_delete.append(chain_name)
+    for table in tables:
+        # 1. Flush the main anchor chains first to break references
+        main_chains = main_chains_map.get(table, [])
+        for chain in main_chains:
+             _run_iptables(table, ["-F", chain], suppress_errors=True)
 
-        # 3. Delete the chains
-        # We must flush them before deleting
-        for chain in chains_to_delete:
-             _run_iptables("filter", ["-F", chain], suppress_errors=True)
-             
-        # Delete them (might fail if still referenced, but we flushed main chains so should be ok)
-        for chain in chains_to_delete:
-             _run_iptables("filter", ["-X", chain], suppress_errors=True)
-             
-        logger.info(f"Deleted {len(chains_to_delete)} stale VPN chains.")
+        # 2. Get list of all custom chains
+        try:
+            res = subprocess.run(["/usr/sbin/iptables", "-t", table, "-S"], capture_output=True, text=True, check=True)
+            lines = res.stdout.splitlines()
+            
+            # Regex to find our custom chains definition: -N <CHAIN_NAME>
+            # We look for chains starting with VI_, VIG_, VPN_
+            
+            chains_to_delete = []
+            for line in lines:
+                if line.startswith("-N"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        chain_name = parts[1]
+                        # Determine if it's a target for deletion
+                        # It must start with our prefixes AND NOT be one of the main system/anchor chains
+                        is_target_prefix = (chain_name.startswith("VI_") or 
+                                            chain_name.startswith("VIG_") or 
+                                            chain_name.startswith("VPN_"))
+                        
+                        if is_target_prefix and chain_name not in main_chains:
+                            chains_to_delete.append(chain_name)
 
-    except Exception as e:
-        logger.error(f"Failed to flush VPN chains: {e}")
+            # 3. Flush the chains before deleting
+            for chain in chains_to_delete:
+                 _run_iptables(table, ["-F", chain], suppress_errors=True)
+                 
+            # 4. Delete the chains
+            for chain in chains_to_delete:
+                 _run_iptables(table, ["-X", chain], suppress_errors=True)
+                 
+            if chains_to_delete:
+                logger.info(f"Deleted {len(chains_to_delete)} stale VPN chains from table '{table}'.")
+
+        except Exception as e:
+            logger.error(f"Failed to flush VPN chains for table '{table}': {e}")

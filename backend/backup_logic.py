@@ -135,6 +135,26 @@ def restore_backup(zip_path):
                     restart_wireguard_interface(interface)
 
             logger.info("WireGuard configs restored and interfaces restarted.")
+        
+        # 2.5 Re-Apply Firewall Rules from valid DB state
+        # Now that DB is restored and Chains are flushed, we re-apply everything to memory
+        try:
+            iptables_manager.apply_all_vpn_rules()
+            logger.info("Firewall rules re-applied from restored database.")
+            
+            # 2.6 Persist rules to file
+            save_script = os.path.join(ROOT_DIR, 'scripts', 'save-iptables.sh')
+            if os.path.exists(save_script):
+                # Ensure executable
+                os.chmod(save_script, 0o755) 
+                subprocess.run([save_script], check=True, capture_output=True)
+                logger.info(f"Firewall rules persisted via {save_script}")
+            else:
+                logger.warning(f"Save script not found at {save_script}")
+                
+        except Exception as e:
+            logger.error(f"Failed to re-apply/save firewall rules during restore: {e}")
+
 
         # 3. Restore Uploads
         restored_uploads = os.path.join(extract_dir, 'uploads')
@@ -150,6 +170,20 @@ def restore_backup(zip_path):
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy2(src, dst)
             logger.info("Uploads restored.")
+            
+            logger.info("Uploads restored.")
+            
+        # 4. Restart VPN Manager Service (Delayed)
+        # We need to restart the backend service to ensure it loads the new DB/State cleanly.
+        # We use a delay to allow the API to return the success response to the client first.
+        try:
+            logger.info("Scheduling delayed restart of vpn-manager service...")
+            subprocess.Popen(["bash", "-c", "sleep 3; systemctl restart vpn-manager"], 
+                             start_new_session=True, 
+                             stdout=subprocess.DEVNULL, 
+                             stderr=subprocess.DEVNULL)
+        except Exception as e:
+            logger.error(f"Failed to schedule service restart: {e}")
             
         return True
 

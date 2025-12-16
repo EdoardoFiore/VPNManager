@@ -195,13 +195,14 @@ def delete_instance(instance_id: str):
         if os.path.exists(config_path):
             os.remove(config_path)
 
-        # Remove Firewall
-        iptables_manager.remove_openvpn_rules(inst.port, "udp", inst.interface, inst.subnet)
-        _save_iptables_rules()
-
         # DB Delete
         session.delete(inst)
         session.commit()
+        
+        # Remove Firewall (Refreshes rules from DB, so must be AFTER delete/commit)
+        # Arguments are ignored by current implementation of remove_openvpn_rules which just reloads all
+        iptables_manager.remove_openvpn_rules(inst.port, "udp", inst.interface, inst.subnet)
+        _save_iptables_rules()
 
 def update_instance_routes(instance_id: str, tunnel_mode: str, routes: List[Dict[str, str]], dns_servers: List[str] = None) -> Instance:
     with Session(engine) as session:
