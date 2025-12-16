@@ -109,6 +109,18 @@ if ($currentRole !== 'admin') {
                                         </div>
                                         <h2 class="mt-2" id="preview-company-name">VPN Manager</h2>
                                     </div>
+                                    <div class="my-4">
+                                        <h4 class="text-muted"><?= __('custom_favicon_label') ?></h4>
+                                        <div id="preview-favicon-container" class="d-flex justify-content-center align-items-center" style="height: 32px;">
+                                              <img src="" id="preview-favicon-img" class="d-none" style="height: 32px; width: 32px; object-fit: contain;">
+                                              <svg id="preview-favicon-default" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="<?= $brandColor ?>" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon">
+                                                  <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                                                  <circle cx="12" cy="11" r="3" />
+                                                  <line x1="12" y1="14" x2="12" y2="15" />
+                                                  <circle cx="12" cy="16" r="1" fill="<?= $brandColor ?>" />
+                                              </svg>
+                                        </div>
+                                    </div>
                                     <button class="btn btn-primary"
                                         id="preview-btn"><?= __('button_example') ?></button>
                                 </div>

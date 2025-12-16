@@ -385,6 +385,14 @@ def update_system_settings(settings_update: SystemSettingsUpdate):
             settings = SystemSettings(id=1, **settings_update.dict())
         else:
             settings_data = settings_update.dict(exclude_unset=True)
+            
+            # Safeguard: Ensure we don't overwrite files with None if somehow present
+            # But allow empty string "" for reset
+            if settings_data.get('logo_url') is None:
+                settings_data.pop('logo_url', None)
+            if settings_data.get('favicon_url') is None:
+                settings_data.pop('favicon_url', None)
+            
             for key, value in settings_data.items():
                 setattr(settings, key, value)
             settings.updated_at = datetime.utcnow()
@@ -394,7 +402,7 @@ def update_system_settings(settings_update: SystemSettingsUpdate):
         session.refresh(settings)
         return settings
 
-from fastapi import UploadFile, File
+from fastapi import UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 
 # Mount static upload dir
@@ -405,7 +413,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # If running behind Nginx, /static/uploads should map to this dir.
 
 @app.post("/api/settings/logo", dependencies=[Depends(auth.check_role([UserRole.ADMIN]))])
-async def upload_logo(file: UploadFile = File(...), type: str = "logo"):
+async def upload_logo(file: UploadFile = File(...), type: str = Form("logo")):
     """
     Type: 'logo' or 'favicon'
     """

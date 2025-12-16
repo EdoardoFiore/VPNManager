@@ -72,6 +72,25 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
+
+        const faviconInput = document.querySelector('[name="favicon_file"]');
+        if (faviconInput) {
+            faviconInput.addEventListener('change', function (e) {
+                if (this.files && this.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        const img = document.getElementById('preview-favicon-img');
+                        const svg = document.getElementById('preview-favicon-default');
+                        if (img) {
+                            img.src = e.target.result;
+                            img.classList.remove('d-none');
+                            if (svg) svg.classList.add('d-none');
+                        }
+                    }
+                    reader.readAsDataURL(this.files[0]);
+                }
+            });
+        }
     }
 
     // --- Backup Settings Listeners ---
@@ -173,6 +192,17 @@ async function loadSystemSettings() {
                     svg.classList.add('d-none');
                 }
             }
+
+            if (data.favicon_url) {
+                const img = document.getElementById('preview-favicon-img');
+                const svg = document.getElementById('preview-favicon-default');
+                if (img && svg) {
+                    img.src = data.favicon_url;
+                    img.classList.remove('d-none');
+                    svg.classList.add('d-none');
+                }
+            }
+
             updatePreview();
         }
     } catch (e) {
@@ -241,6 +271,18 @@ async function saveSystemSettings() {
             const favResponse = await fetch(API_AJAX_HANDLER, { method: 'POST', body: favData });
             const favResult = await favResponse.json();
             if (!favResult.success) throw new Error(__('favicon_upload_error') + " " + (favResult.body.detail || __('unknown_error')));
+
+            // Update preview immediately
+            if (favResult.body.url) {
+                const img = document.getElementById('preview-favicon-img');
+                const svg = document.getElementById('preview-favicon-default');
+                if (img && svg) {
+                    img.src = favResult.body.url;
+                    img.classList.remove('d-none');
+                    svg.classList.add('d-none');
+                }
+            }
+
         }
 
 

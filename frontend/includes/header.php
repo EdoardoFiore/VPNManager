@@ -42,6 +42,9 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <?php if ($brandFavicon): ?>
         <link rel="icon" href="<?= htmlspecialchars($brandFavicon) ?>" />
+    <?php else: ?>
+        <!-- Default Favicon (SVG Data URI) -->
+        <link rel="icon" href="data:image/svg+xml;base64,<?= base64_encode(str_replace('currentColor', $brandColor, '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /><circle cx="12" cy="11" r="3" /><line x1="12" y1="14" x2="12" y2="15" /><circle cx="12" cy="16" r="1" fill="currentColor" /></svg>')) ?>" />
     <?php endif; ?>
     <title><?= __('dashboard') ?> - <?= htmlspecialchars($brandName) ?></title>
     <!-- CSS files -->
