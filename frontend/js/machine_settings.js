@@ -461,18 +461,6 @@ async function applyMachineFirewallRules() {
 }
 
 
-function toggleMachinePortInput(protocol, modalType) {
-    const portContainer = document.getElementById(`machine-port-container-${modalType}`);
-    if (!portContainer) return;
-
-    if (protocol === 'tcp' || protocol === 'udp') {
-        portContainer.style.display = 'block';
-    } else {
-        portContainer.style.display = 'none';
-        portContainer.querySelector('input[name="port"]').value = ''; // Clear value when hidden
-    }
-}
-
 
 // --- Network Interfaces ---
 
@@ -1010,4 +998,3 @@ function toggleMachinePortInput(protocol, modalType) {
         portContainer.querySelector('input[name="port"]').value = ''; // Clear value when hidden
     }
 }
-
