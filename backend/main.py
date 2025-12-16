@@ -1184,9 +1184,9 @@ async def update_machine_network_interface_config(interface_name: str, config_da
              raise HTTPException(status_code=500, detail="Failed to write netplan configuration.")
              
         # Apply Logic: netplan apply
-        # WARNING: This might cut network connection!
-        # We should run it async or warn user.
-        # network_utils.apply_netplan() 
+        success, error_msg = network_utils.apply_netplan_config()
+        if not success:
+             raise HTTPException(status_code=500, detail=f"Failed to apply Netplan config: {error_msg}")
         
         return {"success": True, "message": "Interface configuration updated."}
     except Exception as e:
