@@ -78,20 +78,20 @@ async function fetchAndRenderClients() {
                                 ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
                                 
                                 ${smtpConfigured ? `
-                                <button class="btn btn-info btn-sm btn-icon" onclick="shareClient('${fullName}')" title="Invia via Email">
+                                <button class="btn btn-info btn-sm btn-icon" onclick="shareClient('${fullName}')" title="${__('send_config_email')}">
                                     <i class="ti ti-mail"></i>
                                 </button>` : `
                                 <button class="btn btn-ghost-warning btn-sm btn-icon" onclick="showNotification('warning', __('smtp_not_configured_warning'))" title="${__('smtp_not_configured_warning')}">
                                     <i class="ti ti-mail-exclamation"></i>
                                 </button>`}
                                 
-                                <button class="btn btn-secondary btn-sm btn-icon" onclick="showQRCode('${fullName}')" title="Mostra QR Code">
+                                <button class="btn btn-secondary btn-sm btn-icon" onclick="showQRCode('${fullName}')" title="${__('show_qr')}">
                                     <i class="ti ti-qrcode"></i>
                                 </button>
-                                <button class="btn btn-primary btn-sm btn-icon" onclick="downloadClient('${fullName}')" title="Scarica Configurazione">
+                                <button class="btn btn-primary btn-sm btn-icon" onclick="downloadClient('${fullName}')" title="${__('download_config')}">
                                     <i class="ti ti-download"></i>
                                 </button>
-                                <button class="btn btn-danger btn-sm btn-icon" onclick="revokeClient('${fullName}')" title="Revoca Client">
+                                <button class="btn btn-danger btn-sm btn-icon" onclick="revokeClient('${fullName}')" title="${__('revoke_client')}">
                                     <i class="ti ti-trash"></i>
                                 </button>
                                 ` : ''}

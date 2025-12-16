@@ -189,8 +189,8 @@ require_once 'includes/header.php';
                     <label class="form-label"><?= __('firewall_initial_policy_label') ?></label>
                     <?php if (in_array($currentRole, ['admin', 'partner', 'technician'])): ?>
                         <select class="form-select" id="instance-firewall-default-policy">
-                            <option value="ACCEPT">ACCEPT (Consenti tutto ciò che non è esplicitamente bloccato)</option>
-                            <option value="DROP">DROP (Blocca tutto ciò che non è esplicitamente consentito)</option>
+                            <option value="ACCEPT"><?= __('firewall_initial_policy_accept') ?></option>
+                            <option value="DROP"><?= __('firewall_initial_policy_drop') ?></option>
                         </select>
                     <?php else: ?>
                         <input type="text" class="form-control" id="instance-firewall-default-policy-display" readonly
@@ -220,7 +220,7 @@ require_once 'includes/header.php';
                         </div>
                     </div>
                     <div class="list-group list-group-flush" id="groups-list">
-                        <div class="list-group-item text-center">Caricamento...</div>
+                        <div class="list-group-item text-center"><?= __('loading') ?></div>
                     </div>
                 </div>
             </div>
@@ -311,7 +311,7 @@ require_once 'includes/header.php';
         </div>
         <div class="modal-footer">
             <button type="button" class="btn me-auto" data-bs-dismiss="modal"><?= __('cancel') ?></button>
-            <button type="button" class="btn btn-primary" onclick="createGroup()"><?= __('create_btn') // Create Group in lang it.php? No wait create_btn is Create Instance. ?>Crea Gruppo</button>
+            <button type="button" class="btn btn-primary" onclick="createGroup()"><?= __('create_group_btn') ?></button>
         </div>
     </div>
 </div>
@@ -327,11 +327,11 @@ require_once 'includes/header.php';
         </div>
         <div class="modal-body">
             <div class="mb-3">
-                <label class="form-label">Seleziona Cliente</label>
+                <label class="form-label"><?= __('select_client') ?></label>
                 <select class="form-select" id="member-select">
                     <option value=""><?= __('loading') ?></option>
                 </select>
-                <small class="form-hint">Vengono mostrati solo i client di questa istanza.</small>
+                <small class="form-hint"><?= __('select_client_hint') ?></small>
             </div>
         </div>
         <div class="modal-footer">

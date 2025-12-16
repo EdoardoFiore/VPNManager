@@ -49,7 +49,10 @@ return [
     'stop' => 'Stop',
     'restart' => 'Restart',
     'clients' => 'Clients',
+    'create_group_btn' => 'Create Group',
     'firewall_groups' => 'Firewall Groups',
+    'select_client' => 'Select Client',
+    'select_client_hint' => 'Only the clients of this instance are shown.',
     'logs' => 'Logs',
     'configuration' => 'Configuration',
     
@@ -58,6 +61,7 @@ return [
     'client_name' => 'Client Name',
     'download_config' => 'Download Config',
     'show_qr' => 'Show QR',
+    'revoke_client' => 'Revoke Client',
     
     // Firewall
     'firewall_rules' => 'Firewall Rules',
@@ -96,6 +100,8 @@ return [
     'save_changes' => 'Save Changes',
     'firewall_default_policy_title' => 'Instance Firewall Default Policy',
     'firewall_initial_policy_label' => 'Initial Policy for VPN Client Traffic',
+    'firewall_initial_policy_accept' => 'ACCEPT (Allow everything that is not explicitly blocked)',
+    'firewall_initial_policy_drop' => 'DROP (Block everything that is not explicitly allowed)',
     'firewall_policy_hint' => 'This policy applies to all traffic originating from VPN clients of this instance that does not match any of the defined ACL group rules.',
     'save_policy' => 'Save Policy',
     'groups' => 'Groups',
@@ -178,6 +184,7 @@ return [
     'connection_state_label' => 'Connection State',
     'comment_label' => 'Comment',
     'iptables_preview' => 'IPTables Command Preview',
+    'iptables_description' => 'Rule description',
     'confirm_delete_firewall_rule' => 'Confirm Firewall Rule Deletion',
     'confirm_delete_global_rule_msg' => 'Are you sure you want to delete the following global firewall rule?',
     'configure_interface' => 'Configure Interface',

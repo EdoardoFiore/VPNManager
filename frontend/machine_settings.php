@@ -329,13 +329,13 @@ require_once 'includes/header.php';
                         <input type="text" class="form-control" name="state" placeholder="NEW,ESTABLISHED,RELATED">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Commento</label>
-                        <input type="text" class="form-control" name="comment" placeholder="Descrizione della regola">
+                        <label class="form-label"><?= __('comment_label') ?></label>
+                        <input type="text" class="form-control" name="comment" placeholder="<?= __('iptables_description') ?>">
                     </div>
                 </form>
 
                 <div class="mt-4">
-                    <label class="form-label">Preview Comando IPTables</label>
+                    <label class="form-label"><?= __('iptables_preview') ?></label>
                     <pre class="code-block"
                         style="background-color: #f5f7fb; padding: 10px; border-radius: 4px; font-family: 'Consolas', monospace; font-size: 13px; color: #333;"><code id="iptables-preview-add">iptables -t filter -A INPUT -j ACCEPT</code></pre>
                 </div>
@@ -429,7 +429,7 @@ require_once 'includes/header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label"><?= __('comment_label') ?></label>
-                        <input type="text" class="form-control" name="comment" placeholder="Descrizione della regola">
+                        <input type="text" class="form-control" name="comment" placeholder="<?= __('iptables_description') ?>">
                     </div>
                 </form>
 
