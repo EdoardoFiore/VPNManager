@@ -109,8 +109,8 @@ By default, the `admin` user is created (password is set during the first script
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/Screenshot%202025-12-16%20120100.png" width="300" alt="Screenshot 1"></td>
     <td><img src="docs/screenshots/Screenshot%202025-12-16%20120154.png" width="300" alt="Screenshot 2"></td>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20120100.png" width="300" alt="Screenshot 1"></td>
     <td><img src="docs/screenshots/Screenshot%202025-12-16%20120326.png" width="300" alt="Screenshot 3"></td>
     <td><img src="docs/screenshots/Screenshot%202025-12-16%20121815.png" width="300" alt="Screenshot 4"></td>
     <td><img src="docs/screenshots/Screenshot%202025-12-16%20122053.png" width="300" alt="Screenshot 5"></td>
