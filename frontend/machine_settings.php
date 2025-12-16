@@ -483,20 +483,23 @@ require_once 'includes/header.php';
                 <form id="editNetworkInterfaceForm">
                     <input type="hidden" name="interface_name" id="edit-interface-hidden-name">
                     <div class="mb-3">
-                        <label class="form-label">MAC Address:</label>
+                        <label class="form-label"><?= __('mac_address') ?>:</label>
                         <span id="edit-interface-mac" class="form-control-plaintext"></span>
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label">Link Status:</label>
+                        <label class="form-label"><?= __('link_status') ?>:</label>
                         <span id="edit-interface-link-status" class="form-control-plaintext"></span>
                     </div>
+
                     <div class="mb-3">
                         <label class="form-label"><?= __('ip_config_method') ?></label>
                         <select class="form-select" name="ip_method" id="edit-interface-ip-method"
                             onchange="toggleIpConfigFields(this.value)">
                             <option value="dhcp">DHCP</option>
-                            <option value="static"><?= __('static_ip') // Statico defined? Assuming need add or use 'Statico' ?></option>
-                            <option value="none"><?= __('none') // Nessuno ?></option>
+                            <option value="static"><?= __('static_ip') ?></option>
+                            <option value="none"><?= __('none_masc') ?></option>
+
                         </select>
                     </div>
 

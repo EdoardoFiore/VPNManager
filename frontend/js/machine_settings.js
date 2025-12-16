@@ -321,12 +321,13 @@ function renderMachineFirewallRules() {
         if (window.userRole !== 'admin_readonly') {
             innerHTML += `
             <td class="text-end">
-                <button class="btn btn-sm btn-ghost-primary" onclick="openEditMachineRuleModal('${rule.id}')" title="Modifica">
+                <button class="btn btn-sm btn-ghost-primary" onclick="openEditMachineRuleModal('${rule.id}')" title="${__('edit')}">
                     <i class="ti ti-edit"></i>
                 </button>
-                <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteMachineRule('${rule.id}')" title="Elimina">
+                <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteMachineRule('${rule.id}')" title="${__('delete')}">
                     <i class="ti ti-trash"></i>
                 </button>
+
             </td>
         `;
         } else {
@@ -879,9 +880,10 @@ async function updateMachineFirewallRule() {
     };
 
     if (!ruleData.chain || !ruleData.action) {
-        showNotification('danger', 'Chain e Azione sono campi obbligatori.');
+        showNotification('danger', __('chain_action_required'));
         return;
     }
+
 
     try {
         const response = await fetch(`${API_AJAX_HANDLER}?action=update_machine_firewall_rule&rule_id=${encodeURIComponent(ruleId)}`, {
@@ -892,15 +894,16 @@ async function updateMachineFirewallRule() {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('success', 'Regola firewall aggiornata con successo.');
+            showNotification('success', __('rule_updated_success'));
             bootstrap.Modal.getInstance(document.getElementById('modal-edit-machine-rule')).hide();
             loadMachineFirewallRules();
         } else {
-            showNotification('danger', 'Errore aggiornamento regola: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('update_rule_error') + (result.body.detail || __('error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
+
 }
 
 // --- Preview and dynamic inputs for Edit Modal ---

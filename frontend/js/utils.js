@@ -22,11 +22,12 @@ function showNotification(type, message) {
 
     // Default title mapping
     const titles = {
-        'success': 'Successo',
-        'danger': 'Errore',
-        'warning': 'Attenzione',
-        'info': 'Informazione'
+        'success': __('status_success'),
+        'danger': __('status_error'),
+        'warning': __('status_warning'),
+        'info': __('status_info')
     };
+
 
     // Icon mapping (Tabler icons)
     const icons = {
@@ -50,7 +51,8 @@ function showNotification(type, message) {
                 ${icons[type] || icons['info']}
             </div>
             <div>
-                <h4 class="alert-title">${titles[type] || 'Notifica'}</h4>
+                <h4 class="alert-title">${titles[type] || __('notification_title')}</h4>
+
                 <div class="text-secondary">${message}</div>
             </div>
         </div>

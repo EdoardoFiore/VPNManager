@@ -1,17 +1,33 @@
 <?php
 require_once 'api_client.php';
-// Header includes session check
-require_once 'includes/header.php';
+require_once 'includes/i18n.php';
 
-// Enforce Admin Role
-if (($_SESSION['role'] ?? '') !== 'admin') {
-    die('<div class="container text-center mt-5"><h1>403 Forbidden</h1><p>' . __('access_restricted') . '</p></div>');
-}
-
+// Logic handling MUST be before any HTML output for header() redirects to work
 $error = '';
 $success = '';
 
-// Handle Create User
+// Handle Messages from Redirects
+if (isset($_GET['msg']) && $_GET['msg'] === 'user_deleted') {
+    $success = __('user_deleted');
+}
+
+// Handle Delete User
+if (isset($_GET['delete'])) {
+    $userToDelete = $_GET['delete'];
+    // Simple protection: Check if not self and not admin (API does this too, but good for UI feedback)
+    if ($userToDelete !== 'admin' && $userToDelete !== ($_SESSION['username'] ?? '')) {
+         $result = delete_user($userToDelete);
+         if ($result['success']) {
+             header("Location: users.php?msg=user_deleted");
+             exit;
+         } else {
+             $error = $result['body']['detail'] ?? __('error');
+         }
+    } else {
+        $error = __('access_restricted');
+    }
+}
+
 // Handle Create User
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create') {
     $username = $_POST['username'] ?? '';
@@ -76,6 +92,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
     }
 }
+
+// Include Header AFTER logic
+require_once 'includes/header.php';
+
+// Enforce Admin Role
+if (($_SESSION['role'] ?? '') !== 'admin') {
+    die('<div class="container text-center mt-5"><h1>403 Forbidden</h1><p>' . __('access_restricted') . '</p></div>');
+}
+
+
 
 // Fetch Users and Instances
 $usersResponse = get_users();
@@ -217,9 +243,10 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                                                 </svg>
                                             </button>
                                             <?php if ($user['username'] !== 'admin' && $user['username'] !== $_SESSION['username']): ?>
-                                                <a href="?delete=<?= urlencode($user['username']) ?>"
-                                                    class="btn btn-danger btn-sm"
-                                                    onclick="return confirm('<?= __('confirm_delete') ?>')"><?= __('delete') ?></a>
+                                                <button type="button" class="btn btn-danger btn-sm" 
+                                                        onclick="confirmDeleteUser('<?= htmlspecialchars($user['username']) ?>')">
+                                                    <?= __('delete') ?>
+                                                </button>
                                             <?php endif; ?>
                                         </div>
                                     </td>
@@ -413,7 +440,49 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
         // Show Modal
         new bootstrap.Modal(document.getElementById('modal-user')).show();
     }
+
+    function confirmDeleteUser(username) {
+        const modalEl = document.getElementById('modal-danger');
+        const confirmBtn = document.getElementById('modal-confirm-delete-btn');
+        const warningText = document.getElementById('modal-danger-text');
+        
+        warningText.textContent = "<?= __('confirm_delete_user_msg') ?> " + username + "?";
+        // Actually let's use the explicit 'confirm_delete' key or similar if we have one for users.
+        // We have 'confirm_delete' => 'Sei sicuro?' in lang.
+        // Let's create a specific user message or generic.
+        // Using generic 'confirm_delete' for title and custom text.
+        
+        confirmBtn.href = "?delete=" + encodeURIComponent(username);
+        new bootstrap.Modal(modalEl).show();
+    }
 </script>
+
+<!-- Modal Danger (Confirmation) -->
+<div class="modal modal-blur fade" id="modal-danger" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-status bg-danger"></div>
+            <div class="modal-body text-center py-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon mb-2 text-danger icon-lg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v2m0 4v.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></svg>
+                <h3><?= __('are_you_sure') ?></h3>
+                <div class="text-secondary" id="modal-danger-text"><?= __('action_cannot_be_undone') ?></div>
+            </div>
+            <div class="modal-footer">
+                <div class="w-100">
+                    <div class="row">
+                        <div class="col"><a href="#" class="btn w-100" data-bs-dismiss="modal">
+                            <?= __('cancel') ?>
+                        </a></div>
+                        <div class="col"><a href="#" id="modal-confirm-delete-btn" class="btn btn-danger w-100">
+                            <?= __('yes_delete') ?>
+                        </a></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/js/tabler.min.js"></script>
 </body>

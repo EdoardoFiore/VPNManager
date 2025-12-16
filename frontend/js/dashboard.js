@@ -25,8 +25,9 @@ async function loadInstances() {
                                     <h3 class="card-title m-0">${inst.name}</h3>
                                 </div>
                                 <div class="text-muted">
-                                    <div><strong>Porta:</strong> ${inst.port}</div>
-                                    <div><strong>Subnet:</strong> ${inst.subnet}</div>
+                                    <div><strong>${__('port')}:</strong> ${inst.port}</div>
+                                    <div><strong>${__('vpn_subnet')}:</strong> ${inst.subnet}</div>
+
                                     <div class="mt-2 text-dark">
                                         <span class="badge ${inst.tunnel_mode === 'full' ? 'bg-primary-lt' : 'bg-warning-lt'}">
                                             ${inst.tunnel_mode === 'full' ? __('full_tunnel') : __('split_tunnel')}

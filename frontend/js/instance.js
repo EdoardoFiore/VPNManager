@@ -605,7 +605,8 @@ async function saveRoutes() {
             extraInfo = `
                 <div class="alert alert-info mt-3">
                     <i class="ti ti-info-circle icon me-2"></i>
-                    <strong>Firewall Policy:</strong> ${__('split_tunnel_info_policy')}
+                    <strong>${__('firewall_policy_label')}:</strong> ${__('split_tunnel_info_policy')}
+
                     <br><small class="text-muted">${__('split_tunnel_info_desc')}</small>
                 </div>
             `;
@@ -613,7 +614,8 @@ async function saveRoutes() {
             extraInfo = `
                 <div class="alert alert-info mt-3">
                     <i class="ti ti-info-circle icon me-2"></i>
-                    <strong>Nota Firewall:</strong> ${__('full_tunnel_info_policy')}
+                    <strong>${__('firewall_note_label')}:</strong> ${__('full_tunnel_info_policy')}
+
                     <br><small class="text-muted">${__('full_tunnel_info_desc')}</small>
                 </div>
             `;

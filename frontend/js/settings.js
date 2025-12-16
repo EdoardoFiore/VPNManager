@@ -240,8 +240,9 @@ async function saveSystemSettings() {
 
             const favResponse = await fetch(API_AJAX_HANDLER, { method: 'POST', body: favData });
             const favResult = await favResponse.json();
-            if (!favResult.success) throw new Error("Favicon upload failed: " + (favResult.body.detail || "Unknown"));
+            if (!favResult.success) throw new Error(__('favicon_upload_error') + " " + (favResult.body.detail || __('unknown_error')));
         }
+
 
         showNotification('success', __('customization_saved'));
         setTimeout(() => location.reload(), 1500);

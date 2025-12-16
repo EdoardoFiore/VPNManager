@@ -418,10 +418,12 @@ function renderRules(rules) {
                 <td>${rule.port || '*'}</td>
                 <td class="text-end">
                     ${['admin', 'partner', 'technician'].includes(currentUserRole) ? `
-                    <button class="btn btn-sm btn-ghost-primary" onclick="openEditRuleModal('${rule.id}')" title="Modifica">
+                    <button class="btn btn-sm btn-ghost-primary" onclick="openEditRuleModal('${rule.id}')" title="${__('edit')}">
+
                         <i class="ti ti-edit"></i>
                     </button>
-                    <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteRule('${rule.id}')" title="Elimina">
+                    <button class="btn btn-sm btn-ghost-danger" onclick="confirmDeleteRule('${rule.id}')" title="${__('delete')}">
+
                         <i class="ti ti-trash"></i>
                     </button>
                     ` : ''}
@@ -454,8 +456,9 @@ function renderRules(rules) {
         <td><code>ANY</code></td>
         <td>*</td>
         <td class="text-end">
-            <span class="text-muted" title="${defaultPolicyTitle}">Default Instance Policy</span>
+            <span class="text-muted" title="${defaultPolicyTitle}">${__('default_instance_policy')}</span>
         </td>
+
         `;
     tbody.appendChild(trDefault);
 
@@ -611,11 +614,12 @@ function confirmDeleteRule(ruleId) {
     if (rule.action === 'DROP') badgeClass = 'bg-danger';
 
     const ruleDescriptionHtml = `
-            <strong>Azione:</strong> <span class="badge ${badgeClass}">${rule.action}</span><br>
-            <strong>Protocollo:</strong> ${rule.protocol.toUpperCase()}<br>
-        <strong>Destinazione:</strong> <code>${rule.destination}</code><br>
-        <strong>Porta:</strong> ${rule.port || '*'}
+            <strong>${__('action_label')}:</strong> <span class="badge ${badgeClass}">${rule.action}</span><br>
+            <strong>${__('protocol_label')}:</strong> ${rule.protocol.toUpperCase()}<br>
+        <strong>${__('destination_label')}:</strong> <code>${rule.destination}</code><br>
+        <strong>${__('port_label')}:</strong> ${rule.port || '*'}
     `;
+
 
     document.getElementById('delete-rule-summary').innerHTML = ruleDescriptionHtml;
     document.getElementById('confirm-delete-rule-button').onclick = () => performDeleteRule(ruleId);
