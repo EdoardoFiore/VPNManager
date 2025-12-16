@@ -2,6 +2,7 @@
 // frontend/ajax_handler.php
 
 require_once 'api_client.php';
+require_once __DIR__ . '/includes/i18n.php'; // Include i18n
 
 header('Content-Type: application/json');
 
@@ -31,7 +32,7 @@ switch ($action) {
     case 'get_instance':
         $instance_id = $_GET['instance_id'] ?? '';
         if (empty($instance_id)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'ID istanza mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_instance_id')]]);
             exit;
         }
         $response = get_instance($instance_id);
@@ -44,7 +45,7 @@ switch ($action) {
         $data = json_decode($input, true);
 
         if (!$data || !isset($data['name']) || !isset($data['port']) || !isset($data['subnet'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_data')]]);
             exit;
         }
 
@@ -63,7 +64,7 @@ switch ($action) {
     case 'delete_instance':
         $instance_id = $_POST['instance_id'] ?? '';
         if (empty($instance_id)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Instance ID mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_instance_id')]]);
             exit;
         }
         $response = delete_instance($instance_id);
@@ -76,7 +77,7 @@ switch ($action) {
         $data = json_decode($input, true);
 
         if (!$data || !isset($data['instance_id'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Instance ID mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_instance_id')]]);
             exit;
         }
 
@@ -92,7 +93,7 @@ switch ($action) {
     case 'get_clients':
         $instance_id = $_GET['instance_id'] ?? '';
         if (empty($instance_id)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'ID istanza mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_instance_id')]]);
             exit;
         }
         $response = get_clients($instance_id);
@@ -103,7 +104,7 @@ switch ($action) {
         $instance_id = $_POST['instance_id'] ?? '';
         $client_name = $_POST['client_name'] ?? '';
         if (empty($instance_id) || empty($client_name) || !preg_match('/^[a-zA-Z0-9_.-]+$/', $client_name)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati non validi.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('invalid_data')]]);
             exit;
         }
         $response = create_client($instance_id, $client_name);
@@ -114,7 +115,7 @@ switch ($action) {
         $instance_id = $_GET['instance_id'] ?? '';
         $client_name = $_GET['client_name'] ?? '';
         if (empty($instance_id) || empty($client_name) || !preg_match('/^[a-zA-Z0-9_.-]+$/', $client_name)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati non validi.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('invalid_data')]]);
             exit;
         }
         $response = download_client_config($instance_id, $client_name);
@@ -131,7 +132,7 @@ switch ($action) {
         $instance_id = $_POST['instance_id'] ?? '';
         $client_name = $_POST['client_name'] ?? '';
         if (empty($instance_id) || empty($client_name) || !preg_match('/^[a-zA-Z0-9_.-]+$/', $client_name)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati non validi.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('invalid_data')]]);
             exit;
         }
         $response = revoke_client($instance_id, $client_name);
@@ -155,7 +156,7 @@ switch ($action) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
         if (!$data || !isset($data['name']) || !isset($data['instance_id'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_data')]]);
             exit;
         }
         $response = create_group($data['name'], $data['instance_id'], $data['description'] ?? '');
@@ -165,7 +166,7 @@ switch ($action) {
     case 'delete_group':
         $group_id = $_POST['group_id'] ?? '';
         if (empty($group_id)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'ID gruppo mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_group_id')]]);
             exit;
         }
         $response = delete_group($group_id);
@@ -176,7 +177,7 @@ switch ($action) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
         if (!$data || !isset($data['group_id']) || !isset($data['client_identifier']) || !isset($data['subnet_info'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_data')]]);
             exit;
         }
         $response = add_group_member($data['group_id'], $data['client_identifier'], $data['subnet_info']);
@@ -187,7 +188,7 @@ switch ($action) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
         if (!$data || !isset($data['group_id']) || !isset($data['client_identifier']) || !isset($data['instance_name'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_data')]]);
             exit;
         }
         $response = remove_group_member($data['group_id'], $data['client_identifier'], $data['instance_name']);
@@ -205,7 +206,7 @@ switch ($action) {
         $data = json_decode($input, true);
         // Validazione minima
         if (!$data || !isset($data['group_id']) || !isset($data['action']) || !isset($data['destination'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_data')]]);
             exit;
         }
         $response = create_rule(
@@ -223,7 +224,7 @@ switch ($action) {
     case 'delete_rule':
         $rule_id = $_POST['rule_id'] ?? '';
         if (empty($rule_id)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'ID regola mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_rule_id')]]);
             exit;
         }
         $response = delete_rule($rule_id);
@@ -234,7 +235,7 @@ switch ($action) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
         if (!$data || !isset($data['orders'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_data')]]);
             exit;
         }
         $response = reorder_rules($data['orders']);
@@ -245,7 +246,7 @@ switch ($action) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
         if (!$data || !isset($data['rule_id']) || !isset($data['group_id']) || !isset($data['action_type']) || !isset($data['protocol']) || !isset($data['destination'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti per aggiornare la regola del gruppo.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_update_rule_data')]]);
             exit;
         }
         $response = update_group_firewall_rule(
@@ -265,7 +266,7 @@ switch ($action) {
         $data = json_decode($input, true);
 
         if (!$data || !isset($data['instance_id']) || !isset($data['default_policy'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti per aggiornamento policy firewall.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_policy_data')]]);
             exit;
         }
         $response = update_instance_firewall_policy($data['instance_id'], $data['default_policy']);
@@ -285,7 +286,7 @@ switch ($action) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
         if (!$data || !isset($data['chain']) || !isset($data['action'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti per aggiungere la regola firewall macchina.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_machine_rule_data')]]);
             exit;
         }
         $response = add_machine_firewall_rule($data);
@@ -295,7 +296,7 @@ switch ($action) {
     case 'delete_machine_firewall_rule':
         $rule_id = $_GET['rule_id'] ?? '';
         if (empty($rule_id)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'ID regola macchina mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_machine_rule_id')]]);
             exit;
         }
         $response = delete_machine_firewall_rule($rule_id);
@@ -307,7 +308,7 @@ switch ($action) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
         if (empty($rule_id) || !$data) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti per aggiornare la regola.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_machine_update_data')]]);
             exit;
         }
         $response = update_machine_firewall_rule($rule_id, $data);
@@ -318,7 +319,7 @@ switch ($action) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
         if (!$data) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti per applicare le regole firewall macchina.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_apply_data')]]);
             exit;
         }
         $response = apply_machine_firewall_rules($data);
@@ -335,7 +336,7 @@ switch ($action) {
     case 'get_machine_network_interface_config':
         $interface_name = $_GET['interface_name'] ?? '';
         if (empty($interface_name)) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Nome interfaccia mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_interface_name')]]);
             exit;
         }
         $response = get_machine_network_interface_config($interface_name);
@@ -347,7 +348,7 @@ switch ($action) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
         if (empty($interface_name) || !$data) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'Dati mancanti per aggiornare la configurazione interfaccia.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_interface_config_data')]]);
             exit;
         }
         $response = update_machine_network_interface_config($interface_name, $data);
@@ -412,7 +413,7 @@ switch ($action) {
 
     case 'upload_logo':
         if (!isset($_FILES['file']) || !isset($_POST['type'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'File o tipo mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_file_or_type')]]);
             exit;
         }
         $response = upload_logo($_FILES['file'], $_POST['type']);
@@ -445,7 +446,7 @@ switch ($action) {
 
     case 'restore_backup':
         if (!isset($_FILES['backup_file'])) {
-            echo json_encode(['success' => false, 'body' => ['detail' => 'File mancante.']]);
+            echo json_encode(['success' => false, 'body' => ['detail' => __('missing_file')]]);
             exit;
         }
         echo json_encode(restore_backup($_FILES['backup_file']));
@@ -453,8 +454,7 @@ switch ($action) {
 
     default:
 
-        echo json_encode(['success' => false, 'body' => ['detail' => 'Azione non riconosciuta.']]);
+        echo json_encode(['success' => false, 'body' => ['detail' => __('unknown_action')]]);
         break;
 
 }
-

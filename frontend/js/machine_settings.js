@@ -533,7 +533,7 @@ function renderNetworkInterfaces() {
             <td class="text-end">
                 ${window.userRole !== 'admin_readonly' ? `
                 <button class="btn btn-sm btn-primary" onclick="openEditNetworkInterfaceModal('${iface.name}')">
-                    <i class="ti ti-edit"></i> Configura
+                    <i class="ti ti-edit"></i> ${__('configure')}
                 </button>` : ''}
             </td>
         `;
@@ -870,46 +870,6 @@ function updateIptablesPreviewEditModal() {
     previewCode.textContent = command.join(' ');
 }
 
-function openEditMachineRuleModal(ruleId) {
-    const rule = machineFirewallRules.find(r => r.id === ruleId);
-    if (!rule) {
-        showNotification('danger', 'Regola non trovata per la modifica.');
-        return;
-    }
-
-    const form = document.getElementById('editMachineRuleForm');
-    form.elements['id'].value = rule.id;
-    form.elements['table'].value = rule.table;
-    form.elements['action'].value = rule.action;
-    form.elements['protocol'].value = rule.protocol || '';
-    form.elements['source'].value = rule.source || '';
-    form.elements['destination'].value = rule.destination || '';
-    form.elements['port'].value = rule.port || '';
-    form.elements['in_interface'].value = rule.in_interface || '';
-    form.elements['out_interface'].value = rule.out_interface || '';
-    form.elements['state'].value = rule.state || '';
-    form.elements['comment'].value = rule.comment || '';
-
-    // Update chain options for the specific table and select the correct one
-    const chainSelect = form.elements['chain'];
-    const selectedTable = rule.table;
-    chainSelect.innerHTML = '';
-    const options = chainOptionsMap[selectedTable] || [];
-    options.forEach(optionValue => {
-        const option = document.createElement('option');
-        option.value = optionValue;
-        option.textContent = optionValue;
-        if (optionValue === rule.chain) {
-            option.selected = true;
-        }
-        chainSelect.appendChild(option);
-    });
-
-    toggleMachinePortInput(rule.protocol, 'edit');
-    updateIptablesPreviewEditModal(); // Set initial preview
-
-    new bootstrap.Modal(document.getElementById('modal-edit-machine-rule')).show();
-}
 
 async function updateMachineFirewallRule() {
     const form = document.getElementById('editMachineRuleForm');

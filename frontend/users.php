@@ -167,12 +167,8 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                         <tbody>
                             <?php foreach ($users as $user): ?>
                                 <?php
-                                $displayRole = $user['role'];
-                                if ($displayRole === 'admin_readonly') {
-                                    $displayRole = 'Admin Read Only';
-                                } else {
-                                    $displayRole = ucfirst($displayRole);
-                                }
+                                $roleKey = 'role_' . $user['role'];
+                                $displayRole = __($roleKey) !== $roleKey ? __($roleKey) : ucfirst($user['role']);
 
                                 $userInstanceNames = [];
                                 if (!empty($user['instance_ids'])) {
@@ -210,7 +206,7 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                                     <td>
                                         <div class="btn-list flex-nowrap">
                                             <button class="btn btn-primary btn-icon btn-sm"
-                                                onclick='openEditUserModal(<?= json_encode($user) ?>)' title="Edit User">
+                                                onclick='openEditUserModal(<?= json_encode($user) ?>)' title="<?= __('edit_user') ?>">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
                                                     viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
                                                     stroke-linecap="round" stroke-linejoin="round">
@@ -223,7 +219,7 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                                             <?php if ($user['username'] !== 'admin' && $user['username'] !== $_SESSION['username']): ?>
                                                 <a href="?delete=<?= urlencode($user['username']) ?>"
                                                     class="btn btn-danger btn-sm"
-                                                    onclick="return confirm('<?= __('confirm_delete') ?>')"><?= __('delete_btn') ? __('delete_btn') : 'Delete' ?></a>
+                                                    onclick="return confirm('<?= __('confirm_delete') ?>')"><?= __('delete') ?></a>
                                             <?php endif; ?>
                                         </div>
                                     </td>
@@ -260,17 +256,16 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                     <div class="mb-3">
                         <label class="form-label" id="password-label"><?= __('password_label') ?></label>
                         <input type="password" class="form-control" name="password" id="user-password" required>
-                        <small class="form-hint" id="password-hint" style="display: none;">Lascia vuoto per mantenere la
-                            password attuale.</small>
+                        <small class="form-hint" id="password-hint" style="display: none;"><?= __('password_hint_edit') ?></small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label"><?= __('role_label') ?></label>
                         <select class="form-select" name="role" id="user-role-select" onchange="toggleInstanceSelect()">
-                            <option value="viewer">Viewer (Scoped Read-Only)</option>
-                            <option value="technician">Technician (Scoped Management)</option>
-                            <option value="partner">Partner (Full VPN Mgmt)</option>
-                            <option value="admin_readonly">Admin Read Only (Global View)</option>
-                            <option value="admin">Admin (Full System)</option>
+                            <option value="viewer"><?= __('role_viewer') ?></option>
+                            <option value="technician"><?= __('role_technician') ?></option>
+                            <option value="partner"><?= __('role_partner') ?></option>
+                            <option value="admin_readonly"><?= __('role_admin_readonly') ?></option>
+                            <option value="admin"><?= __('role_admin') ?></option>
                         </select>
                         <!-- Legend Omitted for brevity, kept structure -->
                     </div>
@@ -294,7 +289,7 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn me-auto" data-bs-dismiss="modal"><?= __('cancel') ?></button>
-                    <button type="submit" class="btn btn-primary" id="modal-submit-btn"><?= __('save_btn') ? __('save_btn') : 'Salva' ?></button>
+                    <button type="submit" class="btn btn-primary" id="modal-submit-btn"><?= __('save') ?></button>
                 </div>
             </form>
         </div>
@@ -309,18 +304,18 @@ $instances = ($instancesResponse['success'] && is_array($instancesResponse['body
                 <input type="hidden" name="action" value="update_password">
                 <input type="hidden" name="username" id="update-password-username">
                 <div class="modal-header">
-                    <h5 class="modal-title">Cambia Password per <span id="update-password-username-display"></span></h5>
+                    <h5 class="modal-title"><?= __('change_password_for') ?> <span id="update-password-username-display"></span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Nuova Password</label>
+                        <label class="form-label"><?= __('new_password') ?></label>
                         <input type="password" class="form-control" name="new_password" required>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn me-auto" data-bs-dismiss="modal">Annulla</button>
-                    <button type="submit" class="btn btn-primary">Aggiorna Password</button>
+                    <button type="button" class="btn me-auto" data-bs-dismiss="modal"><?= __('cancel') ?></button>
+                    <button type="submit" class="btn btn-primary"><?= __('update_password_btn') ?></button>
                 </div>
             </form>
         </div>

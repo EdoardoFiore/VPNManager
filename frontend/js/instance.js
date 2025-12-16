@@ -292,7 +292,7 @@ async function performShareClient(clientName) {
 
     const btn = document.getElementById('btn-share-client-confirm');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Invio...';
+    btn.innerHTML = `<div class="spinner-border spinner-border-sm" role="status"></div> ${__('sending')}`;
     btn.disabled = true;
 
     try {
@@ -373,7 +373,7 @@ function displayRoutes() {
     if (currentInstance.tunnel_mode === 'full') {
         if (dnsViewContainer) {
             dnsViewContainer.style.display = 'block';
-            let dnsText = 'Default (Google)';
+            let dnsText = __('default_google');
             if (currentInstance.dns_servers && currentInstance.dns_servers.length > 0) {
                 dnsText = currentInstance.dns_servers.join(', ');
             }
@@ -404,7 +404,7 @@ function displayRoutes() {
                             </div>
                             <div class="col">
                                 <span class="text-body d-block">${route.network}</span>
-                                <small class="text-muted d-block">via ${route.interface}</small>
+                                <small class="text-muted d-block">${__('via')} ${route.interface}</small>
                             </div>
                         </div>
                     </div>
@@ -445,7 +445,7 @@ function renderRouteEditContainer() {
         container.innerHTML += `
             <div class="mb-3">
                 <label class="form-label">${__('dns_servers')}</label>
-                <input type="text" class="form-control" id="dns-servers-edit-input" value="${dnsValue}" placeholder="Es: 1.1.1.1, 8.8.8.8">
+                <input type="text" class="form-control" id="dns-servers-edit-input" value="${dnsValue}" placeholder="${__('dns_example_placeholder')}">
                 <div class="invalid-feedback">${__('dns_invalid_error')}</div>
                 <small class="form-hint">${__('dns_hint')}</small>
             </div>

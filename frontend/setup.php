@@ -1,6 +1,7 @@
 <?php
 // setup.php
 require_once 'api_client.php';
+require_once 'includes/i18n.php'; // Include i18n
 
 // Fetch Branding
 $brandName = 'VPN Manager';
@@ -19,12 +20,12 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
 }
 ?>
 <!doctype html>
-<html lang="it">
+<html lang="<?= $current_lang ?>">
 <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
     <meta http-equiv="X-UA-Compatible" content="ie=edge"/>
-    <title>Configurazione VPN</title>
+    <title><?= __('vpn_configuration') ?></title>
     <!-- CSS files -->
     <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
@@ -58,7 +59,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
             
             <div id="loading-state" class="text-center">
                 <div class="spinner-border text-primary" role="status"></div>
-                <div class="mt-2 text-muted">Verifica del link in corso...</div>
+                <div class="mt-2 text-muted"><?= __('verifying_link') ?></div>
             </div>
 
             <div id="error-state" class="card card-md d-none">
@@ -66,8 +67,8 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                     <div class="mb-3">
                         <i class="ti ti-alert-circle text-danger display-4"></i>
                     </div>
-                    <h2 class="h2 text-danger">Link Invalido o Scaduto</h2>
-                    <p class="text-muted">Il link che hai utilizzato non è valido o è scaduto. Per favore contatta l'amministratore per riceverne uno nuovo.</p>
+                    <h2 class="h2 text-danger"><?= __('invalid_link_title') ?></h2>
+                    <p class="text-muted"><?= __('invalid_link_message') ?></p>
                 </div>
             </div>
 
@@ -75,8 +76,8 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                 <div class="card-body">
                     <div class="d-flex align-items-center justify-content-between mb-4">
                         <div>
-                            <h2 class="h2 mb-0">Ciao, <span id="client-name-display" class="text-primary"></span></h2>
-                            <p class="text-muted mb-0">Ecco la tua configurazione VPN sicura.</p>
+                            <h2 class="h2 mb-0"><?= __('hello') ?> <span id="client-name-display" class="text-primary"></span></h2>
+                            <p class="text-muted mb-0"><?= __('config_ready_message') ?></p>
                         </div>
                         <div class="avatar bg-blue-lt rounded text-uppercase" id="client-initials">VPN</div>
                     </div>
@@ -85,12 +86,12 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                          <ul class="nav nav-pills w-100 p-2 bg-muted-lt rounded" data-bs-toggle="tabs">
                             <li class="nav-item">
                                 <a href="#tabs-mobile" class="nav-link active py-2" data-bs-toggle="tab">
-                                    <i class="ti ti-device-mobile me-2"></i> Smartphone / Tablet
+                                    <i class="ti ti-device-mobile me-2"></i> <?= __('smartphone_tablet') ?>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a href="#tabs-desktop" class="nav-link py-2" data-bs-toggle="tab">
-                                    <i class="ti ti-device-desktop me-2"></i> PC / Mac
+                                    <i class="ti ti-device-desktop me-2"></i> <?= __('pc_mac') ?>
                                 </a>
                             </li>
                         </ul>
@@ -102,10 +103,10 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                             <div class="row g-4">
                                 <!-- Instructions (First on Mobile, Left on Desktop) -->
                                 <div class="col-md-7">
-                                    <h3 class="mb-3">1. Istruzioni</h3>
+                                    <h3 class="mb-3"><?= __('instructions_step') ?></h3>
                                     <ul class="list-group list-group-flush bg-transparent">
                                         <li class="list-group-item bg-transparent px-0">
-                                            <div class="mb-1"><strong>1. Scarica l'App</strong></div>
+                                            <div class="mb-1"><strong><?= __('download_app_step') ?></strong></div>
                                             <div class="d-flex gap-2">
                                                 <a href="https://play.google.com/store/apps/details?id=com.wireguard.android" target="_blank" class="btn btn-sm btn-outline-dark">
                                                     <i class="ti ti-brand-android me-1"></i> Android
@@ -116,13 +117,13 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                                             </div>
                                         </li>
                                         <li class="list-group-item bg-transparent px-0">
-                                            <strong>2. Apri WireGuard</strong> e premi il tasto <strong>+</strong>
+                                            <strong><?= __('open_wireguard_step_mobile') ?></strong>
                                         </li>
                                         <li class="list-group-item bg-transparent px-0">
-                                            <strong>3. Scegli "Scansiona QR"</strong> e inquadra il codice.
+                                            <strong><?= __('scan_qr_step') ?></strong>
                                         </li>
                                         <li class="list-group-item bg-transparent px-0">
-                                            <strong>4. Attiva</strong> la connessione.
+                                            <strong><?= __('activate_step') ?></strong>
                                         </li>
                                     </ul>
                                 </div>
@@ -131,9 +132,9 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                                 <div class="col-md-5">
                                     <div class="card h-100 bg-white border shadow-sm">
                                         <div class="card-body d-flex flex-column align-items-center justify-content-center text-center p-4">
-                                            <h4 class="card-title text-primary mb-3">2. Scansiona</h4>
+                                            <h4 class="card-title text-primary mb-3"><?= __('scan_title') ?></h4>
                                             <div id="qrcode-container" class="p-2 border rounded mb-3 bg-white"></div>
-                                            <div class="text-muted small"><i class="ti ti-lock"></i> Sicuro</div>
+                                            <div class="text-muted small"><i class="ti ti-lock"></i> <?= __('secure') ?></div>
                                         </div>
                                     </div>
                                 </div>
@@ -149,7 +150,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                                         <div class="card-body d-flex flex-column align-items-center justify-content-center text-center p-4">
                                             <i class="ti ti-file-settings text-primary mb-3" style="font-size: 3rem;"></i>
                                             <button id="btn-download-config" class="btn btn-primary w-100 btn-pill">
-                                                <i class="ti ti-download me-2"></i> Scarica Config
+                                                <i class="ti ti-download me-2"></i> <?= __('download_config') ?>
                                             </button>
                                         </div>
                                     </div>
@@ -157,10 +158,10 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
 
                                 <!-- Instructions -->
                                 <div class="col-md-7 order-md-1">
-                                    <h3 class="mb-3">Istruzioni</h3>
+                                    <h3 class="mb-3"><?= __('instructions_step') ?></h3>
                                     <ul class="list-group list-group-flush bg-transparent">
                                         <li class="list-group-item bg-transparent px-0">
-                                            <div class="mb-1"><strong>1. Installa Client</strong></div>
+                                            <div class="mb-1"><strong><?= __('install_client_step') ?></strong></div>
                                             <div class="d-flex gap-2">
                                                 <a href="https://download.wireguard.com/windows-client/wireguard-installer.exe" target="_blank" class="btn btn-sm btn-outline-primary">
                                                     Windows
@@ -171,13 +172,13 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                                             </div>
                                         </li>
                                         <li class="list-group-item bg-transparent px-0">
-                                            <strong>2. Scarica il file .conf</strong> dal pulsante a fianco.
+                                            <strong><?= __('download_conf_step') ?></strong>
                                         </li>
                                         <li class="list-group-item bg-transparent px-0">
-                                            <strong>3. Apri WireGuard</strong> > Importa Tunnel da File.
+                                            <strong><?= __('import_tunnel_step') ?></strong>
                                         </li>
                                         <li class="list-group-item bg-transparent px-0">
-                                            <strong>4. Clicca "Attiva"</strong>.
+                                            <strong><?= __('click_activate_step') ?></strong>
                                         </li>
                                     </ul>
                                 </div>
@@ -192,21 +193,8 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
     <!-- Libs JS -->
     <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/js/tabler.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- Page JS -->
     <script>
-        const API_AJAX_HANDLER = './ajax_handler.php'; // Reuse existing handler? 
-        // Wait, ajax_handler checks for SESSION mostly? 
-        // NO, ajax_handler calls `api_client` which calls Backend.
-        // Backend `get_public_client_config` is PUBLIC (No Auth).
-        // `api_client.php` adds Bearer token if session exists. If not, no header.
-        // So public endpoint logic should work even without session.
-        // BUT `ajax_handler.php` doesn't enforce auth globally? 
-        // `ajax_handler.php` requires `api_client.php`.
-        // `api_client.php` starts session. 
-        // It should be fine.
-        
-        // However, `ajax_handler.php` switches on actions. We need a new action `get_public_config`.
-        // I need to add that to `ajax_handler.php`.
+        // No inline logic here
     </script>
     <script src="./js/setup.js"></script>
 </body>

@@ -14,7 +14,7 @@ if ($currentRole !== 'admin') {
         <div class="row align-items-center">
             <div class="col">
                 <h2 class="page-title">
-                    Impostazioni di Sistema
+                    <?= __('system_settings_title') ?>
                 </h2>
             </div>
         </div>
@@ -24,14 +24,13 @@ if ($currentRole !== 'admin') {
         <div class="card-header">
             <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs">
                 <li class="nav-item">
-                    <a href="#tabs-general" class="nav-link active" data-bs-toggle="tab">Generale /
-                        Personalizzazione</a>
+                    <a href="#tabs-general" class="nav-link active" data-bs-toggle="tab"><?= __('general_customization') ?></a>
                 </li>
                 <li class="nav-item">
-                    <a href="#tabs-smtp" class="nav-link" data-bs-toggle="tab">Configurazione SMTP</a>
+                    <a href="#tabs-smtp" class="nav-link" data-bs-toggle="tab"><?= __('smtp_configuration') ?></a>
                 </li>
                 <li class="nav-item">
-                    <a href="#tabs-backup" class="nav-link" data-bs-toggle="tab">Backup & Ripristino</a>
+                    <a href="#tabs-backup" class="nav-link" data-bs-toggle="tab"><?= __('backup_restore') ?></a>
                 </li>
             </ul>
         </div>
@@ -43,16 +42,16 @@ if ($currentRole !== 'admin') {
                         <div class="col-md-6">
                             <form id="system-settings-form">
                                 <div class="mb-3">
-                                    <label class="form-label">Nome Azienda / Portale</label>
+                                    <label class="form-label"><?= __('company_name_label') ?></label>
                                     <input type="text" class="form-control" name="company_name"
                                         placeholder="VPN Manager">
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Colore Primario</label>
+                                    <label class="form-label"><?= __('primary_color_label') ?></label>
                                     <div class="row g-2">
                                         <div class="col-auto">
                                             <input type="color" class="form-control form-control-color"
-                                                name="primary_color" value="#0054a6" title="Scegli il colore">
+                                                name="primary_color" value="#0054a6" title="<?= __('choose_color') ?>">
                                         </div>
                                         <div class="col">
                                             <input type="text" class="form-control" name="primary_color_text"
@@ -61,15 +60,15 @@ if ($currentRole !== 'admin') {
                                     </div>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Logo Personalizzato</label>
+                                    <label class="form-label"><?= __('custom_logo_label') ?></label>
                                     <input type="file" class="form-control" name="logo_file"
                                         accept=".png,.jpg,.jpeg,.svg">
-                                    <small class="form-hint">Carica un logo (PNG, JPG, SVG). Massimo 2MB.</small>
+                                    <small class="form-hint"><?= __('logo_help') ?></small>
                                 </div>
 
                                 <div class="mt-4">
                                     <button type="submit" class="btn btn-primary">
-                                        <i class="ti ti-device-floppy me-2"></i> Salva Impostazioni
+                                        <i class="ti ti-device-floppy me-2"></i> <?= __('save_settings') ?>
                                     </button>
                                 </div>
                             </form>
@@ -79,7 +78,7 @@ if ($currentRole !== 'admin') {
                             <div class="card">
                                 <div class="card-status-top bg-primary" id="preview-color-strip"></div>
                                 <div class="card-body text-center">
-                                    <h3 class="card-title text-muted">Anteprima Branding</h3>
+                                    <h3 class="card-title text-muted"><?= __('branding_preview') ?></h3>
                                     <div class="my-4">
                                         <!-- Placeholder or current logo -->
                                         <div id="preview-logo-container"
@@ -100,7 +99,7 @@ if ($currentRole !== 'admin') {
                                         </div>
                                         <h2 class="mt-2" id="preview-company-name">VPN Manager</h2>
                                     </div>
-                                    <button class="btn btn-primary" id="preview-btn">Esempio Bottone</button>
+                                    <button class="btn btn-primary" id="preview-btn"><?= __('button_example') ?></button>
                                 </div>
                             </div>
                         </div>
@@ -114,23 +113,23 @@ if ($currentRole !== 'admin') {
                         <div class="col-md-6">
                             <form id="smtp-form">
                                 <div class="mb-3">
-                                    <label class="form-label">Host SMTP</label>
+                                    <label class="form-label"><?= __('smtp_host_label') ?></label>
                                     <input type="text" class="form-control" name="smtp_host"
                                         placeholder="smtp.example.com" required>
                                 </div>
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label class="form-label">Porta</label>
+                                            <label class="form-label"><?= __('port') ?></label>
                                             <input type="number" class="form-control" name="smtp_port" placeholder="587"
                                                 required>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label class="form-label">Crittografia</label>
+                                            <label class="form-label"><?= __('encryption_label') ?></label>
                                             <select class="form-select" name="smtp_encryption">
-                                                <option value="none">Nessuna</option>
+                                                <option value="none"><?= __('none') ?></option>
                                                 <option value="tls">TLS</option>
                                                 <option value="ssl">SSL</option>
                                             </select>
@@ -138,38 +137,37 @@ if ($currentRole !== 'admin') {
                                     </div>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Username SMTP</label>
+                                    <label class="form-label"><?= __('smtp_username_label') ?></label>
                                     <input type="text" class="form-control" name="smtp_username"
                                         placeholder="user@example.com">
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Password SMTP</label>
+                                    <label class="form-label"><?= __('smtp_password_label') ?></label>
                                     <input type="password" class="form-control" name="smtp_password"
                                         placeholder="Password">
                                 </div>
                                 <hr>
                                 <div class="mb-3">
-                                    <label class="form-label">Nome Mittente</label>
+                                    <label class="form-label"><?= __('sender_name_label') ?></label>
                                     <input type="text" class="form-control" name="sender_name" placeholder="VPN Manager"
                                         required>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Email Mittente</label>
+                                    <label class="form-label"><?= __('sender_email_label') ?></label>
                                     <input type="email" class="form-control" name="sender_email"
                                         placeholder="noreply@example.com" required>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">URL Pubblico Istanza</label>
+                                    <label class="form-label"><?= __('public_url_label') ?></label>
                                     <input type="url" class="form-control" name="public_url"
                                         placeholder="https://vpn.example.com"
-                                        title="L'URL base usato per i link nelle email (es. https://tuo-dominio.com)">
-                                    <small class="form-hint">URL utilizzato per generare i link di configurazione
-                                        inviati via email.</small>
+                                        title="<?= __('public_url_help') ?>">
+                                    <small class="form-hint"><?= __('public_url_hint') ?></small>
                                 </div>
 
                                 <div class="d-flex">
                                     <button type="submit" class="btn btn-primary" id="btn-save-smtp">
-                                        <i class="ti ti-device-floppy me-2"></i> Salva Configurazione
+                                        <i class="ti ti-device-floppy me-2"></i> <?= __('save_configuration') ?>
                                     </button>
                                 </div>
                             </form>
@@ -178,17 +176,16 @@ if ($currentRole !== 'admin') {
                         <div class="col-md-6">
                             <div class="card bg-muted-lt">
                                 <div class="card-body">
-                                    <h3 class="card-title">Test Invio Email</h3>
-                                    <p class="text-muted">Invia una email di prova per verificare la configurazione
-                                        salvata.</p>
+                                    <h3 class="card-title"><?= __('test_email_title') ?></h3>
+                                    <p class="text-muted"><?= __('test_email_desc') ?></p>
                                     <form id="test-email-form">
                                         <div class="mb-3">
-                                            <label class="form-label">Email Destinatario</label>
+                                            <label class="form-label"><?= __('recipient_email_label') ?></label>
                                             <input type="email" class="form-control" id="test-email-dest"
                                                 placeholder="tua@email.com" required>
                                         </div>
                                         <button type="button" class="btn btn-secondary w-100" id="btn-test-smtp">
-                                            <i class="ti ti-mail me-2"></i> Invia Email di Test
+                                            <i class="ti ti-mail me-2"></i> <?= __('send_test_email_btn') ?>
                                         </button>
                                     </form>
                                     <div id="test-result" class="mt-3"></div>
@@ -206,30 +203,30 @@ if ($currentRole !== 'admin') {
                                 <div class="mb-3">
                                     <label class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" name="backup_enabled">
-                                        <span class="form-check-label">Abilita Backup Recorrenti</span>
+                                        <span class="form-check-label"><?= __('enable_recurring_backup') ?></span>
                                     </label>
                                 </div>
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label class="form-label">Frequenza</label>
+                                            <label class="form-label"><?= __('frequency_label') ?></label>
                                             <select class="form-select" name="backup_frequency">
-                                                <option value="daily">Giornaliero (Daily)</option>
-                                                <option value="weekly">Settimanale (Weekly)</option>
+                                                <option value="daily"><?= __('daily') ?></option>
+                                                <option value="weekly"><?= __('weekly') ?></option>
                                             </select>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label class="form-label">Orario (HH:MM)</label>
+                                            <label class="form-label"><?= __('time_label') ?></label>
                                             <input type="time" class="form-control" name="backup_time" value="03:00">
                                         </div>
                                     </div>
                                 </div>
 
-                                <h3 class="mt-4">Destinazione Remota</h3>
+                                <h3 class="mt-4"><?= __('remote_destination_title') ?></h3>
                                 <div class="mb-3">
-                                    <label class="form-label">Protocollo</label>
+                                    <label class="form-label"><?= __('protocol') ?></label>
                                     <select class="form-select" name="remote_protocol">
                                         <option value="sftp">SFTP (SSH)</option>
                                         <option value="ftp">FTP</option>
@@ -238,39 +235,39 @@ if ($currentRole !== 'admin') {
                                 <div class="row">
                                     <div class="col-md-8">
                                         <div class="mb-3">
-                                            <label class="form-label">Host Remoto</label>
+                                            <label class="form-label"><?= __('remote_host_label') ?></label>
                                             <input type="text" class="form-control" name="remote_host"
                                                 placeholder="backup.example.com">
                                         </div>
                                     </div>
                                     <div class="col-md-4">
                                         <div class="mb-3">
-                                            <label class="form-label">Porta</label>
+                                            <label class="form-label"><?= __('port') ?></label>
                                             <input type="number" class="form-control" name="remote_port" value="22">
                                         </div>
                                     </div>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Username</label>
+                                    <label class="form-label"><?= __('username') ?></label>
                                     <input type="text" class="form-control" name="remote_user" placeholder="backupuser">
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Password</label>
+                                    <label class="form-label"><?= __('password') ?></label>
                                     <input type="password" class="form-control" name="remote_password"
                                         placeholder="********">
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Percorso Remoto</label>
+                                    <label class="form-label"><?= __('remote_path_label') ?></label>
                                     <input type="text" class="form-control" name="remote_path"
                                         placeholder="/var/backups/vpn">
                                 </div>
 
                                 <div class="d-flex gap-2 mt-4">
                                     <button type="submit" class="btn btn-primary" id="btn-save-backup">
-                                        <i class="ti ti-device-floppy me-2"></i> Salva Configurazione
+                                        <i class="ti ti-device-floppy me-2"></i> <?= __('save_configuration') ?>
                                     </button>
                                     <button type="button" class="btn btn-secondary" id="btn-test-backup">
-                                        <i class="ti ti-plug me-2"></i> Test Connessione
+                                        <i class="ti ti-plug me-2"></i> <?= __('test_connection_btn') ?>
                                     </button>
                                 </div>
                             </form>
@@ -281,21 +278,20 @@ if ($currentRole !== 'admin') {
                             <div class="card mb-3">
                                 <div class="card-status-top bg-green"></div>
                                 <div class="card-body">
-                                    <h3 class="card-title">Stato Backup</h3>
+                                    <h3 class="card-title"><?= __('backup_status_title') ?></h3>
                                     <dl class="row">
-                                        <dt class="col-5">Ultimo Backup:</dt>
+                                        <dt class="col-5"><?= __('last_backup_label') ?></dt>
                                         <dd class="col-7" id="backup-last-time">-</dd>
-                                        <dt class="col-5">Esito:</dt>
+                                        <dt class="col-5"><?= __('outcome_label') ?></dt>
                                         <dd class="col-7" id="backup-last-status">-</dd>
                                     </dl>
-                                    <p class="text-muted small">I backup includono il database SQLite e le
-                                        configurazioni WireGuard.</p>
+                                    <p class="text-muted small"><?= __('backup_info_text') ?></p>
                                     <div class="d-grid gap-2">
                                         <button class="btn btn-primary" id="btn-backup-remote">
-                                            <i class="ti ti-cloud-upload me-2"></i> Backup Remoto
+                                            <i class="ti ti-cloud-upload me-2"></i> <?= __('remote_backup_btn') ?>
                                         </button>
                                         <button class="btn btn-outline-secondary" id="btn-backup-download">
-                                            <i class="ti ti-download me-2"></i> Scarica Backup
+                                            <i class="ti ti-download me-2"></i> <?= __('download_backup_btn') ?>
                                         </button>
                                     </div>
                                 </div>
@@ -305,12 +301,10 @@ if ($currentRole !== 'admin') {
                             <div class="card border-danger mt-3">
                                 <div class="card-status-top bg-danger"></div>
                                 <div class="card-body">
-                                    <h3 class="card-title text-danger">Ripristino da Backup</h3>
-                                    <p class="text-muted small">Carica un file backup (.zip) per ripristinare il
-                                        database e le configurazioni.</p>
+                                    <h3 class="card-title text-danger"><?= __('restore_backup_title') ?></h3>
+                                    <p class="text-muted small"><?= __('restore_backup_desc') ?></p>
                                     <div class="alert alert-warning">
-                                        <i class="ti ti-alert-triangle me-2"></i> <strong>Attenzione:</strong> Questa
-                                        azione sovrascriverà tutti i dati attuali!
+                                        <i class="ti ti-alert-triangle me-2"></i> <strong><?= __('warning_label') ?></strong> <?= __('restore_warning_text') ?>
                                     </div>
                                     <form id="restore-form">
                                         <div class="mb-3">
@@ -318,15 +312,14 @@ if ($currentRole !== 'admin') {
                                                 required>
                                         </div>
                                         <button type="submit" class="btn btn-danger w-100" id="btn-restore">
-                                            <i class="ti ti-history me-2"></i> Ripristina Backup
+                                            <i class="ti ti-history me-2"></i> <?= __('restore_backup_action') ?>
                                         </button>
                                     </form>
                                     <div id="restore-progress" class="mt-3 d-none">
                                         <div class="progress">
                                             <div class="progress-bar progress-bar-indeterminate bg-danger"></div>
                                         </div>
-                                        <div class="text-center small mt-1 text-muted">Ripristino (Caricamento in
-                                            corso)...</div>
+                                        <div class="text-center small mt-1 text-muted"><?= __('restore_loading') ?></div>
                                     </div>
                                 </div>
                             </div>
@@ -342,15 +335,13 @@ if ($currentRole !== 'admin') {
                     <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
                         <div class="modal-content">
                             <div class="modal-body">
-                                <div class="modal-title">Avviare Backup Remoto?</div>
-                                <div>Stai per avviare il processo di backup e caricamento remoto. L'operazione potrebbe
-                                    richiedere alcuni secondi.</div>
+                                <div class="modal-title"><?= __('start_remote_backup_title') ?></div>
+                                <div><?= __('start_remote_backup_desc') ?></div>
                             </div>
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-link link-secondary me-auto"
-                                    data-bs-dismiss="modal">Annulla</button>
-                                <button type="button" class="btn btn-primary" id="btn-confirm-backup-remote">Sì, Avvia
-                                    Backup</button>
+                                    data-bs-dismiss="modal"><?= __('cancel') ?></button>
+                                <button type="button" class="btn btn-primary" id="btn-confirm-backup-remote"><?= __('yes_start_backup') ?></button>
                             </div>
                         </div>
                     </div>
@@ -365,20 +356,18 @@ if ($currentRole !== 'admin') {
                             <div class="modal-status bg-danger"></div>
                             <div class="modal-body text-center py-4">
                                 <i class="ti ti-alert-triangle text-danger icon mb-2" style="font-size: 3rem;"></i>
-                                <h3>Sei sicuro?</h3>
-                                <div class="text-muted">Questa azione <strong>sovrascriverà il database e le
-                                        configurazioni esistenti</strong>. Il sistema verrà riavviato e potresti perdere
-                                    i dati attuali non salvati.</div>
+                                <h3><?= __('are_you_sure') ?></h3>
+                                <div class="text-muted"><?= __('restore_confirm_text') ?></div>
                             </div>
                             <div class="modal-footer">
                                 <div class="w-100">
                                     <div class="row">
                                         <div class="col"><a href="#" class="btn w-100" data-bs-dismiss="modal">
-                                                Annulla
+                                                <?= __('cancel') ?>
                                             </a></div>
                                         <div class="col"><a href="#" class="btn btn-danger w-100"
                                                 id="btn-confirm-restore-action">
-                                                Ripristina
+                                                <?= __('restore_btn') ?>
                                             </a></div>
                                     </div>
                                 </div>

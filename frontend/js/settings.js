@@ -412,7 +412,7 @@ async function testBackupConnection() {
     const form = document.getElementById('backup-form');
     const btn = document.getElementById('btn-test-backup');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Test...';
+    btn.innerHTML = `<div class="spinner-border spinner-border-sm" role="status"></div> ${__('testing')}`;
     btn.disabled = true;
 
     try {

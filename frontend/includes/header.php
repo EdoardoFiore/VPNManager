@@ -37,7 +37,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>VPN Manager Dashboard</title>
+    <title><?= __('dashboard') ?> - <?= htmlspecialchars($brandName) ?></title>
     <!-- CSS files -->
     <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
@@ -187,8 +187,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                                         </svg>
                                     </span>
                                     <span class="nav-link-title">
-                                        <?= __('active_instances') // Reusing 'active_instances' or using 'dashboard'? Let's check lang file. 'Dashboard' is not in lang file yet. I should add 'dashboard' key or just leave it if it's universal. 'Dashboard' is universal enough but let's be consistent. I will add 'dashboard'=>'Dashboard' to lang files later or just use 'home' ?>
-                                        Dashboard
+                                        <?= __('dashboard') ?>
                                     </span>
                                 </a>
                             </li>
@@ -246,7 +245,11 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                             <div class="d-none d-xl-block ps-2">
                                 <div><?= htmlspecialchars($currentUser) ?></div>
                                 <div class="mt-1 small text-muted">
-                                    <?= htmlspecialchars($currentRole === 'admin_readonly' ? 'Admin Read Only' : ucfirst($currentRole)) ?>
+                                    <?php 
+                                        $roleKey = 'role_' . $currentRole;
+                                        // Simple translation for header badge, shortened if needed, or full
+                                        echo htmlspecialchars(__($roleKey) !== $roleKey ? __($roleKey) : ucfirst($currentRole));
+                                    ?>
                                 </div>
                             </div>
                         </a>
