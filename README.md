@@ -105,6 +105,27 @@ By default, the `admin` user is created (password is set during the first script
 
 ---
 
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20120100.png" width="300" alt="Screenshot 1"></td>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20120154.png" width="300" alt="Screenshot 2"></td>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20120326.png" width="300" alt="Screenshot 3"></td>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20121815.png" width="300" alt="Screenshot 4"></td>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20122053.png" width="300" alt="Screenshot 5"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20122119.png" width="300" alt="Screenshot 6"></td>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20122225.png" width="300" alt="Screenshot 7"></td>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20122303.png" width="300" alt="Screenshot 8"></td>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20122321.png" width="300" alt="Screenshot 9"></td>
+    <td><img src="docs/screenshots/Screenshot%202025-12-16%20122346.png" width="300" alt="Screenshot 10"></td>
+  </tr>
+</table>
+
+---
+
 ## 🆘 Troubleshooting
 
 *   **Dashboard Unreachable**: Check Nginx (`systemctl status nginx`).
