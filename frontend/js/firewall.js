@@ -811,7 +811,7 @@ async function saveInstanceFirewallPolicy() {
         const result = await response.json();
 
         if (result.success) { // Check result.success from ajax_handler.php
-            showNotification('success', 'Policy firewall predefinita aggiornata con successo.');
+            showNotification('success', __('firewall_policy_updated_success'));
             // Update currentInstance object in JS to reflect the new policy
             currentInstance.firewall_default_policy = policy;
             // Re-render rules to reflect the change in default policy (especially the "virtual" default rule)
@@ -819,9 +819,9 @@ async function saveInstanceFirewallPolicy() {
                 loadRules(currentGroupId);
             }
         } else {
-            showNotification('danger', 'Errore salvataggio policy: ' + (result.body.detail || 'Sconosciuto'));
+            showNotification('danger', __('save_policy_error') + (result.body.detail || __('unknown_error')));
         }
     } catch (e) {
-        showNotification('danger', 'Errore di connessione: ' + e.message);
+        showNotification('danger', __('connection_error') + e.message);
     }
 }

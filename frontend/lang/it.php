@@ -288,6 +288,8 @@ return [
     'members_of' => 'Membri di',
     'default_instance_policy_loading' => "Policy di default dell'istanza (caricamento...)",
     'delete_rule_error_short' => 'Errore eliminazione regola.',
+    'firewall_policy_updated_success' => 'Policy firewall predefinita aggiornata con successo.',
+    'save_policy_error' => 'Errore salvataggio policy: ',
     
     // Dashboard & Settings
     'no_instances_config' => 'Nessuna istanza configurata. Creane una nuova.',

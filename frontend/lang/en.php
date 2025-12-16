@@ -288,6 +288,8 @@ return [
     'members_of' => 'Members of',
     'default_instance_policy_loading' => 'Instance default policy (loading...)',
     'delete_rule_error_short' => 'Error deleting rule.',
+    'firewall_policy_updated_success' => 'Default firewall policy updated successfully.',
+    'save_policy_error' => 'Error saving policy: ',
 
     // Dashboard & Settings
     'no_instances_config' => 'No instances configured. Create a new one.',
