@@ -24,7 +24,8 @@ if ($currentRole !== 'admin') {
         <div class="card-header">
             <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs">
                 <li class="nav-item">
-                    <a href="#tabs-general" class="nav-link active" data-bs-toggle="tab"><?= __('general_customization') ?></a>
+                    <a href="#tabs-general" class="nav-link active"
+                        data-bs-toggle="tab"><?= __('general_customization') ?></a>
                 </li>
                 <li class="nav-item">
                     <a href="#tabs-smtp" class="nav-link" data-bs-toggle="tab"><?= __('smtp_configuration') ?></a>
@@ -65,6 +66,12 @@ if ($currentRole !== 'admin') {
                                         accept=".png,.jpg,.jpeg,.svg">
                                     <small class="form-hint"><?= __('logo_help') ?></small>
                                 </div>
+                                <div class="mb-3">
+                                    <label class="form-label"><?= __('custom_favicon_label') ?></label>
+                                    <input type="file" class="form-control" name="favicon_file"
+                                        accept=".png,.jpg,.jpeg,.svg,.ico">
+                                    <small class="form-hint"><?= __('favicon_help') ?></small>
+                                </div>
 
                                 <div class="mt-4 d-flex gap-2">
                                     <button type="submit" class="btn btn-primary">
@@ -102,7 +109,8 @@ if ($currentRole !== 'admin') {
                                         </div>
                                         <h2 class="mt-2" id="preview-company-name">VPN Manager</h2>
                                     </div>
-                                    <button class="btn btn-primary" id="preview-btn"><?= __('button_example') ?></button>
+                                    <button class="btn btn-primary"
+                                        id="preview-btn"><?= __('button_example') ?></button>
                                 </div>
                             </div>
                         </div>
@@ -163,8 +171,7 @@ if ($currentRole !== 'admin') {
                                 <div class="mb-3">
                                     <label class="form-label"><?= __('public_url_label') ?></label>
                                     <input type="url" class="form-control" name="public_url"
-                                        placeholder="https://vpn.example.com"
-                                        title="<?= __('public_url_help') ?>">
+                                        placeholder="https://vpn.example.com" title="<?= __('public_url_help') ?>">
                                     <small class="form-hint"><?= __('public_url_hint') ?></small>
                                 </div>
 
@@ -307,7 +314,8 @@ if ($currentRole !== 'admin') {
                                     <h3 class="card-title text-danger"><?= __('restore_backup_title') ?></h3>
                                     <p class="text-muted small"><?= __('restore_backup_desc') ?></p>
                                     <div class="alert alert-warning">
-                                        <i class="ti ti-alert-triangle me-2"></i> <strong><?= __('warning_label') ?></strong> <?= __('restore_warning_text') ?>
+                                        <i class="ti ti-alert-triangle me-2"></i>
+                                        <strong><?= __('warning_label') ?></strong> <?= __('restore_warning_text') ?>
                                     </div>
                                     <form id="restore-form">
                                         <div class="mb-3">
@@ -322,7 +330,8 @@ if ($currentRole !== 'admin') {
                                         <div class="progress">
                                             <div class="progress-bar progress-bar-indeterminate bg-danger"></div>
                                         </div>
-                                        <div class="text-center small mt-1 text-muted"><?= __('restore_loading') ?></div>
+                                        <div class="text-center small mt-1 text-muted"><?= __('restore_loading') ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -344,7 +353,8 @@ if ($currentRole !== 'admin') {
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-link link-secondary me-auto"
                                     data-bs-dismiss="modal"><?= __('cancel') ?></button>
-                                <button type="button" class="btn btn-primary" id="btn-confirm-backup-remote"><?= __('yes_start_backup') ?></button>
+                                <button type="button" class="btn btn-primary"
+                                    id="btn-confirm-backup-remote"><?= __('yes_start_backup') ?></button>
                             </div>
                         </div>
                     </div>
@@ -408,6 +418,11 @@ if ($currentRole !== 'admin') {
                     </div>
                 </div>
 
-                <script src="js/settings.js"></script>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                <?php require_once 'includes/footer.php'; ?>
+    <script src="js/settings.js"></script>
+
+    <?php require_once 'includes/footer.php'; ?>

@@ -18,6 +18,7 @@ $currentRole = $_SESSION['role'] ?? 'viewer';
 $brandName = 'VPN Manager';
 $brandColor = '#0054a6';
 $brandLogo = '';
+$brandFavicon = '';
 
 $sysSettings = get_system_settings();
 if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSettings['body'])) {
@@ -28,6 +29,8 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
         $brandColor = $s['primary_color'];
     if (!empty($s['logo_url']))
         $brandLogo = $s['logo_url'];
+    if (!empty($s['favicon_url']))
+        $brandFavicon = $s['favicon_url'];
 }
 ?>
 <!doctype html>
@@ -37,10 +40,14 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <?php if ($brandFavicon): ?>
+        <link rel="icon" href="<?= htmlspecialchars($brandFavicon) ?>" />
+    <?php endif; ?>
     <title><?= __('dashboard') ?> - <?= htmlspecialchars($brandName) ?></title>
     <!-- CSS files -->
     <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler.min.css" rel="stylesheet" />
-    <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler-flags.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler-flags.min.css"
+        rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
@@ -154,7 +161,8 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                 <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
                     <a href="index.php" class="d-flex align-items-center text-decoration-none">
                         <?php if ($brandLogo): ?>
-                             <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo" class="navbar-brand-image me-2" style="height: 32px; width: auto;">
+                            <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo" class="navbar-brand-image me-2"
+                                style="height: 32px; width: auto;">
                         <?php else: ?>
                             <!-- Default SVG -->
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
@@ -244,10 +252,10 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                             <div class="d-none d-xl-block ps-2">
                                 <div><?= htmlspecialchars($currentUser) ?></div>
                                 <div class="mt-1 small text-muted">
-                                    <?php 
-                                        $roleKey = 'role_' . $currentRole;
-                                        // Simple translation for header badge, shortened if needed, or full
-                                        echo htmlspecialchars(__($roleKey) !== $roleKey ? __($roleKey) : ucfirst($currentRole));
+                                    <?php
+                                    $roleKey = 'role_' . $currentRole;
+                                    // Simple translation for header badge, shortened if needed, or full
+                                    echo htmlspecialchars(__($roleKey) !== $roleKey ? __($roleKey) : ucfirst($currentRole));
                                     ?>
                                 </div>
                             </div>

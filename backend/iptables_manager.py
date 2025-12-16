@@ -1,6 +1,7 @@
 import subprocess
 import logging
 import uuid
+import re
 from typing import List, Union, Optional, Dict, Any
 from sqlmodel import Session, select
 
@@ -290,4 +291,51 @@ remove_openvpn_rules = remove_vpn_instance_rules
 
 # Legacy helper - removed functionality
 def _load_openvpn_rules_config():
-    return {}
+    pass
+
+def flush_all_vpn_chains():
+    """
+    Completely removes all VPN-related chains (VIG_*, VI_*, VPN_*) to ensure a clean slate.
+    Used during restore process.
+    """
+    logger.info("Flushing all VPN iptables chains...")
+    
+    # 1. Flush the main anchor chains first to break references
+    main_chains = [VPN_INPUT_CHAIN, VPN_OUTPUT_CHAIN, VPN_MAIN_FWD_CHAIN, FW_INPUT_CHAIN, FW_OUTPUT_CHAIN, FW_FORWARD_CHAIN]
+    for chain in main_chains:
+        _run_iptables("filter", ["-F", chain], suppress_errors=True)
+
+    # 2. Get list of all custom chains
+    try:
+        res = subprocess.run(["/usr/sbin/iptables", "-t", "filter", "-S"], capture_output=True, text=True, check=True)
+        lines = res.stdout.splitlines()
+        
+        # Regex to find our custom chains definition: -N <CHAIN_NAME>
+        # We look for chains starting with VI_, VIG_, VPN_INPUT_, VPN_OUTPUT_
+        # Note: VPN_INPUT (exact) is a main chain, we don't delete it, only flush it.
+        # But per-instance chains like VPN_INPUT_customer1 must be deleted.
+        
+        chains_to_delete = []
+        for line in lines:
+            if line.startswith("-N"):
+                parts = line.split()
+                if len(parts) >= 2:
+                    chain_name = parts[1]
+                    if (chain_name.startswith("VI_") or 
+                        chain_name.startswith("VIG_") or 
+                        (chain_name.startswith("VPN_") and chain_name not in [VPN_INPUT_CHAIN, VPN_OUTPUT_CHAIN, VPN_MAIN_FWD_CHAIN, VPN_NAT_POSTROUTING_CHAIN])):
+                        chains_to_delete.append(chain_name)
+
+        # 3. Delete the chains
+        # We must flush them before deleting
+        for chain in chains_to_delete:
+             _run_iptables("filter", ["-F", chain], suppress_errors=True)
+             
+        # Delete them (might fail if still referenced, but we flushed main chains so should be ok)
+        for chain in chains_to_delete:
+             _run_iptables("filter", ["-X", chain], suppress_errors=True)
+             
+        logger.info(f"Deleted {len(chains_to_delete)} stale VPN chains.")
+
+    except Exception as e:
+        logger.error(f"Failed to flush VPN chains: {e}")

@@ -47,8 +47,8 @@ class Instance(InstanceBase, table=True):
     public_key: str
     
     # Relationships
-    clients: List["Client"] = Relationship(back_populates="instance")
-    groups: List["Group"] = Relationship(back_populates="instance")
+    clients: List["Client"] = Relationship(back_populates="instance", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    groups: List["Group"] = Relationship(back_populates="instance", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     assigned_users: List[User] = Relationship(back_populates="assigned_instances", link_model=UserInstance)
 
 class InstanceRead(InstanceBase):
@@ -68,7 +68,7 @@ class Client(SQLModel, table=True):
 
     # Relationships
     instance: Instance = Relationship(back_populates="clients")
-    group_links: List["GroupMember"] = Relationship(back_populates="client")
+    group_links: List["GroupMember"] = Relationship(back_populates="client", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
 
 class Group(SQLModel, table=True):
@@ -79,8 +79,8 @@ class Group(SQLModel, table=True):
 
     # Relationships
     instance: Instance = Relationship(back_populates="groups")
-    client_links: List["GroupMember"] = Relationship(back_populates="group")
-    rules: List["FirewallRule"] = Relationship(back_populates="group")
+    client_links: List["GroupMember"] = Relationship(back_populates="group", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    rules: List["FirewallRule"] = Relationship(back_populates="group", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
 class GroupRead(SQLModel):
     id: str

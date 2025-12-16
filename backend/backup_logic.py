@@ -4,6 +4,7 @@ import zipfile
 import sqlite3
 import datetime
 import logging
+import iptables_manager
 import subprocess
 
 # Configure Logging
@@ -111,6 +112,12 @@ def restore_backup(zip_path):
             
             shutil.copy2(restored_db, target_db)
             logger.info("Database restored.")
+            
+            # Flush old VPN firewall chains to prevent zombies from previous state
+            try:
+                iptables_manager.flush_all_vpn_chains()
+            except Exception as e:
+                logger.warning(f"Failed to flush old firewall chains: {e}")
         
         # 2. Restore WireGuard Configs
         restored_configs = os.path.join(extract_dir, 'wireguard')

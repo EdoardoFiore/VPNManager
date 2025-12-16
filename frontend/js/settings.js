@@ -230,6 +230,19 @@ async function saveSystemSettings() {
             }
         }
 
+        // 3. Favicon Upload
+        const faviconInput = form.querySelector('[name="favicon_file"]');
+        if (faviconInput && faviconInput.files.length > 0) {
+            const favData = new FormData();
+            favData.append('action', 'upload_logo');
+            favData.append('file', faviconInput.files[0]);
+            favData.append('type', 'favicon');
+
+            const favResponse = await fetch(API_AJAX_HANDLER, { method: 'POST', body: favData });
+            const favResult = await favResponse.json();
+            if (!favResult.success) throw new Error("Favicon upload failed: " + (favResult.body.detail || "Unknown"));
+        }
+
         showNotification('success', __('customization_saved'));
         setTimeout(() => location.reload(), 1500);
 
