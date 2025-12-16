@@ -66,9 +66,12 @@ if ($currentRole !== 'admin') {
                                     <small class="form-hint"><?= __('logo_help') ?></small>
                                 </div>
 
-                                <div class="mt-4">
+                                <div class="mt-4 d-flex gap-2">
                                     <button type="submit" class="btn btn-primary">
                                         <i class="ti ti-device-floppy me-2"></i> <?= __('save_settings') ?>
+                                    </button>
+                                    <button type="button" class="btn btn-warning" id="btn-reset-system-settings">
+                                        <i class="ti ti-rotate-clockwise me-2"></i> <?= __('reset_to_default') ?>
                                     </button>
                                 </div>
                             </form>
@@ -368,6 +371,35 @@ if ($currentRole !== 'admin') {
                                         <div class="col"><a href="#" class="btn btn-danger w-100"
                                                 id="btn-confirm-restore-action">
                                                 <?= __('restore_btn') ?>
+                                            </a></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reset Confirmation Modal -->
+                <div class="modal modal-blur fade" id="modal-confirm-reset-system" tabindex="-1" role="dialog"
+                    aria-hidden="true">
+                    <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+                        <div class="modal-content">
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            <div class="modal-status bg-warning"></div>
+                            <div class="modal-body text-center py-4">
+                                <i class="ti ti-alert-triangle text-warning icon mb-2" style="font-size: 3rem;"></i>
+                                <h3><?= __('are_you_sure') ?></h3>
+                                <div class="text-muted"><?= __('reset_customization_confirm') ?></div>
+                            </div>
+                            <div class="modal-footer">
+                                <div class="w-100">
+                                    <div class="row">
+                                        <div class="col"><a href="#" class="btn w-100" data-bs-dismiss="modal">
+                                                <?= __('cancel') ?>
+                                            </a></div>
+                                        <div class="col"><a href="#" class="btn btn-warning w-100"
+                                                id="btn-confirm-reset-system-action">
+                                                <?= __('reset_to_default') ?>
                                             </a></div>
                                     </div>
                                 </div>

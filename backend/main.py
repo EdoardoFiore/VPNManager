@@ -360,6 +360,8 @@ class SystemSettingsUpdate(BaseModel):
     support_url: Optional[str] = None
     primary_color: str
     custom_css: Optional[str] = None
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
     # Logo and Favicon handled via separate upload endpoint to manage files
 
 @app.get("/api/settings/system")

@@ -339,6 +339,8 @@ return [
     'custom_logo_label' => 'Custom Logo',
     'logo_help' => 'Upload a logo (PNG, JPG, SVG). Max 2MB.',
     'save_settings' => 'Save Settings',
+    'reset_to_default' => 'Reset to Default',
+    'reset_customization_confirm' => 'Are you sure you want to reset customization settings to default? This will remove the logo and reset colors.',
     'branding_preview' => 'Branding Preview',
     'button_example' => 'Button Example',
     'smtp_host_label' => 'SMTP Host',

@@ -15,6 +15,28 @@ document.addEventListener('DOMContentLoaded', function () {
         saveSystemSettings();
     });
 
+    const btnResetSystem = document.getElementById('btn-reset-system-settings');
+    if (btnResetSystem) {
+        btnResetSystem.addEventListener('click', function () {
+            // Show Modal instead of native confirm
+            const modal = new bootstrap.Modal(document.getElementById('modal-confirm-reset-system'));
+            modal.show();
+        });
+    }
+
+    const btnConfirmResetSystem = document.getElementById('btn-confirm-reset-system-action');
+    if (btnConfirmResetSystem) {
+        btnConfirmResetSystem.addEventListener('click', function () {
+            // Hide Modal
+            const modalEl = document.getElementById('modal-confirm-reset-system');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            // Execute Reset
+            executeResetSystemSettings();
+        });
+    }
+
     document.getElementById('btn-test-smtp').addEventListener('click', testSMTPSettings);
 
     // Color Picker Sync
@@ -214,6 +236,41 @@ async function saveSystemSettings() {
     } catch (e) {
         showNotification('danger', e.message);
     } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function executeResetSystemSettings() {
+    const btn = document.getElementById('btn-reset-system-settings');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>';
+    btn.disabled = true;
+
+    try {
+        const payload = {
+            action: 'update_system_settings',
+            company_name: 'VPN Manager',
+            primary_color: '#0054a6',
+            logo_url: '',
+            favicon_url: ''
+        };
+
+        const response = await fetch(API_AJAX_HANDLER, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(payload)
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification('success', __('settings_saved'));
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            throw new Error(result.body.detail || __('save_data_error'));
+        }
+    } catch (e) {
+        showNotification('danger', e.message);
         btn.innerHTML = originalText;
         btn.disabled = false;
     }

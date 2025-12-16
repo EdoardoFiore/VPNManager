@@ -339,6 +339,8 @@ return [
     'custom_logo_label' => 'Logo Personalizzato',
     'logo_help' => 'Carica un logo (PNG, JPG, SVG). Massimo 2MB.',
     'save_settings' => 'Salva Impostazioni',
+    'reset_to_default' => 'Ripristina Default',
+    'reset_customization_confirm' => 'Sei sicuro di voler ripristinare le impostazioni di personalizzazione predefinite? Questo rimuoverà il logo e reimposterà i colori.',
     'branding_preview' => 'Anteprima Branding',
     'button_example' => 'Esempio Bottone',
     'smtp_host_label' => 'Host SMTP',
