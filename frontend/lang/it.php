@@ -301,7 +301,7 @@ return [
     
     // Setup.php (Public Config)
     'vpn_configuration' => 'Configurazione VPN',
-    'verifying_link' => 'Verifica del link in corso...',,
+    'verifying_link' => 'Verifica del link in corso...',
     'invalid_link_title' => 'Link Invalido o Scaduto',
     'invalid_link_message' => 'Il link che hai utilizzato non è valido o è scaduto. Per favore contatta l\'amministratore per riceverne uno nuovo.',
     'hello' => 'Ciao,',
