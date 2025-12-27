@@ -22,7 +22,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/js/tabler.min.js"></script>
 
 <!-- Custom JS -->
-<script src="js/utils.js"></script>
+<script src="js/utils.js?v=<?= time() ?>"></script>
 <?php if (isset($extra_scripts)) {
     foreach ($extra_scripts as $script) {
         echo '<script src="' . $script . '"></script>';

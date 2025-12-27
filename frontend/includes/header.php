@@ -53,6 +53,7 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
         rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <link href="css/dark-theme.css?v=<?= time() ?>" rel="stylesheet" />
     <style>
         .card-actions {
             margin-left: auto;
@@ -153,10 +154,19 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
 </head>
 
 <body class="layout-boxed">
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme');
+            if (!theme) {
+                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.body.setAttribute('data-bs-theme', theme);
+        })();
+    </script>
     <?php export_translations_to_js(); ?>
     <div class="page">
         <!-- Navbar -->
-        <header class="navbar navbar-expand-md navbar-light d-print-none">
+        <header class="navbar navbar-expand-md d-print-none">
             <div class="container-xl">
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu">
                     <span class="navbar-toggler-icon"></span>
@@ -228,6 +238,13 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                     </div>
                 </div>
                 <div class="navbar-nav flex-row order-md-last">
+                    <div class="nav-item d-none d-md-flex me-3">
+                        <a href="#" class="nav-link px-0" onclick="toggleTheme(); return false;" title="Toggle Dark Mode" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                            <span id="theme-icon">
+                                 <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
+                            </span>
+                        </a>
+                    </div>
                     <!-- Language Switcher -->
                     <div class="nav-item dropdown me-3">
                         <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown">

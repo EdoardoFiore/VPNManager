@@ -60,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title><?= __('login_title') ?></title>
     <!-- CSS files -->
     <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler.min.css" rel="stylesheet" />
+    <link href="css/dark-theme.css?v=<?= time() ?>" rel="stylesheet" />
     <style>
         :root {
             --tblr-primary:
@@ -91,6 +92,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 
 <body class=" d-flex flex-column">
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme');
+            if (!theme) {
+                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.body.setAttribute('data-bs-theme', theme);
+        })();
+    </script>
     <div class="page page-center">
         <div class="container container-tight py-4">
             <div class="text-center mb-4">
