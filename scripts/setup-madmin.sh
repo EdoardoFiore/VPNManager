@@ -90,12 +90,45 @@ WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONPATH=$APP_DIR"
 Environment="DATABASE_URL=postgresql://madmin:madmin@localhost/madmin"
-ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
+
+# 6. Nginx Configuration
+echo "[*] Configuring Nginx Reverse Proxy..."
+if ! command -v nginx &> /dev/null; then
+    apt-get install -y nginx
+fi
+
+NGINX_CONF="/etc/nginx/sites-available/madmin"
+rm -f "$NGINX_CONF"
+
+cat <<EOF > "$NGINX_CONF"
+server {
+    listen 80;
+    server_name _;
+
+    # Serve Static Files Directly (Optional optimization, but uvicorn/fastapi handles it well too)
+    # location /assets/ {
+    #     alias $APP_DIR/frontend/assets/;
+    # }
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/madmin
+rm -f /etc/nginx/sites-enabled/default
+systemctl reload nginx
 
 systemctl daemon-reload
 systemctl enable madmin
