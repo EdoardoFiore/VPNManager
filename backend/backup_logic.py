@@ -4,7 +4,7 @@ import zipfile
 import sqlite3
 import datetime
 import logging
-import iptables_manager
+from backend.modules.wireguard.services import iptables_service as iptables_manager
 import subprocess
 
 # Configure Logging
@@ -143,7 +143,7 @@ def restore_backup(zip_path):
             logger.info("Firewall rules re-applied from restored database.")
             
             # 2.6 Persist rules to file
-            save_script = os.path.join(ROOT_DIR, 'scripts', 'save-iptables.sh')
+            save_script = os.path.join(BACKEND_DIR, 'core', 'scripts', 'save-iptables.sh')
             if os.path.exists(save_script):
                 # Ensure executable
                 os.chmod(save_script, 0o755) 

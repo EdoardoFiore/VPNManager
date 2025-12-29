@@ -4,11 +4,11 @@ from typing import List, Dict, Optional, Tuple
 from sqlmodel import Session, select
 import datetime
 
-from database import engine
-from models import Client, Instance
-import ip_manager
-import instance_manager
-import wireguard_manager
+from backend.core.database import engine
+from backend.modules.wireguard.models import Client, Instance
+from . import ip_service as ip_manager
+from . import instance_service as instance_manager
+from . import wireguard_service as wireguard_manager
 
 logger = logging.getLogger(__name__)
 

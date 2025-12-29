@@ -3,9 +3,9 @@ import uuid
 from typing import List, Dict, Optional
 from sqlmodel import Session, select
 
-from database import engine
-from models import MachineFirewallRule
-import iptables_manager
+from backend.core.database import engine
+from backend.modules.firewall.models import MachineFirewallRule
+from backend.modules.wireguard.services import iptables_service as iptables_manager
 
 logger = logging.getLogger(__name__)
 

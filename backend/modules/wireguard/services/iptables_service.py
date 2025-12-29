@@ -1,12 +1,13 @@
-import subprocess
 import logging
 import uuid
 import re
 from typing import List, Union, Optional, Dict, Any
 from sqlmodel import Session, select
 
-from database import engine
-from models import Instance, MachineFirewallRule
+from backend.core.database import engine
+from backend.modules.wireguard.models import Instance
+from backend.modules.firewall.models import MachineFirewallRule
+from backend.core import system_service
 
 logger = logging.getLogger(__name__)
 
@@ -20,120 +21,27 @@ FW_INPUT_CHAIN = "FW_INPUT"
 FW_OUTPUT_CHAIN = "FW_OUTPUT"
 FW_FORWARD_CHAIN = "FW_FORWARD"
 
-# --- Config Paths ---
-DATA_DIR = "/opt/vpn-manager/backend/data"
+DEFAULT_INTERFACE = system_service.get_default_interface()
 
-def _get_default_interface():
-    """Detects the default network interface."""
-    try:
-        result = subprocess.run(["/usr/sbin/ip", "-o", "-4", "route", "show", "default"], capture_output=True, text=True, check=True)
-        if result.stdout:
-            parts = result.stdout.split()
-            if "dev" in parts:
-                return parts[parts.index("dev") + 1]
-    except Exception as e:
-        logger.warning(f"Could not detect default interface using 'ip route': {e}")
-    
-    logger.warning("Falling back to 'eth0' as default interface.")
-    return "eth0" # Fallback
-
-DEFAULT_INTERFACE = _get_default_interface()
-
-class MachineFirewallRule:
-    def __init__(self, id: str, chain: str, action: str,
-                 protocol: Optional[str] = None,
-                 source: Optional[str] = None, destination: Optional[str] = None,
-                 port: Optional[Union[int, str]] = None, in_interface: Optional[str] = None,
-                 out_interface: Optional[str] = None, state: Optional[str] = None,
-                 comment: Optional[str] = None, table: str = "filter", order: int = 0):
-        self.id = id if id else str(uuid.uuid4())
-        self.chain = chain.upper()
-        self.action = action.upper()
-        self.protocol = protocol.lower() if protocol else None
-        self.source = source
-        self.destination = destination
-        self.port = str(port) if port else None
-        self.in_interface = in_interface
-        self.out_interface = out_interface
-        self.state = state
-        self.comment = comment
-        self.table = table.lower()
-        self.order = order
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "chain": self.chain,
-            "action": self.action,
-            "protocol": self.protocol,
-            "source": self.source,
-            "destination": self.destination,
-            "port": self.port,
-            "in_interface": self.in_interface,
-            "out_interface": self.out_interface,
-            "state": self.state,
-            "comment": self.comment,
-            "table": self.table,
-            "order": self.order
-        }
-
-    @staticmethod
-    def from_dict(data: dict):
-        return MachineFirewallRule(**data)
-
+# Wrappers for compatibility with existing calls (proxying to core)
+# Ideally call sites should be updated, but for now we shim them
 def _run_iptables(table: str, args: List[str], suppress_errors: bool = False):
-    """Run an iptables command."""
-    command = ["/usr/sbin/iptables"]
-    if table != "filter":
-        command.extend(["-t", table])
-    command.extend(args)
-
-    try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
-        return True, None
-    except subprocess.CalledProcessError as e:
-        if not suppress_errors:
-            error_msg = f"iptables error: {e.stderr.strip()} cmd: {' '.join(command)}"
-            logger.error(error_msg)
-            return False, error_msg
-        else:
-            return False, e.stderr.strip()
+    return system_service.run_iptables(table, args, suppress_errors)
 
 def _create_or_flush_chain(chain_name: str, table: str = "filter"):
-    # Try to create chain, suppress error if it exists
-    res, _ = _run_iptables(table, ["-N", chain_name], suppress_errors=True)
-    if not res:
-        # If creation failed (likely exists), flush it
-        _run_iptables(table, ["-F", chain_name])
-    return True
+    return system_service.create_or_flush_chain(chain_name, table)
 
 def _delete_chain_if_empty(chain_name: str, table: str = "filter"):
-    _run_iptables(table, ["-F", chain_name])
-    _run_iptables(table, ["-X", chain_name])
+    return system_service.delete_chain_if_empty(chain_name, table)
 
 def _ensure_jump_rule(source_chain: str, target_chain: str, table: str = "filter", position: int = 1):
-    _run_iptables(table, ["-D", source_chain, "-j", target_chain], suppress_errors=True)
-    res, err = _run_iptables(table, ["-I", source_chain, str(position), "-j", target_chain])
-    if res:
-        logger.info(f"Enforced jump from {source_chain} to {target_chain} at pos {position}")
-    else:
-        # Fallback for "Index of insertion too big"
-        if "Index of insertion too big" in err or "iptables: Index of insertion too big" in err:
-             logger.warning(f"Insert at pos {position} failed (Index too big), falling back to Append (-A).")
-             res_fallback, err_fallback = _run_iptables(table, ["-A", source_chain, "-j", target_chain])
-             if res_fallback:
-                 logger.info(f"Enforced jump from {source_chain} to {target_chain} via Append")
-             else:
-                 logger.error(f"Failed to enforce jump rule (fallback): {err_fallback}")
-        else:
-            logger.error(f"Failed to enforce jump rule: {err}")
+    return system_service.ensure_jump_rule(source_chain, target_chain, table, position)
 
-# --- Persistence Models ---
-
-
+# --- Persistence Helpers ---
 
 def _build_iptables_args_from_rule(rule: MachineFirewallRule, operation: str = "-A") -> List[str]:
-    args = [operation, rule.chain]
+    # Note: rule is now likely the SQLModel instance, verify attributes match
+    args = [operation, rule.chain.upper()] # Ensure chain case
     if rule.in_interface: args.extend(["-i", rule.in_interface])
     if rule.out_interface: args.extend(["-o", rule.out_interface])
     if rule.source: args.extend(["-s", rule.source])
@@ -141,11 +49,12 @@ def _build_iptables_args_from_rule(rule: MachineFirewallRule, operation: str = "
     if rule.protocol:
         args.extend(["-p", rule.protocol])
         if rule.port and rule.action not in ["MASQUERADE", "SNAT", "DNAT"]:
-             args.extend(["--dport", rule.port])
+             args.extend(["--dport", str(rule.port)])
     if rule.state:
         args.extend(["-m", "state", "--state", rule.state])
     
-    args.extend(["-m", "comment", "--comment", f"ID_{rule.id}"])
+    # rule.id might be UUID object
+    args.extend(["-m", "comment", "--comment", f"ID_{str(rule.id)}"])
 
     if rule.action == "MASQUERADE":
         args.extend(["-j", "MASQUERADE"])
@@ -157,6 +66,7 @@ def _build_iptables_args_from_rule(rule: MachineFirewallRule, operation: str = "
         args.extend(["-j", rule.action])
 
     return args
+
 
 def add_machine_firewall_rule(rule: MachineFirewallRule) -> (bool, Optional[str]):
     args = _build_iptables_args_from_rule(rule, operation="-I")

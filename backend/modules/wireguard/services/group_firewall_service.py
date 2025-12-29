@@ -4,11 +4,11 @@ from typing import List, Dict, Optional
 from sqlmodel import Session, select
 import uuid
 
-from database import engine
-from models import Group, GroupMember, FirewallRule, Client, Instance, GroupRead
-import iptables_manager
-import instance_manager
-import ip_manager
+from backend.core.database import engine
+from backend.modules.wireguard.models import Group, FirewallRule, Client, Instance, GroupRead, GroupMember
+from . import iptables_service as iptables_manager
+from . import instance_service as instance_manager
+from . import ip_service as ip_manager
 
 logger = logging.getLogger(__name__)
 

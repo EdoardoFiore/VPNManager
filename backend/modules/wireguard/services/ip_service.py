@@ -2,8 +2,8 @@ import logging
 import ipaddress
 from typing import Optional
 from sqlmodel import Session, select
-from database import engine
-from models import Client, Instance
+from backend.core.database import engine
+from backend.modules.wireguard.models import Client, Instance
 
 logger = logging.getLogger(__name__)
 

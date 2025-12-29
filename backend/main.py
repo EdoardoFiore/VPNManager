@@ -14,15 +14,17 @@ from sqlmodel import Session, select
 import json
 import importlib.util
 
-import vpn_manager
-import instance_manager
-import network_utils
-import firewall_manager as instance_firewall_manager
-import iptables_manager
-from machine_firewall_manager import machine_firewall_manager
-from database import create_db_and_tables, engine
+# Updated Imports for Modular Structure
+from backend.modules.wireguard.services import client_service as vpn_manager
+from backend.modules.wireguard.services import instance_service as instance_manager
+from backend.core import network_utils
+from backend.modules.wireguard.services import group_firewall_service as instance_firewall_manager
+from backend.modules.wireguard.services import iptables_service as iptables_manager
+from backend.modules.firewall.services.machine_service import machine_firewall_manager
+from backend.core.database import create_db_and_tables, engine
+# Keep using bridge for models to ensure all are loaded
 from models import User, UserRole, UserInstance, Instance, SMTPSettings, MagicToken, SystemSettings, BackupSettings
-import auth
+from backend.core import auth
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -32,7 +34,7 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import backup_logic
-import upload_manager
+from backend.core import upload_manager
 
 # Scheduler instance
 scheduler = BackgroundScheduler()
@@ -376,31 +378,13 @@ def get_menu(current_user: User = Depends(auth.get_current_user)):
                      "icon": item.get("icon", "circle")
                  })
                  
-    # 3. System (Admin) - Nested
+    # 3. Store (Available to Admin)
     if current_user.role == UserRole.ADMIN:
-        admin_menu = {
-            "label": "Admin",
-            "icon": "adjustments", 
-            "submenu": []
-        }
-        
-        admin_menu["submenu"].append({
-            "label": "Users",
-            "url": "users.php",
-            "icon": "users"
-        })
-        admin_menu["submenu"].append({
-            "label": "Settings",
-            "url": "settings.php",
-            "icon": "settings"
-        })
-        admin_menu["submenu"].append({
+        menu.append({
              "label": "Store",
              "url": "store.php",
              "icon": "building-store"
         })
-        
-        menu.append(admin_menu)
         
     return menu
 

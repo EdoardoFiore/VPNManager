@@ -6,8 +6,8 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlmodel import Session, select
-from database import engine
-from models import User, UserRole
+from .database import engine
+from .models import User, UserRole
 
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "CHANGE_THIS_IN_PRODUCTION_TO_A_VERY_SECRET_KEY")
@@ -83,7 +83,7 @@ async def check_instance_access(request: Request, user: User = Depends(get_curre
             return user # Should not happen if used on correct endpoint
             
         with Session(engine) as session:
-            from models import UserInstance
+            from .models import UserInstance
             link = session.get(UserInstance, (user.username, instance_id))
             if link:
                 return user

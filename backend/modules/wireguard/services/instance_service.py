@@ -6,17 +6,22 @@ from ipaddress import ip_network, ip_address, AddressValueError
 from typing import List, Optional, Dict
 from sqlmodel import Session, select
 
-from database import engine
-from models import Instance
-import wireguard_manager
-import iptables_manager
+from backend.core.database import engine
+from backend.modules.wireguard.models import Instance
+from . import wireguard_service as wireguard_manager
+from . import iptables_service as iptables_manager
 
 logger = logging.getLogger(__name__)
 
 WIREGUARD_CONFIG_DIR = "/etc/wireguard"
 
+# Calculate backend dir: currently in backend/modules/wireguard/services
+# ../../../ = backend
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_DIR = os.path.abspath(os.path.join(CURRENT_DIR, '..', '..', '..'))
+
 def _save_iptables_rules():
-    save_script = "/opt/vpn-manager/scripts/save-iptables.sh"
+    save_script = os.path.join(BACKEND_DIR, "core", "scripts", "save-iptables.sh")
     if os.path.exists(save_script):
         try:
             subprocess.run(["bash", save_script], check=True)
@@ -172,7 +177,7 @@ def create_instance(name: str, port: int, subnet: str,
     )
     
     try:
-        import firewall_manager
+        from . import group_firewall_service as firewall_manager
         firewall_manager.apply_firewall_rules()
     except Exception as e:
         logger.error(f"Firewall update failed: {e}")
@@ -230,7 +235,7 @@ def update_instance_routes(instance_id: str, tunnel_mode: str, routes: List[Dict
         session.refresh(instance)
         
         try:
-            import firewall_manager
+            from . import group_firewall_service as firewall_manager
             firewall_manager.apply_firewall_rules()
         except Exception as e:
             logger.error(f"Firewall update failed after route change: {e}")
@@ -251,6 +256,6 @@ def update_instance_firewall_policy(instance_id: str, new_policy: str) -> Instan
         session.commit()
         session.refresh(inst)
         
-        import firewall_manager
+        from . import group_firewall_service as firewall_manager
         firewall_manager.apply_firewall_rules()
         return inst
