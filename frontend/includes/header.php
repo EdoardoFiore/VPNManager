@@ -14,7 +14,7 @@ $currentUser = $_SESSION['username'] ?? 'User';
 $currentRole = $_SESSION['role'] ?? 'viewer';
 
 // Fetch Branding
-$brandName = 'MAdmin';
+$brandName = 'MADmin';
 $brandColor = '#0054a6';
 $brandLogo = '';
 $brandFavicon = '';
@@ -59,23 +59,54 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
         .text-primary { color: <?= $brandColor ?> !important; }
         .bg-primary { background-color: <?= $brandColor ?> !important; }
         .btn-primary { background-color: <?= $brandColor ?> !important; border-color: <?= $brandColor ?> !important; }
-        .nav-link.active { border-right: 3px solid <?= $brandColor ?>; color: <?= $brandColor ?> !important; background: rgba(0,0,0,0.05); }
         .form-check-input:checked { background-color: <?= $brandColor ?> !important; border-color: <?= $brandColor ?> !important; }
 
+        /* Menu Highlights and Styling */
+        .nav-link.active { 
+            border-right: 3px solid <?= $brandColor ?>; 
+            color: <?= $brandColor ?> !important; 
+            background: rgba(var(--tblr-primary-rgb), 0.05); 
+        }
+        
+        .nav-link:hover {
+            background-color: rgba(var(--tblr-body-color-rgb), 0.04);
+            color: var(--tblr-body-color);
+            transition: all 0.2s ease;
+        }
+
+        /* 1. Card Hover Effect (Legacy CSS) */
+        .instance-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .instance-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        /* 2. Notification Styles (Left Border) */
+        .alert-success {
+            border-left: 5px solid #2fb344 !important;
+        }
+
+        .alert-danger {
+            border-left: 5px solid #d63939 !important;
+        }
+        
         /* Loading skeleton styles */
         .box-loading {
             animation: pulse 1.5s infinite ease-in-out;
-            background-color: #e0e0e0; /* Light gray for light theme */
+            background-color: #e0e0e0; 
             background-image: linear-gradient(90deg, #e0e0e0 0px, #f0f0f0 40px, #e0e0e0 80px);
             background-size: 200% 100%;
             background-position: -100% 0;
         }
 
         [data-bs-theme="dark"] .box-loading {
-            background-color: #333; /* Darker gray for dark theme */
+            background-color: #333; 
             background-image: linear-gradient(90deg, #333 0px, #444 40px, #333 80px);
         }
-
+        
         @keyframes pulse {
             0% { background-position: -100% 0; }
             100% { background-position: 100% 0; }
@@ -151,13 +182,19 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                         </div>
                         
                         <div class="row">
-                            <div class="col-6">
-                                <a href="change_lang.php?lang=<?= $current_lang == 'it' ? 'en' : 'it' ?>" class="btn btn-ghost-secondary w-100" title="Switch Language">
+                            <div class="col-4">
+                                <a href="change_lang.php?lang=<?= $current_lang == 'it' ? 'en' : 'it' ?>" class="btn btn-ghost-secondary w-100 px-0" title="Switch Language">
                                     <?= $current_lang == 'it' ? 'EN' : 'IT' ?>
                                 </a>
                             </div>
-                            <div class="col-6">
-                                 <a href="logout.php" class="btn btn-ghost-danger w-100" title="<?= __('logout') ?>">
+                            <div class="col-4">
+                                <a href="#" class="btn btn-ghost-secondary w-100 px-0" id="dark-mode-toggle" title="Toggle Dark Mode">
+                                     <!-- Initial Icon Placeholders - JS will update -->
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-moon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
+                                </a>
+                            </div>
+                            <div class="col-4">
+                                 <a href="logout.php" class="btn btn-ghost-danger w-100 px-0" title="<?= __('logout') ?>">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" /><path d="M20 12h-13l3 -3m0 6l-3 -3" /></svg>
                                 </a>
                             </div>
@@ -171,6 +208,34 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
             window.currentUser = '<?= $_SESSION['username'] ?? '' ?>';
             window.userRole = '<?= $_SESSION['role'] ?? '' ?>';
             
+            // Dark Mode Toggle Logic
+            document.addEventListener("DOMContentLoaded", function() {
+                const toggle = document.getElementById('dark-mode-toggle');
+                const body = document.body;
+                
+                function updateIcon() {
+                    const isDark = body.getAttribute('data-bs-theme') === 'dark';
+                    if (isDark) {
+                        toggle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-sun" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="4" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></svg>`;
+                        toggle.title = "Switch to Light Mode";
+                    } else {
+                         toggle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-moon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>`;
+                         toggle.title = "Switch to Dark Mode";
+                    }
+                }
+                
+                // Init Icon
+                updateIcon();
+                
+                toggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const newTheme = body.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+                    body.setAttribute('data-bs-theme', newTheme);
+                    localStorage.setItem('theme', newTheme);
+                    updateIcon();
+                });
+            });
+
             // Dynamic Menu Loader
             document.addEventListener("DOMContentLoaded", function() {
                 fetch('/api/core/menu', {
@@ -183,35 +248,68 @@ if (isset($sysSettings['success']) && $sysSettings['success'] && !empty($sysSett
                     const container = document.getElementById('dynamic-menu-container');
                     container.innerHTML = '';
                     
-                    menu.forEach(item => {
-                        if (item.header) {
-                            const header = document.createElement('li');
-                            header.className = 'nav-item';
-                            header.innerHTML = `<div class="nav-link disabled text-muted text-uppercase small mt-2 mb-1">${item.header}</div>`;
-                            container.appendChild(header);
-                        } else {
-                            const li = document.createElement('li');
-                            li.className = 'nav-item';
+                    const renderMenuItem = (item) => {
+                         if (item.header) {
+                            return `<div class="nav-link disabled text-muted text-uppercase small mt-2 mb-1">${item.header}</div>`;
+                        }
+                        
+                         // Check active state
+                        const currentPath = window.location.pathname.split("/").pop();
+                        const isActive = item.url === currentPath || (item.url === 'index.php' && currentPath === '');
+                        const activeClass = isActive ? 'active' : '';
+                        
+                        // Handle Submenu
+                        if (item.submenu && item.submenu.length > 0) {
+                            let subHtml = `
+                                <a class="nav-link dropdown-toggle" href="#navbar-extra" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="false" >
+                                    <span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-${item.icon}"></i></span>
+                                    <span class="nav-link-title">${item.label}</span>
+                                </a>
+                                <div class="dropdown-menu">
+                                    <div class="dropdown-menu-columns">
+                                        <div class="dropdown-menu-column">
+                            `;
                             
-                            // Check active state
-                            const currentPath = window.location.pathname.split("/").pop();
-                            const isActive = item.url === currentPath || (item.url === 'index.php' && currentPath === '');
+                            item.submenu.forEach(sub => {
+                                 const isSubActive = sub.url === currentPath ? 'active' : '';
+                                 subHtml += `
+                                    <a class="dropdown-item ${isSubActive}" href="${sub.url}">
+                                        <span class="nav-link-icon d-md-none d-lg-inline-block me-1"><i class="ti ti-${sub.icon}" style="font-size:14px"></i></span>
+                                        ${sub.label}
+                                    </a>
+                                 `;
+                            });
                             
-                            if (isActive) li.classList.add('active');
-                            
-                            li.innerHTML = `
+                            subHtml += `</div></div></div>`;
+                            return `<li class="nav-item dropdown">${subHtml}</li>`;
+                        }
+                        
+                        return `
+                            <li class="nav-item ${activeClass}">
                                 <a class="nav-link" href="${item.url}">
                                     <span class="nav-link-icon d-md-none d-lg-inline-block">
-                                        <!-- Icon Rendering -->
                                         <i class="ti ti-${item.icon}"></i> 
                                     </span>
                                     <span class="nav-link-title">
                                         ${item.label}
                                     </span>
                                 </a>
-                            `;
-                            container.appendChild(li);
-                        }
+                            </li>
+                        `;
+                    };
+                    
+                    menu.forEach(item => {
+                         if (item.header) {
+                             const header = document.createElement('li');
+                             header.className = 'nav-item';
+                             header.innerHTML = renderMenuItem(item);
+                             container.appendChild(header);
+                         } else {
+                            // Helper to convert string info to DOM
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = renderMenuItem(item);
+                            container.appendChild(tempDiv.firstElementChild);
+                         }
                     });
                 })
                 .catch(err => console.error("Menu load failed", err));

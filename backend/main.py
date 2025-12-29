@@ -280,7 +280,7 @@ def update_scheduler(settings: BackupSettings):
 
 # --- App Init ---
 app = FastAPI(
-    title="MAdmin API",
+    title="MADmin API",
     description="Modular Admin Interface with WireGuard Support.",
     version="3.0.0",
 )
@@ -376,19 +376,31 @@ def get_menu(current_user: User = Depends(auth.get_current_user)):
                      "icon": item.get("icon", "circle")
                  })
                  
-    # 3. System (Admin)
+    # 3. System (Admin) - Nested
     if current_user.role == UserRole.ADMIN:
-        menu.append({"header": "System"})
-        menu.append({
+        admin_menu = {
+            "label": "Admin",
+            "icon": "adjustments", 
+            "submenu": []
+        }
+        
+        admin_menu["submenu"].append({
             "label": "Users",
             "url": "users.php",
             "icon": "users"
         })
-        menu.append({
+        admin_menu["submenu"].append({
             "label": "Settings",
             "url": "settings.php",
             "icon": "settings"
         })
+        admin_menu["submenu"].append({
+             "label": "Store",
+             "url": "store.php",
+             "icon": "building-store"
+        })
+        
+        menu.append(admin_menu)
         
     return menu
 
@@ -471,7 +483,7 @@ def get_system_settings():
         if not settings:
              # Return defaults if not set
             return {
-                "company_name": "MAdmin",
+                "company_name": "MADmin",
                 "primary_color": "#0054a6"
             }
         return settings
@@ -543,7 +555,7 @@ async def upload_logo(file: UploadFile = File(...), type: str = Form("logo")):
     with Session(engine) as session:
         settings = session.get(SystemSettings, 1)
         if not settings:
-            settings = SystemSettings(id=1, company_name="MAdmin") # Init if missing
+            settings = SystemSettings(id=1, company_name="MADmin") # Init if missing
             
         if type == "logo":
             settings.logo_url = relative_path

@@ -100,7 +100,7 @@ fi
 # 3. Installazione Python e Venv
 log_info "Installazione Python e Venv..."
 # Aggiungiamo python3-full per garantire ensurepip e venv
-if ! apt-get install -y python3-pip python3-venv sqlite3 python3-full libpq-dev; then
+if ! apt-get install -y python3-pip python3-venv python3-full libpq-dev; then
      log_error "Errore nell'installazione di Python/Venv."
      exit 1
 fi
