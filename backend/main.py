@@ -11,6 +11,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
+import json
+import importlib.util
 
 import vpn_manager
 import instance_manager
@@ -278,10 +280,49 @@ def update_scheduler(settings: BackupSettings):
 
 # --- App Init ---
 app = FastAPI(
-    title="VPN Manager API",
-    description="WireGuard VPN Management with RBAC.",
+    title="MAdmin API",
+    description="Modular Admin Interface with WireGuard Support.",
     version="3.0.0",
 )
+
+# --- Module System ---
+LOADED_MODULES = []
+
+def load_modules():
+    """
+    Scans backend/modules/ for valid modules (folders with manifest.json)
+    and includes their routers.
+    """
+    modules_dir = os.path.join(os.path.dirname(__file__), "modules")
+    if not os.path.exists(modules_dir):
+        return
+
+    for module_name in os.listdir(modules_dir):
+        module_path = os.path.join(modules_dir, module_name)
+        manifest_path = os.path.join(module_path, "manifest.json")
+        
+        if os.path.isdir(module_path) and os.path.exists(manifest_path):
+            try:
+                with open(manifest_path, "r") as f:
+                    manifest = json.load(f)
+                
+                # Check if router.py exists
+                router_path = os.path.join(module_path, "router.py")
+                if os.path.exists(router_path):
+                    # Dynamic Import
+                    spec = importlib.util.spec_from_file_location(f"modules.{module_name}.router", router_path)
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    
+                    if hasattr(module, "router"):
+                        app.include_router(module.router, prefix=f"/api/modules/{module_name}", tags=[module_name])
+                        print(f"Loaded Module: {module_name}")
+                        LOADED_MODULES.append({
+                            "id": module_name,
+                            "manifest": manifest
+                        })
+            except Exception as e:
+                print(f"Failed to load module {module_name}: {e}")
 
 @app.on_event("startup")
 def on_startup():
@@ -293,6 +334,64 @@ def on_startup():
                 update_scheduler(settings)
     except Exception as e:
         print(f"Startup scheduler error: {e}")
+    
+    # Load Modules
+    load_modules()
+
+@app.get("/api/core/menu")
+def get_menu(current_user: User = Depends(auth.get_current_user)):
+    """
+    Returns the dynamic menu structure for the frontend.
+    """
+    menu = []
+    
+    # 1. Base / Core Items
+    menu.append({
+        "header": "Core"
+    })
+    menu.append({
+        "label": "Dashboard",
+        "url": "index.php",
+        "icon": "home"
+    })
+    
+    # Admin only Settings
+    if current_user.role in [UserRole.ADMIN, UserRole.ADMIN_READ_ONLY]:
+         menu.append({
+            "label": "Firewall",
+            "url": "machine_settings.php",
+            "icon": "shield-lock"
+         })
+         
+    # 2. Module Items
+    for mod in LOADED_MODULES:
+        manifest = mod["manifest"]
+        # Basic permission check could be added here
+        if "menu" in manifest:
+             menu.append({"header": manifest.get("name", mod["id"])})
+             for item in manifest["menu"]:
+                 menu.append({
+                     "label": item.get("label", "Unknown"),
+                     "url": item.get("link", "#"),
+                     "icon": item.get("icon", "circle")
+                 })
+                 
+    # 3. System (Admin)
+    if current_user.role == UserRole.ADMIN:
+        menu.append({"header": "System"})
+        menu.append({
+            "label": "Users",
+            "url": "users.php",
+            "icon": "users"
+        })
+        menu.append({
+            "label": "Settings",
+            "url": "settings.php",
+            "icon": "settings"
+        })
+        
+    return menu
+
 
 
 # --- SMTP Settings Endpoints ---
@@ -372,7 +471,7 @@ def get_system_settings():
         if not settings:
              # Return defaults if not set
             return {
-                "company_name": "VPN Manager",
+                "company_name": "MAdmin",
                 "primary_color": "#0054a6"
             }
         return settings
@@ -444,7 +543,7 @@ async def upload_logo(file: UploadFile = File(...), type: str = Form("logo")):
     with Session(engine) as session:
         settings = session.get(SystemSettings, 1)
         if not settings:
-            settings = SystemSettings(id=1, company_name="VPN Manager") # Init if missing
+            settings = SystemSettings(id=1, company_name="MAdmin") # Init if missing
             
         if type == "logo":
             settings.logo_url = relative_path

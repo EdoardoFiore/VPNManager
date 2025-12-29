@@ -9,3 +9,4 @@ bcrypt==3.2.2
 python-jose[cryptography]
 APScheduler
 paramiko
+psycopg2-binary

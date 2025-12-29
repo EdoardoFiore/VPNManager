@@ -5,7 +5,7 @@ require_once 'includes/i18n.php'; // Include i18n
 
 
 // Fetch Branding
-$brandName = 'VPN Manager';
+$brandName = 'MAdmin';
 $brandColor = '#0054a6';
 $brandLogo = '';
 

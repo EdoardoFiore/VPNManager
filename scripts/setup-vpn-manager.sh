@@ -100,10 +100,19 @@ fi
 # 3. Installazione Python e Venv
 log_info "Installazione Python e Venv..."
 # Aggiungiamo python3-full per garantire ensurepip e venv
-if ! apt-get install -y python3-pip python3-venv sqlite3 python3-full; then
+if ! apt-get install -y python3-pip python3-venv sqlite3 python3-full libpq-dev; then
      log_error "Errore nell'installazione di Python/Venv."
      exit 1
 fi
+
+# 4. Installazione Database (PostgreSQL)
+log_info "Installazione PostgreSQL..."
+if ! apt-get install -y postgresql postgresql-contrib; then
+    log_error "Errore nell'installazione di PostgreSQL."
+    exit 1
+fi
+systemctl enable postgresql
+systemctl start postgresql
 
 # Verifica modulo Kernel (opzionale su kernel recenti)
 modprobe wireguard
@@ -136,6 +145,8 @@ log_info "Fase 3/5: Deploy del Backend API..."
 
 mkdir -p /opt/vpn-manager/backend
 mkdir -p /opt/vpn-manager/backend/data
+mkdir -p /opt/vpn-manager/backend/core
+mkdir -p /opt/vpn-manager/backend/modules
 mkdir -p /opt/vpn-manager/scripts
 
 # Creazione Venv
@@ -159,9 +170,24 @@ log_info "Installazione requirements..."
 JWT_SECRET=$(openssl rand -hex 32)
 ENV_FILE="/opt/vpn-manager/backend/.env"
 # Rimuoviamo API_KEY non più necessaria con Auth JWT, ma manteniamo compatibilità se serve
+# Configurazione Database PostgreSQL
+log_info "Configurazione DB PostgreSQL..."
+DB_USER="madmin"
+DB_NAME="madmin_db"
+DB_PASS=$(openssl rand -hex 16)
+
+# Create user if not exists
+sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1 || sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
+# Update password ensures it matches our generated one if user exists
+sudo -u postgres psql -c "ALTER USER $DB_USER WITH PASSWORD '$DB_PASS';"
+
+# Create DB if not exists
+sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1 || sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
+
 echo "API_KEY=compatibility_mode_key" > "$ENV_FILE" 
 echo "SECRET_KEY=$JWT_SECRET" >> "$ENV_FILE"
 echo "WIREGUARD_CONFIG_DIR=/etc/wireguard" >> "$ENV_FILE"
+echo "DATABASE_URL=postgresql://$DB_USER:$DB_PASS@localhost/$DB_NAME" >> "$ENV_FILE"
 
 
 # Configurazione Servizio Backend
