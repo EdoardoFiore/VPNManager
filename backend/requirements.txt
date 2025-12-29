@@ -5,7 +5,8 @@ alembic
 psycopg2-binary
 python-multipart
 python-jose[cryptography]
-passlib[bcrypt]
+passlib[argon2]
+argon2-cffi
 httpx
 jinja2
 netifaces

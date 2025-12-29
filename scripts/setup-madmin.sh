@@ -4,14 +4,38 @@ set -e
 # MADmin - Modular Admin Interface Setup Script
 # Installs Python dependencies and sets up the Systemd service.
 
-APP_DIR="/opt/vpn-manager"
+APP_DIR="/opt/madmin"
 BACKEND_DIR="$APP_DIR/backend"
 VENV_DIR="$APP_DIR/venv"
+
+# Detect directory of this script (assuming it's in scripts/)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+
+echo "[*] Detected Repo Root at: $REPO_ROOT"
+echo "[*] Installing to: $APP_DIR"
+
+# 0. Copy Files to Install Dir
+# We use cp -r to copy the repo content to /opt/madmin
+# ensuring we have the latest files there.
+if [ "$REPO_ROOT" != "$APP_DIR" ]; then
+    echo "[*] Copying files to $APP_DIR..."
+    mkdir -p "$APP_DIR"
+    # Copy backend, frontend (if exists), generic files
+    # Avoiding copying venv or .git to keep it clean if possible, but simple cp -R is safer for now
+    cp -R "$REPO_ROOT/backend" "$APP_DIR/"
+    cp -R "$REPO_ROOT/scripts" "$APP_DIR/" 2>/dev/null || true
+    # If frontend exists in future
+    if [ -d "$REPO_ROOT/frontend" ]; then
+        cp -R "$REPO_ROOT/frontend" "$APP_DIR/"
+    fi
+fi
 
 # 1. System Dependencies
 echo "[*] Installing System Dependencies..."
 apt-get update
-apt-get install -y python3 python3-pip python3-venv postgresql libpq-dev iptables curl git
+# Ensure basic tools
+apt-get install -y python3 python3-pip python3-venv postgresql libpq-dev iptables curl git build-essential libffi-dev
 
 # 2. Virtual Environment
 echo "[*] Setting up Python Environment..."
@@ -21,6 +45,7 @@ fi
 
 source "$VENV_DIR/bin/activate"
 pip install --upgrade pip
+
 pip install -r "$BACKEND_DIR/requirements.txt"
 
 # 3. Directory Permissions
