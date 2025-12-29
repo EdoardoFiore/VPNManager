@@ -60,8 +60,30 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/api/core/auth", tags=["Core Auth"])
 app.include_router(firewall_router, prefix="/api/core/firewall", tags=["Core Firewall"])
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+
 app.include_router(modules_router, prefix="/api/core/modules", tags=["Core Modules"])
 
+# Serve Frontend
+# 1. Assets (CSS, JS, Images)
+# Ensure frontend directory is relative to execution context or absolute
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+ASSETS_DIR = os.path.join(FRONTEND_DIR, "assets")
+
+if os.path.exists(ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+
+# 2. HTML Pages (Root and others)
 @app.get("/")
-def read_root():
-    return {"status": "online", "system": "MADmin Kernel"}
+async def read_index():
+    return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
+
+@app.get("/{filename}.html")
+async def read_html(filename: str):
+    path = os.path.join(FRONTEND_DIR, f"{filename}.html")
+    if os.path.exists(path):
+        return FileResponse(path)
+    return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
+

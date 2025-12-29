@@ -46,28 +46,50 @@ fi
 source "$VENV_DIR/bin/activate"
 pip install --upgrade pip
 
+# CRITICAL: Uninstall bcrypt to avoid passlib conflict (ModuleNotFoundError: No module named 'bcrypt.__about__')
+# pip uninstall -y bcrypt # Removed as requested to be non-destructive, but keep in mind if issues persist
+
 pip install -r "$BACKEND_DIR/requirements.txt"
 
-# 3. Directory Permissions
+# 3. Database Setup (PostgreSQL)
+echo "[*] Configuring PostgreSQL..."
+# Create User and DB if they don't exist
+# We use sudo -u postgres to run psql commands
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='madmin'" | grep -q 1; then
+    echo "Creating 'madmin' database user..."
+    sudo -u postgres psql -c "CREATE USER madmin WITH PASSWORD 'madmin';"
+else
+    echo "User 'madmin' already exists."
+fi
+
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='madmin'" | grep -q 1; then
+    echo "Creating 'madmin' database..."
+    sudo -u postgres psql -c "CREATE DATABASE madmin OWNER madmin;"
+else
+    echo "Database 'madmin' already exists."
+fi
+
+# 4. Directory Permissions
 echo "[*] Setting Permissions..."
 mkdir -p "$BACKEND_DIR/data"
 mkdir -p "$BACKEND_DIR/modules"
 mkdir -p "$BACKEND_DIR/staging"
 
-# 4. Systemd Service
+# 5. Systemd Service
 echo "[*] Configuring Systemd Service..."
 SERVICE_FILE="/etc/systemd/system/madmin.service"
 
 cat <<EOF > "$SERVICE_FILE"
 [Unit]
 Description=MADmin Modular Admin Interface
-After=network.target
+After=network.target postgresql.service
 
 [Service]
 User=root
 WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONPATH=$APP_DIR"
+Environment="DATABASE_URL=postgresql://madmin:madmin@localhost/madmin"
 ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
 Restart=always
 

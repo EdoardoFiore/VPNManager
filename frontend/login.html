@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+    <meta http-equiv="X-UA-Compatible" content="ie=edge"/>
+    <title>MADmin - Login</title>
+    <!-- CSS files -->
+    <link href="./assets/css/tabler.min.css" rel="stylesheet"/>
+    <link href="./assets/css/tabler-flags.min.css" rel="stylesheet"/>
+    <link href="./assets/css/tabler-payments.min.css" rel="stylesheet"/>
+    <link href="./assets/css/tabler-vendors.min.css" rel="stylesheet"/>
+    <link href="./assets/css/demo.min.css" rel="stylesheet"/>
+    <style>
+      @import url('https://rsms.me/inter/inter.css');
+      :root {
+      	--tblr-font-sans-serif: 'Inter Var', -apple-system, BlinkMacSystemFont, San Francisco, Segoe UI, Roboto, Helvetica Neue, sans-serif;
+      }
+      body {
+      	font-feature-settings: "cv03", "cv04", "cv11";
+      }
+    </style>
+  </head>
+  <body  class=" d-flex flex-column">
+    <div class="page page-center">
+      <div class="container container-tight py-4">
+        <div class="text-center mb-4">
+          <a href="." class="navbar-brand navbar-brand-autodark"><img src="./assets/static/logo.svg" height="36" alt=""></a>
+        </div>
+        <div class="card card-md">
+          <div class="card-body">
+            <h2 class="h2 text-center mb-4">Login to your account</h2>
+            <form id="login-form" action="./" method="get" autocomplete="off" novalidate>
+              <div class="mb-3">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" id="username" class="form-control" placeholder="admin" autocomplete="off">
+              </div>
+              <div class="mb-2">
+                <label class="form-label">
+                  Password
+                </label>
+                <div class="input-group input-group-flat">
+                  <input type="password" name="password" id="password" class="form-control"  placeholder="Your password"  autocomplete="off">
+                </div>
+              </div>
+              <div class="form-footer">
+                <button type="submit" class="btn btn-primary w-100">Sign in</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Libs JS -->
+    <!-- Tabler Core -->
+    <script src="./assets/js/tabler.min.js" defer></script>
+    <script src="./assets/js/demo.min.js" defer></script>
+    
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const params = new URLSearchParams();
+            params.append('username', formData.get('username'));
+            params.append('password', formData.get('password'));
+
+            try {
+                // TODO: Update URL to point to backend port (8000) or use relative if proxied
+                const response = await fetch('http://localhost:8000/api/core/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: params
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('madmin_token', data.access_token);
+                    window.location.href = 'index.html';
+                } else {
+                    alert('Login failed');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Connection error');
+            }
+        });
+    </script>
+  </body>
+</html>

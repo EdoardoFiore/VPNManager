@@ -10,3 +10,4 @@ argon2-cffi
 httpx
 jinja2
 netifaces
+aiofiles

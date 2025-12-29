@@ -1,11 +1,11 @@
+from typing import Callable, List
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlmodel import Session, select
-from typing import Optional
 
 from backend.core.database import get_session
-from backend.core.auth.models import User
+from backend.core.auth.models import User, Permission, UserPermissionLink
 from backend.core.auth.utils import SECRET_KEY, ALGORITHM
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/core/auth/login")
@@ -41,3 +41,25 @@ def get_current_superuser(current_user: User = Depends(get_current_active_user))
             status_code=status.HTTP_403_FORBIDDEN, detail="The user doesn't have enough privileges"
         )
     return current_user
+
+class PermissionChecker:
+    def __init__(self, required_permission: str):
+        self.required_permission = required_permission
+
+    def __call__(self, user: User = Depends(get_current_active_user)) -> User:
+        if user.is_superuser:
+            return user
+        
+        # Check permissions list
+        # Lazy loading of permissions might require refresh if not joined eagerly, 
+        # but SQLModel Relationship should handle it if attached to session.
+        # We assume user is attached to session from get_current_user.
+        
+        for p in user.permissions:
+            if p.slug == self.required_permission:
+                return user
+                
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Operation not permitted. Required: {self.required_permission}"
+        )
