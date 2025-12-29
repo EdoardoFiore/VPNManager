@@ -5,7 +5,7 @@ Wants=network-pre.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/vpn-manager/scripts/restore-iptables.sh
+ExecStart=/opt/vpn-manager/backend/core/scripts/restore-iptables.sh
 RemainAfterExit=yes
 
 [Install]

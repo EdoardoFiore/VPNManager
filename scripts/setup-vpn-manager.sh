@@ -158,7 +158,11 @@ fi
 # Copia file
 log_info "Copia file backend..."
 cp -r ../backend/* /opt/vpn-manager/backend/
-cp -r ../scripts/* /opt/vpn-manager/scripts/
+# scripts are already inside backend/core/scripts now, no need to copy ../scripts separately if it's empty or redundant.
+# However, for safety if source still has them:
+# cp -r ../scripts/* /opt/vpn-manager/scripts/ -> This is wrong now.
+# We ensure the structure on target matches source.
+
 
 # Installazione dipendenze Python
 log_info "Installazione requirements..."
@@ -200,9 +204,10 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/vpn-manager/backend
+# Running from root to allow 'backend' package imports
+WorkingDirectory=/opt/vpn-manager
 Environment="PATH=/opt/vpn-manager-env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/opt/vpn-manager-env/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=/opt/vpn-manager-env/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 
@@ -211,10 +216,10 @@ WantedBy=multi-user.target
 EOF
 
 # Configurazione Persistenza IPTables
-chmod +x /opt/vpn-manager/scripts/save-iptables.sh
-chmod +x /opt/vpn-manager/scripts/restore-iptables.sh
-cp /opt/vpn-manager/scripts/iptables-vpn.service /etc/systemd/system/
-# Fix content of service file to point to correct scripts if needed (scripts names match)
+chmod +x /opt/vpn-manager/backend/core/scripts/save-iptables.sh
+chmod +x /opt/vpn-manager/backend/core/scripts/restore-iptables.sh
+# Fix service file path in copy source if needed, assuming it's in core/scripts now
+cp /opt/vpn-manager/backend/core/scripts/iptables-vpn.service /etc/systemd/system/
 
 systemctl daemon-reload
 systemctl enable iptables-vpn.service
