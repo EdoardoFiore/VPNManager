@@ -8,19 +8,19 @@ from backend.core.firewall.models import FirewallRule, FirewallAction
 
 logger = logging.getLogger("madmin.core.firewall")
 
-MADMIN_INPUT = "MADMIN_INPUT"
-MADMIN_OUTPUT = "MADMIN_OUTPUT"
-MADMIN_FORWARD = "MADMIN_FORWARD"
+MADMIN_INPUT = "FW_INPUT"
+MADMIN_OUTPUT = "FW_OUTPUT"
+MADMIN_FORWARD = "FW_FORWARD"
 
 class FirewallManager:
     def __init__(self):
         pass
 
     def initialize_chains(self):
-        """Ensures MADMIN chains exist and are hooked."""
+        """Ensures FW chains exist and are hooked."""
         logger.info("Initializing Firewall Chains...")
         
-        # 1. Create Chains
+        # 1. Create Chains (idempotent-ish via suppress_errors)
         self._create_chain(MADMIN_INPUT, "filter")
         self._create_chain(MADMIN_OUTPUT, "filter")
         self._create_chain(MADMIN_FORWARD, "filter")
@@ -30,23 +30,17 @@ class FirewallManager:
         self._ensure_jump("OUTPUT", MADMIN_OUTPUT)
         self._ensure_jump("FORWARD", MADMIN_FORWARD)
         
-        # 3. Apply Base Rules (Est/Related, Lo)
-        # TODO: Make this configurable? For now hardcoded sane defaults
-        self._apply_base_rules()
-        
-        # 4. Apply DB Rules
-        self.apply_rules()
-
     def apply_rules(self):
         """Re-applies all rules from DB."""
-        # Flush custom chains (but not delete)
+        # Ensure chains exist first
+        self.initialize_chains()
+        
+        # Flush chains
         self._flush_chain(MADMIN_INPUT)
         self._flush_chain(MADMIN_OUTPUT)
         self._flush_chain(MADMIN_FORWARD)
         
         self._apply_base_rules()
-        
-        # TODO: Apply Module Hooks here (interleaved or before)
         
         with Session(engine) as session:
             rules = session.exec(select(FirewallRule).where(FirewallRule.enabled == True).order_by(FirewallRule.priority)).all()
@@ -61,15 +55,35 @@ class FirewallManager:
         if chain == "FORWARD": chain = MADMIN_FORWARD
         
         cmd = ["/usr/sbin/iptables", "-A", chain]
-        cmd.extend(["-p", rule.protocol])
+        
+        # Protocol
+        if rule.protocol and rule.protocol != "all":
+            cmd.extend(["-p", rule.protocol])
+
+        # Source/Dest
         if rule.source: cmd.extend(["-s", rule.source])
         if rule.destination: cmd.extend(["-d", rule.destination])
-        if rule.port and rule.protocol in ["tcp", "udp"]: cmd.extend(["--dport", rule.port])
         
-        cmd.extend(["-j", rule.action.value])
+        # Port
+        if rule.port and rule.protocol in ["tcp", "udp"]:
+             cmd.extend(["--dport", str(rule.port)])
         
+        # Interfaces
+        if rule.in_interface: cmd.extend(["-i", rule.in_interface])
+        if rule.out_interface: cmd.extend(["-o", rule.out_interface])
+        
+        # State
+        if rule.state:
+            cmd.extend(["-m", "state", "--state", rule.state])
+        
+        # Action
+        cmd.extend(["-j", rule.action.value]) # Enum value
+        
+        # Comment
         if rule.description:
-            cmd.extend(["-m", "comment", "--comment", rule.description[:255]])
+            # Sanitize comment
+            safe_comment = "".join([c for c in rule.description if c.isalnum() or c in " -_"])[:50]
+            cmd.extend(["-m", "comment", "--comment", safe_comment])
             
         run_command(cmd)
 

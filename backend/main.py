@@ -7,6 +7,7 @@ from backend.core.database import init_db, engine, get_session
 from backend.core.auth.router import router as auth_router
 from backend.core.firewall.router import router as firewall_router
 from backend.core.module_manager.router import router as modules_router
+from backend.core.ui_router import router as ui_router_obj
 from backend.core.module_manager.loader import loader
 # Import models
 import backend.core.firewall.models 
@@ -65,6 +66,7 @@ from fastapi.responses import FileResponse
 import os
 
 app.include_router(modules_router, prefix="/api/core/modules", tags=["Core Modules"])
+app.include_router(ui_router_obj, prefix="/api/core", tags=["Core UI"])
 
 # Serve Frontend
 # 1. Assets (CSS, JS, Images)

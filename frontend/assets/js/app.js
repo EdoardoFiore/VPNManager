@@ -1,4 +1,5 @@
-const API_BASE = 'http://132.145.54.55:8000/api'; // Update IP or use relative path in prod
+// Use relative path for API, assuming served by Nginx or same origin
+const API_BASE = '/api';
 
 // Auth Check
 function requireAuth() {
@@ -162,16 +163,85 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(user => {
                 document.getElementById('user-display-name').innerText = user.username;
+                loadMenu(); // Load Sidebar
                 loadPage('dashboard');
             })
             .catch(e => {
-                localStorage.removeItem('madmin_token');
-                window.location.href = 'login.html';
+                console.error(e);
+                // localStorage.removeItem('madmin_token');
+                // window.location.href = 'login.html';
             });
     }
 });
+
+async function loadMenu() {
+    const container = document.getElementById('dynamic-menu-container');
+
+    try {
+        const res = await fetch(`${API_BASE}/core/menu`, { headers: getHeaders() });
+        if (!res.ok) throw new Error(res.statusText);
+
+        const menu = await res.json();
+        const currentPath = window.location.hash.replace('#', '') || 'dashboard'; // Use hash routing logic if applicable or state
+
+        container.innerHTML = '';
+
+        menu.forEach(item => {
+            if (item.header) {
+                container.innerHTML += `
+                     <li class="nav-item text-uppercase text-muted fw-bold fs-5 ps-3 mt-3 mb-1" style="font-size: 0.7rem; letter-spacing: .05em;">
+                        ${item.header}
+                    </li>`;
+            } else {
+                // Determine active state logic (simplified)
+                // In a real SPA, we track 'currentPage' global
+                // For now, we rely on onClick updating specific classes if we wanted, 
+                // but re-rendering on page load is enough.
+                const isActive = false;
+
+                container.innerHTML += `
+                    <li class="nav-item ${isActive ? 'active' : ''}">
+                        <a class="nav-link" href="#" onclick="loadPage('${item.url}'); return false;">
+                            <span class="nav-link-icon d-md-none d-lg-inline-block">
+                                <i class="ti ti-${item.icon}"></i>
+                            </span>
+                            <span class="nav-link-title">
+                                ${item.label}
+                            </span>
+                        </a>
+                    </li>`;
+            }
+        });
+
+    } catch (e) {
+        console.error("Menu load error", e);
+        container.innerHTML = `
+            <li class="nav-item">
+                <a class="nav-link text-danger" href="#">
+                    <span class="nav-link-icon"><i class="ti ti-alert-triangle"></i></span>
+                    <span class="nav-link-title">Menu Error (Is Backend Running?)</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                 <a class="nav-link" href="#" onclick="loadMenu(); return false;">
+                    <span class="nav-link-icon"><i class="ti ti-refresh"></i></span>
+                    <span class="nav-link-title">Retry</span>
+                </a>
+            </li>
+        `;
+    }
+}
 
 document.getElementById('logout-btn').addEventListener('click', () => {
     localStorage.removeItem('madmin_token');
     window.location.href = 'login.html';
 });
+
+// Mobile Logout
+const mobileLogout = document.getElementById('mobile-logout-btn');
+if (mobileLogout) {
+    mobileLogout.addEventListener('click', () => {
+        localStorage.removeItem('madmin_token');
+        window.location.href = 'login.html';
+    });
+}

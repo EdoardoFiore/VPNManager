@@ -303,6 +303,7 @@ async function submitAddRule() {
     formData.forEach((value, key) => data[key] = value);
 
     // Cleanup defaults
+    if (!data.id) delete data.id;
     if (data.protocol === 'all') delete data.protocol;
     if (!data.port) delete data.port;
     if (!data.source) delete data.source;
