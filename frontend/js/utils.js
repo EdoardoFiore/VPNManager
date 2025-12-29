@@ -41,8 +41,8 @@ function showNotification(type, message) {
     alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
     alertDiv.role = 'alert';
 
-    // Make alerts stand out more with white background and border
-    alertDiv.style.backgroundColor = '#fff';
+    // Make alerts stand out more - use shadow, but rely on CSS for colors
+    // alertDiv.style.backgroundColor = '#fff'; // REMOVED for Dark Mode compatibility
     alertDiv.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
 
     alertDiv.innerHTML = `
@@ -103,3 +103,33 @@ function __(key) {
     return key;
 }
 
+
+// Theme Management
+function toggleTheme() {
+    const currentTheme = document.body.getAttribute('data-bs-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.body.setAttribute('data-bs-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeIcon(newTheme);
+}
+
+function updateThemeIcon(theme) {
+    const iconEl = document.getElementById('theme-icon');
+    if (iconEl) {
+        if (theme === 'dark') {
+            // Show Sun icon (to switch to light) or Moon (indicating current)? 
+            // Tabler usually toggles. Let's show the Icon representing the *current* state 
+            // OR the icon representing the *action*.
+            // Let's go with: Moon = Dark Mode Active. Sun = Light Mode Active.
+            iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>';
+        } else {
+            iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="4" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></svg>';
+        }
+    }
+}
+
+// Initialize icon on load
+document.addEventListener('DOMContentLoaded', function () {
+    const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    updateThemeIcon(savedTheme);
+});

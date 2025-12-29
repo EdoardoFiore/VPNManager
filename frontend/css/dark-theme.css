@@ -1,0 +1,115 @@
+/* --- Dark Theme Overrides (Premium Slate) --- */
+[data-bs-theme="dark"] {
+    --tblr-body-bg: #0f172a;           /* Slate 900 */
+    --tblr-bg-surface: #1e293b;        /* Slate 800 */
+    --tblr-card-bg: #1e293b;           /* Slate 800 */
+    --tblr-border-color: #334155;      /* Slate 700 */
+    --tblr-border-color-translucent: rgba(51, 65, 85, 0.5);
+    --tblr-body-color: #cbd5e1;        /* Slate 300 */
+    --tblr-muted: #94a3b8;             /* Slate 400 */
+    --tblr-heading-color: #f1f5f9;     /* Slate 100 */
+    --tblr-link-color: #38bdf8;        /* Sky 400 */
+    --tblr-link-hover-color: #7dd3fc;  /* Sky 300 */
+}
+
+[data-bs-theme="dark"] .navbar {
+    background-color: #1e293b !important;
+    border-bottom: 1px solid #334155;
+}
+
+[data-bs-theme="dark"] .card,
+[data-bs-theme="dark"] .modal-content,
+[data-bs-theme="dark"] .dropdown-menu {
+    background-color: var(--tblr-bg-surface);
+    border-color: var(--tblr-border-color);
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: #0f172a;
+    border-color: #334155;
+    color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] .table thead th {
+    background-color: #1e293b; /* Match surface */
+    color: #f1f5f9; /* Slate 100 */
+}
+
+[data-bs-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+    --tblr-table-accent-bg: rgba(51, 65, 85, 0.3); /* Transparent Slate 700 */
+    color: inherit;
+}
+
+[data-bs-theme="dark"] code {
+    background-color: #334155; /* Slate 700 */
+    color: #f1f5f9; /* Slate 100 */
+}
+
+[data-bs-theme="dark"] .modal-header {
+    background-color: #1e293b; /* Surface */
+    border-bottom: 1px solid #334155;
+    color: #f1f5f9;
+}
+
+/* Fix Nav Tabs Background (Card Header) - Target specific structure */
+[data-bs-theme="dark"] .card-header,
+[data-bs-theme="dark"] .card-header-tabs {
+    background-color: #1e293b !important;
+    border-bottom: 1px solid #334155;
+    color: #f1f5f9;
+}
+
+/* Nav Tabs Item Fix */
+[data-bs-theme="dark"] .nav-tabs .nav-link {
+    color: #94a3b8; /* Muted */
+    border-color: transparent;
+}
+[data-bs-theme="dark"] .nav-tabs .nav-link:hover {
+    color: #f1f5f9;
+    border-color: #334155;
+    background-color: #334155;
+}
+[data-bs-theme="dark"] .nav-tabs .nav-link.active {
+    color: #f1f5f9;
+    background-color: #1e293b !important;
+    border-color: #334155 #334155 #1e293b;
+}
+
+/* Fix Table Backgrounds (Base Reset) */
+[data-bs-theme="dark"] .table,
+[data-bs-theme="dark"] .table tbody,
+[data-bs-theme="dark"] .table td,
+[data-bs-theme="dark"] .table th {
+    background-color: #1e293b; /* Base Card Color */
+    color: inherit;
+    border-color: #334155;
+}
+
+/* Force Striped Rows Styling - Even/Odd Explicit */
+[data-bs-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: #283445 !important; /* Visible dark stripe */
+    box-shadow: none !important;
+}
+[data-bs-theme="dark"] .table-striped > tbody > tr:nth-of-type(even) > * {
+    background-color: #1e293b !important; /* Base Card Color */
+    box-shadow: none !important;
+}
+
+/* Fix Pre/Code Blocks - Distinct from Inputs */
+[data-bs-theme="dark"] pre, 
+[data-bs-theme="dark"] code {
+    background-color: #020617 !important; /* Very Dark Slate (Terminal style) */
+    color: #f8fafc !important;
+    border: 1px solid #334155;
+}
+
+/* Fix Alerts/Notifications */
+[data-bs-theme="dark"] .alert {
+    background-color: #1e293b;
+    border-color: #334155;
+    color: #f1f5f9;
+}
+[data-bs-theme="dark"] .alert .text-secondary {
+    color: #cbd5e1 !important;
+}
