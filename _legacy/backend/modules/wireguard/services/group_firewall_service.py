@@ -5,7 +5,8 @@ from sqlmodel import Session, select
 import uuid
 
 from backend.core.database import engine
-from backend.modules.wireguard.models import Group, FirewallRule, Client, Instance, GroupRead, GroupMember
+from backend.modules.wireguard.models import Group, Client, Instance, GroupRead, GroupMember
+from backend.modules.firewall.models import FirewallRule
 from . import iptables_service as iptables_manager
 from . import instance_service as instance_manager
 from . import ip_service as ip_manager
@@ -43,19 +44,15 @@ def delete_group(group_id: str):
     with Session(engine) as session:
         group = session.get(Group, group_id)
         if group:
-            session.delete(group) # Cascades should handle rules/members if configured, or manual delete
-            # SQLModel relationships don't auto-cascade delete in DB unless defined in SA args.
-            # Manually clean for safety.
-            session.exec(select(GroupMember).where(GroupMember.group_id == group_id)).delete() # This might need delete() method
-            # ... actually session.delete(obj) is cleaner.
-            # Let's trust cascade or do manual query.
-            # For simplicity:
-            # Delete members links
+            # Delete members links explicitly
             members = session.exec(select(GroupMember).where(GroupMember.group_id == group_id)).all()
-            for m in members: session.delete(m)
-            # Delete rules
+            for m in members: 
+                session.delete(m)
+            
+            # Delete rules explicitly
             rules = session.exec(select(FirewallRule).where(FirewallRule.group_id == group_id)).all()
-            for r in rules: session.delete(r)
+            for r in rules: 
+                session.delete(r)
             
             session.delete(group)
             session.commit()

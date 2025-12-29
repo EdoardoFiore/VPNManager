@@ -170,7 +170,7 @@ def apply_all_vpn_rules(): # Renamed from apply_all_openvpn_rules
         
     # 4. Trigger Firewall Manager for Forwarding rules
     try:
-        import firewall_manager
+        from backend.modules.wireguard.services import group_firewall_service as firewall_manager
         firewall_manager.apply_firewall_rules()
     except Exception as e:
         logger.error(f"Failed to trigger firewall_manager.apply_firewall_rules: {e}")
@@ -251,14 +251,19 @@ def flush_all_vpn_chains():
                         if is_target_prefix and chain_name not in main_chains:
                             chains_to_delete.append(chain_name)
 
+            if chains_to_delete:
+                logger.info(f"Identified {len(chains_to_delete)} chains to delete: {chains_to_delete}")
+
             # 3. Flush the chains before deleting
             for chain in chains_to_delete:
                  _run_iptables(table, ["-F", chain], suppress_errors=True)
                  
             # 4. Delete the chains
             for chain in chains_to_delete:
-                 _run_iptables(table, ["-X", chain], suppress_errors=True)
-                 
+                 res, err = _run_iptables(table, ["-X", chain], suppress_errors=True)
+                 if not res:
+                     logger.warning(f"Failed to delete chain {chain}: {err}")
+
             if chains_to_delete:
                 logger.info(f"Deleted {len(chains_to_delete)} stale VPN chains from table '{table}'.")
 

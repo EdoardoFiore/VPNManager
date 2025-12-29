@@ -668,6 +668,26 @@ require_once 'includes/header.php';
 <script>
     const currentUserRole = '<?= $currentRole ?>';
 </script>
+<!-- Modal Delete Group Confirm -->
+<div class="modal modal-blur fade" id="modal-delete-group-confirm" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><?= __('confirm_delete_group_title') ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><?= __('confirm_delete_group_msg') ?></p>
+                <div id="delete-group-summary" class="mb-3"></div>
+                <p class="text-muted"><?= __('action_cannot_be_undone') ?></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn me-auto" data-bs-dismiss="modal"><?= __('cancel') ?></button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-group-button" data-bs-dismiss="modal"><?= __('yes_delete') ?></button>
+            </div>
+        </div>
+    </div>
+</div>
 <?php
 $extra_scripts = ['js/qrcode.min.js', 'js/instance.js', 'js/firewall.js'];
 require_once 'includes/footer.php';

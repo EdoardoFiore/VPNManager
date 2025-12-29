@@ -118,9 +118,28 @@ async function createGroup() {
     }
 }
 
-async function deleteCurrentGroup() {
+function deleteCurrentGroup() {
     if (!currentGroupId) return;
-    if (!confirm(__("group_delete_confirm"))) return;
+
+    // Find group name for display
+    const group = allGroups.find(g => g.id === currentGroupId);
+    const groupName = group ? group.name : 'Unknown';
+
+    document.getElementById('delete-group-summary').innerHTML = `
+        <div class="alert alert-warning">
+            ${__('group_name')}: <strong>${groupName}</strong>
+        </div>
+    `;
+
+    // Bind confirm button
+    const btn = document.getElementById('confirm-delete-group-button');
+    btn.onclick = () => performDeleteGroup();
+
+    new bootstrap.Modal(document.getElementById('modal-delete-group-confirm')).show();
+}
+
+async function performDeleteGroup() {
+    if (!currentGroupId) return;
 
     const response = await fetch(`${API_AJAX_HANDLER}`, {
         method: 'POST',
@@ -132,12 +151,13 @@ async function deleteCurrentGroup() {
 
     const result = await response.json();
     if (result.success) {
+        showNotification('success', __('group_deleted_success') || 'Group deleted successfully');
         currentGroupId = null;
         document.getElementById('group-details-container').style.display = 'none';
         document.getElementById('no-group-selected').style.display = 'block';
         loadGroups();
     } else {
-        alert(__("error") + ": " + result.body.detail);
+        showNotification('danger', __("error") + ": " + result.body.detail);
     }
 }
 
