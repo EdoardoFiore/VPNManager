@@ -129,7 +129,7 @@ AllowedIPs = {allowed_ips}
             )
             subprocess.run(
                 ['wg', 'syncconf', interface, '/dev/stdin'],
-                input=stripped.stdout, check=True, capture_output=True
+                input=stripped.stdout, check=True, capture_output=True, text=True
             )
             return True
         except subprocess.CalledProcessError:
@@ -192,7 +192,7 @@ PersistentKeepalive = 25
         try:
             result = subprocess.run(
                 ['qrencode', '-t', 'PNG', '-o', '-'],
-                input=config, capture_output=True, text=False, check=True
+                input=config.encode('utf-8'), capture_output=True, text=False, check=True
             )
             return result.stdout
         except FileNotFoundError:

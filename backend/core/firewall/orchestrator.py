@@ -71,31 +71,35 @@ class FirewallOrchestrator:
         result = await session.execute(
             select(ModuleChain).where(ModuleChain.chain_name == chain_name)
         )
-        if result.scalar_one_or_none():
-            logger.warning(f"Chain {chain_name} already registered")
-            return None
+        existing = result.scalar_one_or_none()
         
-        # Create chain in iptables
-        if not iptables.create_or_flush_chain(chain_name, table_name):
-            logger.error(f"Failed to create iptables chain {chain_name}")
-            return None
+        if existing:
+            # Chain exists, but we should ensure jump rules are present (e.g. after restart)
+            # Just skip the DB creation part
+            pass
+        else:
+            # Create chain in iptables
+            if not iptables.create_or_flush_chain(chain_name, table_name):
+                logger.error(f"Failed to create iptables chain {chain_name}")
+                return None
+            
+            # Register in database
+            chain = ModuleChain(
+                module_id=module_id,
+                chain_name=chain_name,
+                parent_chain=parent_chain,
+                priority=priority,
+                table_name=table_name
+            )
+            session.add(chain)
+            await session.flush()
         
-        # Register in database
-        chain = ModuleChain(
-            module_id=module_id,
-            chain_name=chain_name,
-            parent_chain=parent_chain,
-            priority=priority,
-            table_name=table_name
-        )
-        session.add(chain)
-        await session.flush()
-        
-        # Rebuild jump rules
+        # Rebuild jump rules (ALWAYS, to ensure integration)
         await self.rebuild_chain_jumps(session, parent_chain, table_name)
         
-        logger.info(f"Registered module chain {chain_name} for module {module_id}")
-        return chain
+        if not existing:
+            logger.info(f"Registered module chain {chain_name} for module {module_id}")
+        return existing or chain
     
     async def unregister_module_chain(
         self,

@@ -265,7 +265,7 @@ async function renderInstanceDetail(container) {
             <!-- Instance Info Card -->
             <div class="card mb-3">
                 <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex justify-content-between align-items-center w-100">
                         <div>
                             <h3 class="card-title mb-0">${instance.name}</h3>
                             <small class="text-muted">Interfaccia: ${instance.interface}</small>
@@ -326,7 +326,7 @@ async function renderInstanceDetail(container) {
             <!-- Clients Card -->
             <div class="card">
                 <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex justify-content-between align-items-center w-100">
                         <h3 class="card-title"><i class="ti ti-users me-2"></i>Client VPN (${clients.length})</h3>
                         <button class="btn btn-primary" id="btn-new-client">
                             <i class="ti ti-user-plus me-1"></i>Nuovo Client
@@ -436,33 +436,68 @@ window.deleteInstance = async (id) => {
     }
 };
 
-window.downloadConfig = (name) => {
-    window.open(`/api/modules/wireguard/instances/${currentInstanceId}/clients/${name}/config`, '_blank');
+window.downloadConfig = async (name) => {
+    try {
+        const token = localStorage.getItem('madmin_token');
+        const res = await fetch(`/api/modules/wireguard/instances/${currentInstanceId}/clients/${name}/config`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) throw new Error('Download fallito: ' + res.statusText);
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${name}.conf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
 };
 
-window.showQR = (name) => {
-    const modal = document.createElement('div');
-    modal.innerHTML = `
-        <div class="modal fade" tabindex="-1">
-            <div class="modal-dialog modal-sm">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">QR Code - ${name}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body text-center p-4">
-                        <img src="/api/modules/wireguard/instances/${currentInstanceId}/clients/${name}/qr" 
-                             class="img-fluid" alt="QR Code">
-                        <p class="mt-3 mb-0 text-muted small">Scansiona con l'app WireGuard</p>
+window.showQR = async (name) => {
+    try {
+        const token = localStorage.getItem('madmin_token');
+        const res = await fetch(`/api/modules/wireguard/instances/${currentInstanceId}/clients/${name}/qr`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) throw new Error('Caricamento QR fallito: ' + res.statusText);
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        const modal = document.createElement('div');
+        modal.innerHTML = `
+            <div class="modal fade" tabindex="-1">
+                <div class="modal-dialog modal-sm">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">QR Code - ${name}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body text-center p-4">
+                            <img src="${url}" class="img-fluid" alt="QR Code">
+                            <p class="mt-3 mb-0 text-muted small">Scansiona con l'app WireGuard</p>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-    const bsModal = new bootstrap.Modal(modal.querySelector('.modal'));
-    bsModal.show();
-    modal.querySelector('.modal').addEventListener('hidden.bs.modal', () => modal.remove());
+        `;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal.querySelector('.modal'));
+        bsModal.show();
+        modal.querySelector('.modal').addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+            window.URL.revokeObjectURL(url);
+        });
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
 };
 
 window.revokeClient = async (name) => {
