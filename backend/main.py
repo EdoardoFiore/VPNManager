@@ -160,7 +160,8 @@ def create_app() -> FastAPI:
         app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
     
     if os.path.exists(frontend_dir):
-        app.mount("/static", StaticFiles(directory=os.path.join(frontend_dir, "assets")), name="static")
+        # Note: Static assets (/static/*) are served directly by Nginx
+        # Module static files are mounted at /static/modules/{module_id} by module_loader
         
         @app.get("/")
         async def serve_index():
