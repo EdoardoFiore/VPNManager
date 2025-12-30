@@ -160,6 +160,14 @@ server {
         add_header Cache-Control "public, immutable";
     }
     
+    # Uploaded files (logos, favicons, etc.)
+    location /uploads {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+    
     # API reverse proxy
     location /api {
         proxy_pass http://127.0.0.1:8000;
@@ -181,6 +189,11 @@ server {
     }
 }
 EOF
+
+# Create uploads directory
+mkdir -p $INSTALL_DIR/uploads
+chown -R www-data:www-data $INSTALL_DIR/uploads
+chmod 755 $INSTALL_DIR/uploads
 
 # Abilita sito
 rm -f /etc/nginx/sites-enabled/default

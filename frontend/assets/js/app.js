@@ -105,11 +105,14 @@ async function loadSystemSettings() {
             document.head.appendChild(style);
         }
 
-        // Apply logo if set - replace icon with image
+        // Apply logo if set - show img and hide default icon
         if (settings.logo_url) {
-            const navbarBrand = document.querySelector('.navbar-brand a');
-            if (navbarBrand) {
-                navbarBrand.innerHTML = `<img src="${settings.logo_url}" alt="Logo" style="max-height: 32px;">`;
+            const logoImg = document.getElementById('navbar-logo-img');
+            const logoDefault = document.getElementById('navbar-logo-default');
+            if (logoImg && logoDefault) {
+                logoImg.src = settings.logo_url;
+                logoImg.classList.remove('d-none');
+                logoDefault.classList.add('d-none');
             }
         }
 

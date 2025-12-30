@@ -42,10 +42,13 @@ export async function render(container) {
                             <div class="col-md-6">
                                 <label class="form-label">Logo</label>
                                 <div class="d-flex align-items-center gap-3">
-                                    <div id="logo-preview" class="border rounded p-2 d-flex align-items-center justify-content-center bg-dark text-primary"
+                                    <div id="logo-preview-container" class="border rounded p-2 d-flex align-items-center justify-content-center bg-dark"
                                          style="min-height: 50px; min-width: 120px;">
-                                        <i class="ti ti-server-cog" style="font-size: 1.5rem;"></i>
-                                        <span class="ms-2 text-white fw-bold">MADMIN</span>
+                                        <img id="logo-preview-img" src="" class="d-none" style="max-height: 50px; max-width: 100%; object-fit: contain;">
+                                        <div id="logo-preview-default" class="text-primary d-flex align-items-center">
+                                            <i class="ti ti-server-cog" style="font-size: 1.5rem;"></i>
+                                            <span class="ms-2 text-white fw-bold">MADMIN</span>
+                                        </div>
                                     </div>
                                     ${canManage ? `
                                     <div class="btn-group">
@@ -56,14 +59,15 @@ export async function render(container) {
                                     </div>
                                     ` : ''}
                                 </div>
-                                <small class="form-hint">PNG o SVG, max 200x50px (funzionalità in sviluppo)</small>
+                                <small class="form-hint">PNG o SVG, max 200x50px</small>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Favicon</label>
                                 <div class="d-flex align-items-center gap-3">
-                                    <div id="favicon-preview" class="border rounded d-flex align-items-center justify-content-center bg-dark text-primary"
+                                    <div id="favicon-preview-container" class="border rounded d-flex align-items-center justify-content-center bg-dark"
                                          style="width: 40px; height: 40px;">
-                                        <i class="ti ti-server-cog"></i>
+                                        <img id="favicon-preview-img" src="" class="d-none" style="height: 32px; width: 32px; object-fit: contain;">
+                                        <i id="favicon-preview-default" class="ti ti-server-cog text-primary"></i>
                                     </div>
                                     ${canManage ? `
                                     <div class="btn-group">
@@ -74,7 +78,7 @@ export async function render(container) {
                                     </div>
                                     ` : ''}
                                 </div>
-                                <small class="form-hint">ICO o PNG 32x32px (funzionalità in sviluppo)</small>
+                                <small class="form-hint">ICO o PNG 32x32px</small>
                             </div>
                             <div class="col-12">
                                 ${canManage ? '<button class="btn btn-primary" id="save-system">Salva Impostazioni</button>' : ''}
@@ -221,19 +225,25 @@ async function loadSettings() {
         document.getElementById('primary-color-hex').value = system.primary_color || '#206bc4';
         document.getElementById('support-url').value = system.support_url || '';
 
-        // Logo preview - show uploaded image if URL exists
+        // Logo preview - show uploaded image if URL exists (toggle img/default visibility)
         if (system.logo_url) {
-            const logoPreview = document.getElementById('logo-preview');
-            if (logoPreview) {
-                logoPreview.innerHTML = `<img src="${system.logo_url}" style="max-height: 100%;">`;
+            const logoImg = document.getElementById('logo-preview-img');
+            const logoDefault = document.getElementById('logo-preview-default');
+            if (logoImg && logoDefault) {
+                logoImg.src = system.logo_url;
+                logoImg.classList.remove('d-none');
+                logoDefault.classList.add('d-none');
             }
         }
 
         // Favicon preview - show uploaded image if URL exists
         if (system.favicon_url) {
-            const faviconPreview = document.getElementById('favicon-preview');
-            if (faviconPreview) {
-                faviconPreview.innerHTML = `<img src="${system.favicon_url}" style="max-width: 100%; max-height: 100%;">`;
+            const faviconImg = document.getElementById('favicon-preview-img');
+            const faviconDefault = document.getElementById('favicon-preview-default');
+            if (faviconImg && faviconDefault) {
+                faviconImg.src = system.favicon_url;
+                faviconImg.classList.remove('d-none');
+                faviconDefault.classList.add('d-none');
             }
         }
 
@@ -288,11 +298,16 @@ function setupEventListeners() {
     document.getElementById('logo-upload')?.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
-            // Show preview immediately
+            // Show preview immediately (toggle img/default visibility)
             const reader = new FileReader();
             reader.onload = (ev) => {
-                const preview = document.getElementById('logo-preview');
-                preview.innerHTML = `<img src="${ev.target.result}" style="max-height: 100%;">`;
+                const img = document.getElementById('logo-preview-img');
+                const defaultEl = document.getElementById('logo-preview-default');
+                if (img && defaultEl) {
+                    img.src = ev.target.result;
+                    img.classList.remove('d-none');
+                    defaultEl.classList.add('d-none');
+                }
             };
             reader.readAsDataURL(file);
 
@@ -323,11 +338,16 @@ function setupEventListeners() {
     document.getElementById('favicon-upload')?.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
-            // Show preview immediately
+            // Show preview immediately (toggle img/default visibility)
             const reader = new FileReader();
             reader.onload = (ev) => {
-                const preview = document.getElementById('favicon-preview');
-                preview.innerHTML = `<img src="${ev.target.result}" style="max-width: 100%; max-height: 100%;">`;
+                const img = document.getElementById('favicon-preview-img');
+                const defaultEl = document.getElementById('favicon-preview-default');
+                if (img && defaultEl) {
+                    img.src = ev.target.result;
+                    img.classList.remove('d-none');
+                    defaultEl.classList.add('d-none');
+                }
             };
             reader.readAsDataURL(file);
 
