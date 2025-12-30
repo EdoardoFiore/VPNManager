@@ -47,6 +47,32 @@
     }
 }
 
+/* == Sidebar User Section == */
+.sidebar-user-section {
+    margin-top: auto;
+    padding-bottom: 1rem;
+}
+
+.user-dropdown-trigger {
+    padding: 0.5rem 1rem !important;
+    margin: 0 0.5rem !important;
+    border-radius: 0.375rem;
+}
+
+.user-dropdown-trigger:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-menu-user {
+    position: absolute !important;
+    bottom: 100% !important;
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+    top: auto !important;
+    margin-bottom: 0.5rem !important;
+    min-width: auto !important;
+}
+
 /* == Cards == */
 .card {
     border: none;
@@ -144,6 +170,20 @@
 
 .drag-handle:hover {
     color: #495057;
+}
+
+.draggable-row {
+    transition: background-color 0.15s ease;
+}
+
+.draggable-row.dragging {
+    opacity: 0.5;
+    background: #e3f2fd !important;
+}
+
+.draggable-row.drag-over {
+    background: #d4edda !important;
+    border-top: 2px solid #28a745;
 }
 
 /* == Empty States == */

@@ -1,22 +1,38 @@
 /**
  * MADMIN - Firewall View
  * 
- * Machine firewall management with similar UI to legacy system.
- * Displays rules in tables grouped by chain with drag-and-drop ordering.
+ * Machine firewall management with multiple tables support.
+ * Displays rules with drag-and-drop ordering and iptables preview.
  */
 
 import { apiGet, apiPost, apiPatch, apiDelete, apiPut } from '../api.js';
-import { showToast, confirmDialog, chainBadge, actionBadge, emptyState, escapeHtml } from '../utils.js';
+import { showToast, confirmDialog, actionBadge, emptyState, escapeHtml } from '../utils.js';
 import { setPageActions, checkPermission } from '../app.js';
 
 let rules = [];
 let editingRule = null;
+let currentTable = 'filter';
+
+// Table definitions with their chains
+const TABLES = {
+    filter: { label: 'Filter', chains: ['INPUT', 'OUTPUT', 'FORWARD'], icon: 'shield' },
+    nat: { label: 'NAT', chains: ['PREROUTING', 'POSTROUTING', 'OUTPUT'], icon: 'arrows-exchange' },
+    mangle: { label: 'Mangle', chains: ['PREROUTING', 'INPUT', 'FORWARD', 'OUTPUT', 'POSTROUTING'], icon: 'adjustments' },
+    raw: { label: 'Raw', chains: ['PREROUTING', 'OUTPUT'], icon: 'bolt' }
+};
+
+// Actions available per table
+const TABLE_ACTIONS = {
+    filter: ['ACCEPT', 'DROP', 'REJECT', 'LOG'],
+    nat: ['SNAT', 'DNAT', 'MASQUERADE', 'REDIRECT', 'ACCEPT'],
+    mangle: ['MARK', 'TOS', 'TTL', 'ACCEPT'],
+    raw: ['NOTRACK', 'ACCEPT']
+};
 
 /**
  * Render the firewall view
  */
 export async function render(container) {
-    // Set page actions
     if (checkPermission('firewall.manage')) {
         setPageActions(`
             <button class="btn btn-primary" id="btn-add-rule">
@@ -28,41 +44,31 @@ export async function render(container) {
     container.innerHTML = `
         <div class="row">
             <div class="col-12">
+                <!-- Table Selection -->
+                <div class="card mb-3">
+                    <div class="card-body py-2">
+                        <div class="btn-group w-100" role="group">
+                            ${Object.entries(TABLES).map(([key, t]) => `
+                                <input type="radio" class="btn-check" name="fw-table" id="table-${key}" 
+                                       value="${key}" ${key === 'filter' ? 'checked' : ''}>
+                                <label class="btn btn-outline-primary" for="table-${key}">
+                                    <i class="ti ti-${t.icon} me-1"></i>${t.label}
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Chain Tabs -->
                 <div class="card">
                     <div class="card-header">
-                        <ul class="nav nav-tabs card-header-tabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-input" type="button">
-                                    <i class="ti ti-arrow-down-right me-1"></i>INPUT
-                                    <span class="badge bg-azure-lt ms-2" id="count-input">0</span>
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-output" type="button">
-                                    <i class="ti ti-arrow-up-right me-1"></i>OUTPUT
-                                    <span class="badge bg-azure-lt ms-2" id="count-output">0</span>
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-forward" type="button">
-                                    <i class="ti ti-arrows-right-left me-1"></i>FORWARD
-                                    <span class="badge bg-azure-lt ms-2" id="count-forward">0</span>
-                                </button>
-                            </li>
+                        <ul class="nav nav-tabs card-header-tabs" role="tablist" id="chain-tabs">
+                            <!-- Tabs will be rendered dynamically -->
                         </ul>
                     </div>
                     <div class="card-body">
-                        <div class="tab-content">
-                            <div class="tab-pane active show" id="tab-input" role="tabpanel">
-                                <div id="rules-input"></div>
-                            </div>
-                            <div class="tab-pane" id="tab-output" role="tabpanel">
-                                <div id="rules-output"></div>
-                            </div>
-                            <div class="tab-pane" id="tab-forward" role="tabpanel">
-                                <div id="rules-forward"></div>
-                            </div>
+                        <div class="tab-content" id="chain-content">
+                            <!-- Content will be rendered dynamically -->
                         </div>
                     </div>
                 </div>
@@ -80,21 +86,22 @@ export async function render(container) {
                     <form id="rule-form">
                         <div class="modal-body">
                             <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label required">Catena</label>
-                                    <select class="form-select" id="rule-chain" required>
-                                        <option value="INPUT">INPUT</option>
-                                        <option value="OUTPUT">OUTPUT</option>
-                                        <option value="FORWARD">FORWARD</option>
+                                <div class="col-md-4">
+                                    <label class="form-label required">Tabella</label>
+                                    <select class="form-select" id="rule-table" required>
+                                        ${Object.entries(TABLES).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('')}
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
+                                    <label class="form-label required">Catena</label>
+                                    <select class="form-select" id="rule-chain" required>
+                                        <!-- Populated dynamically -->
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
                                     <label class="form-label required">Azione</label>
                                     <select class="form-select" id="rule-action" required>
-                                        <option value="ACCEPT">ACCEPT</option>
-                                        <option value="DROP">DROP</option>
-                                        <option value="REJECT">REJECT</option>
-                                        <option value="LOG">LOG</option>
+                                        <!-- Populated dynamically -->
                                     </select>
                                 </div>
                                 <div class="col-md-6">
@@ -106,7 +113,7 @@ export async function render(container) {
                                         <option value="icmp">ICMP</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-6" id="port-group">
                                     <label class="form-label">Porta</label>
                                     <input type="text" class="form-control" id="rule-port" 
                                            placeholder="es. 80, 443, 8000:8080">
@@ -155,6 +162,14 @@ export async function render(container) {
                                     <input type="text" class="form-control" id="rule-comment" 
                                            placeholder="Descrizione della regola">
                                 </div>
+                                <!-- iptables Preview -->
+                                <div class="col-12">
+                                    <label class="form-label">Anteprima Comando iptables</label>
+                                    <pre class="bg-dark text-success p-3 rounded" id="iptables-preview" 
+                                         style="font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+iptables -t filter -A INPUT -j ACCEPT
+                                    </pre>
+                                </div>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -167,10 +182,8 @@ export async function render(container) {
         </div>
     `;
 
-    // Setup event listeners
     setupEventListeners();
-
-    // Load rules
+    renderChainTabs();
     await loadRules();
 }
 
@@ -179,16 +192,123 @@ export async function render(container) {
  */
 function setupEventListeners() {
     // Add rule button
-    const addBtn = document.getElementById('btn-add-rule');
-    if (addBtn) {
-        addBtn.addEventListener('click', () => openRuleModal());
-    }
+    document.getElementById('btn-add-rule')?.addEventListener('click', () => openRuleModal());
 
     // Rule form submit
-    const form = document.getElementById('rule-form');
-    if (form) {
-        form.addEventListener('submit', handleRuleSubmit);
-    }
+    document.getElementById('rule-form')?.addEventListener('submit', handleRuleSubmit);
+
+    // Table selection
+    document.querySelectorAll('input[name="fw-table"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            currentTable = e.target.value;
+            renderChainTabs();
+            renderRules();
+        });
+    });
+
+    // Modal table change - update chains and actions
+    document.getElementById('rule-table')?.addEventListener('change', (e) => {
+        updateModalChains(e.target.value);
+        updateModalActions(e.target.value);
+        updateIptablesPreview();
+    });
+
+    // Protocol change - show/hide port field
+    document.getElementById('rule-protocol')?.addEventListener('change', (e) => {
+        const portGroup = document.getElementById('port-group');
+        const proto = e.target.value;
+        // Hide port for ICMP or no protocol
+        portGroup.style.display = (proto === 'tcp' || proto === 'udp') ? 'block' : 'none';
+        if (proto !== 'tcp' && proto !== 'udp') {
+            document.getElementById('rule-port').value = '';
+        }
+        updateIptablesPreview();
+    });
+
+    // Update preview on any field change
+    ['rule-chain', 'rule-action', 'rule-protocol', 'rule-port', 'rule-source',
+        'rule-destination', 'rule-in-interface', 'rule-out-interface', 'rule-state']
+        .forEach(id => {
+            document.getElementById(id)?.addEventListener('change', updateIptablesPreview);
+            document.getElementById(id)?.addEventListener('input', updateIptablesPreview);
+        });
+}
+
+/**
+ * Render chain tabs for current table
+ */
+function renderChainTabs() {
+    const tabsContainer = document.getElementById('chain-tabs');
+    const contentContainer = document.getElementById('chain-content');
+    if (!tabsContainer || !contentContainer) return;
+
+    const chains = TABLES[currentTable].chains;
+
+    tabsContainer.innerHTML = chains.map((chain, i) => `
+        <li class="nav-item" role="presentation">
+            <button class="nav-link ${i === 0 ? 'active' : ''}" data-bs-toggle="tab" 
+                    data-bs-target="#tab-${chain.toLowerCase()}" type="button">
+                ${chain}
+                <span class="badge bg-azure-lt ms-2" id="count-${chain.toLowerCase()}">0</span>
+            </button>
+        </li>
+    `).join('');
+
+    contentContainer.innerHTML = chains.map((chain, i) => `
+        <div class="tab-pane ${i === 0 ? 'active show' : ''}" id="tab-${chain.toLowerCase()}" role="tabpanel">
+            <div id="rules-${chain.toLowerCase()}"></div>
+        </div>
+    `).join('');
+}
+
+/**
+ * Update modal chain options based on selected table
+ */
+function updateModalChains(table) {
+    const chainSelect = document.getElementById('rule-chain');
+    const chains = TABLES[table].chains;
+    chainSelect.innerHTML = chains.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+/**
+ * Update modal action options based on selected table
+ */
+function updateModalActions(table) {
+    const actionSelect = document.getElementById('rule-action');
+    const actions = TABLE_ACTIONS[table];
+    actionSelect.innerHTML = actions.map(a => `<option value="${a}">${a}</option>`).join('');
+}
+
+/**
+ * Update iptables command preview
+ */
+function updateIptablesPreview() {
+    const preview = document.getElementById('iptables-preview');
+    if (!preview) return;
+
+    const table = document.getElementById('rule-table')?.value || 'filter';
+    const chain = document.getElementById('rule-chain')?.value || 'INPUT';
+    const action = document.getElementById('rule-action')?.value || 'ACCEPT';
+    const protocol = document.getElementById('rule-protocol')?.value;
+    const port = document.getElementById('rule-port')?.value;
+    const source = document.getElementById('rule-source')?.value;
+    const destination = document.getElementById('rule-destination')?.value;
+    const inIface = document.getElementById('rule-in-interface')?.value;
+    const outIface = document.getElementById('rule-out-interface')?.value;
+    const state = document.getElementById('rule-state')?.value;
+
+    let cmd = `iptables -t ${table} -A ${chain}`;
+
+    if (protocol) cmd += ` -p ${protocol}`;
+    if (source) cmd += ` -s ${source}`;
+    if (destination) cmd += ` -d ${destination}`;
+    if (inIface) cmd += ` -i ${inIface}`;
+    if (outIface) cmd += ` -o ${outIface}`;
+    if (state) cmd += ` -m state --state ${state}`;
+    if (port && (protocol === 'tcp' || protocol === 'udp')) cmd += ` --dport ${port}`;
+    cmd += ` -j ${action}`;
+
+    preview.textContent = cmd;
 }
 
 /**
@@ -207,10 +327,12 @@ async function loadRules() {
  * Render rules in tables
  */
 function renderRules() {
-    const chains = ['INPUT', 'OUTPUT', 'FORWARD'];
+    const chains = TABLES[currentTable].chains;
 
     for (const chain of chains) {
-        const chainRules = rules.filter(r => r.chain === chain).sort((a, b) => a.order - b.order);
+        const chainRules = rules
+            .filter(r => r.table_name === currentTable && r.chain === chain)
+            .sort((a, b) => a.order - b.order);
         const containerId = `rules-${chain.toLowerCase()}`;
         const container = document.getElementById(containerId);
 
@@ -232,7 +354,7 @@ function renderRules() {
                 <table class="table table-vcenter firewall-table" id="table-${chain.toLowerCase()}">
                     <thead>
                         <tr>
-                            <th class="rule-order">#</th>
+                            <th class="rule-order" style="width: 60px;">#</th>
                             <th>Azione</th>
                             <th>Protocollo</th>
                             <th>Sorgente</th>
@@ -243,15 +365,16 @@ function renderRules() {
                             <th class="rule-actions"></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="sortable-container" data-chain="${chain}">
                         ${chainRules.map(rule => renderRuleRow(rule)).join('')}
                     </tbody>
                 </table>
             </div>
         `;
 
-        // Setup row event listeners
+        // Setup row event listeners and drag-drop
         setupRowEvents(container);
+        setupDragDrop(container.querySelector('.sortable-container'));
     }
 }
 
@@ -263,9 +386,9 @@ function renderRuleRow(rule) {
     const disabledClass = rule.enabled ? '' : 'disabled';
 
     return `
-        <tr class="${disabledClass}" data-id="${rule.id}">
+        <tr class="${disabledClass} draggable-row" data-id="${rule.id}" draggable="${canManage}">
             <td class="rule-order">
-                ${canManage ? '<i class="ti ti-grip-vertical drag-handle"></i>' : ''}
+                ${canManage ? '<i class="ti ti-grip-vertical drag-handle" style="cursor: grab;"></i>' : ''}
                 <span class="ms-1">${rule.order + 1}</span>
             </td>
             <td>${actionBadge(rule.action)}</td>
@@ -289,6 +412,69 @@ function renderRuleRow(rule) {
             </td>
         </tr>
     `;
+}
+
+/**
+ * Setup drag and drop for rule ordering
+ */
+function setupDragDrop(tbody) {
+    if (!tbody || !checkPermission('firewall.manage')) return;
+
+    let draggedRow = null;
+
+    tbody.querySelectorAll('.draggable-row').forEach(row => {
+        row.addEventListener('dragstart', (e) => {
+            draggedRow = row;
+            row.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', row.dataset.id);
+        });
+
+        row.addEventListener('dragend', () => {
+            row.classList.remove('dragging');
+            draggedRow = null;
+            // Remove all drag-over states
+            tbody.querySelectorAll('.drag-over').forEach(r => r.classList.remove('drag-over'));
+        });
+
+        row.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (row !== draggedRow) {
+                row.classList.add('drag-over');
+            }
+        });
+
+        row.addEventListener('dragleave', () => {
+            row.classList.remove('drag-over');
+        });
+
+        row.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            row.classList.remove('drag-over');
+
+            if (draggedRow && row !== draggedRow) {
+                const draggedId = draggedRow.dataset.id;
+                const targetId = row.dataset.id;
+
+                // Find indices
+                const draggedRule = rules.find(r => r.id === draggedId);
+                const targetRule = rules.find(r => r.id === targetId);
+
+                if (draggedRule && targetRule) {
+                    try {
+                        await apiPatch(`/firewall/rules/${draggedId}/reorder`, {
+                            new_order: targetRule.order
+                        });
+                        showToast('Ordine aggiornato', 'success');
+                        await loadRules();
+                    } catch (error) {
+                        showToast('Errore: ' + error.message, 'error');
+                    }
+                }
+            }
+        });
+    });
 }
 
 /**
@@ -333,14 +519,18 @@ function setupRowEvents(container) {
 function openRuleModal(rule = null) {
     editingRule = rule;
 
-    const modal = document.getElementById('rule-modal');
     const title = document.getElementById('rule-modal-title');
-
     title.textContent = rule ? 'Modifica Regola' : 'Nuova Regola';
 
-    // Reset form
-    document.getElementById('rule-chain').value = rule?.chain || 'INPUT';
-    document.getElementById('rule-action').value = rule?.action || 'ACCEPT';
+    // Set table first, then update chains/actions
+    const tableSelect = document.getElementById('rule-table');
+    tableSelect.value = rule?.table_name || currentTable;
+    updateModalChains(tableSelect.value);
+    updateModalActions(tableSelect.value);
+
+    // Reset form fields
+    document.getElementById('rule-chain').value = rule?.chain || TABLES[tableSelect.value].chains[0];
+    document.getElementById('rule-action').value = rule?.action || TABLE_ACTIONS[tableSelect.value][0];
     document.getElementById('rule-protocol').value = rule?.protocol || '';
     document.getElementById('rule-port').value = rule?.port || '';
     document.getElementById('rule-source').value = rule?.source || '';
@@ -351,8 +541,14 @@ function openRuleModal(rule = null) {
     document.getElementById('rule-enabled').checked = rule?.enabled !== false;
     document.getElementById('rule-comment').value = rule?.comment || '';
 
-    const bsModal = new bootstrap.Modal(modal);
-    bsModal.show();
+    // Show/hide port field based on protocol
+    const proto = rule?.protocol || '';
+    document.getElementById('port-group').style.display = (proto === 'tcp' || proto === 'udp') ? 'block' : 'none';
+
+    // Update preview
+    updateIptablesPreview();
+
+    new bootstrap.Modal(document.getElementById('rule-modal')).show();
 }
 
 /**
@@ -362,6 +558,7 @@ async function handleRuleSubmit(e) {
     e.preventDefault();
 
     const data = {
+        table_name: document.getElementById('rule-table').value,
         chain: document.getElementById('rule-chain').value,
         action: document.getElementById('rule-action').value,
         protocol: document.getElementById('rule-protocol').value || null,
@@ -384,11 +581,7 @@ async function handleRuleSubmit(e) {
             showToast('Regola creata con successo', 'success');
         }
 
-        // Close modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('rule-modal'));
-        modal.hide();
-
-        // Reload rules
+        bootstrap.Modal.getInstance(document.getElementById('rule-modal')).hide();
         await loadRules();
 
     } catch (error) {

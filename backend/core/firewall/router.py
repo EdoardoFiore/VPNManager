@@ -6,6 +6,7 @@ API endpoints for machine firewall management.
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import SQLModel
 import uuid
 
 from core.database import get_session
@@ -82,19 +83,36 @@ async def create_rule(
     session: AsyncSession = Depends(get_session)
 ):
     """Create a new firewall rule."""
-    # Validate chain
-    if rule_data.chain not in ("INPUT", "OUTPUT", "FORWARD"):
+    # Valid chains per table
+    table_chains = {
+        "filter": ("INPUT", "OUTPUT", "FORWARD"),
+        "nat": ("PREROUTING", "POSTROUTING", "OUTPUT"),
+        "mangle": ("PREROUTING", "INPUT", "FORWARD", "OUTPUT", "POSTROUTING"),
+        "raw": ("PREROUTING", "OUTPUT")
+    }
+    
+    table = rule_data.table_name or "filter"
+    if table not in table_chains:
+        raise HTTPException(status_code=400, detail=f"Table must be one of: {', '.join(table_chains.keys())}")
+    
+    if rule_data.chain not in table_chains[table]:
         raise HTTPException(
             status_code=400,
-            detail="Chain must be INPUT, OUTPUT, or FORWARD"
+            detail=f"Chain for table {table} must be one of: {', '.join(table_chains[table])}"
         )
     
-    # Validate action
-    valid_actions = ("ACCEPT", "DROP", "REJECT", "LOG", "RETURN")
-    if rule_data.action not in valid_actions:
+    # Valid actions per table
+    table_actions = {
+        "filter": ("ACCEPT", "DROP", "REJECT", "LOG", "RETURN"),
+        "nat": ("SNAT", "DNAT", "MASQUERADE", "REDIRECT", "ACCEPT", "RETURN"),
+        "mangle": ("MARK", "TOS", "TTL", "ACCEPT", "RETURN"),
+        "raw": ("NOTRACK", "ACCEPT", "RETURN")
+    }
+    
+    if rule_data.action not in table_actions[table]:
         raise HTTPException(
             status_code=400,
-            detail=f"Action must be one of: {', '.join(valid_actions)}"
+            detail=f"Action for table {table} must be one of: {', '.join(table_actions[table])}"
         )
     
     rule = await firewall_orchestrator.create_rule(session, rule_data.model_dump())
@@ -162,6 +180,67 @@ async def update_rule_order(
     await session.commit()
     
     return {"status": "ok", "message": f"Updated order for {len(orders)} rules"}
+
+
+class SingleRuleReorder(SQLModel):
+    new_order: int
+
+
+@router.patch("/rules/{rule_id}/reorder")
+async def reorder_single_rule(
+    rule_id: str,
+    data: SingleRuleReorder,
+    current_user: User = Depends(require_permission("firewall.manage")),
+    session: AsyncSession = Depends(get_session)
+):
+    """Move a single rule to a new position."""
+    try:
+        rule_uuid = uuid.UUID(rule_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid rule ID format")
+    
+    from sqlalchemy import select
+    from .models import MachineFirewallRule
+    
+    # Get the rule
+    result = await session.execute(
+        select(MachineFirewallRule).where(MachineFirewallRule.id == rule_uuid)
+    )
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    
+    old_order = rule.order
+    new_order = data.new_order
+    
+    # Get all rules in the same chain/table
+    chain_rules = await session.execute(
+        select(MachineFirewallRule)
+        .where(MachineFirewallRule.chain == rule.chain)
+        .where(MachineFirewallRule.table_name == rule.table_name)
+        .order_by(MachineFirewallRule.order)
+    )
+    all_rules = list(chain_rules.scalars().all())
+    
+    # Shift rules
+    if new_order < old_order:
+        # Moving up
+        for r in all_rules:
+            if r.id != rule.id and r.order >= new_order and r.order < old_order:
+                r.order += 1
+    else:
+        # Moving down
+        for r in all_rules:
+            if r.id != rule.id and r.order > old_order and r.order <= new_order:
+                r.order -= 1
+    
+    rule.order = new_order
+    await session.commit()
+    
+    # Re-apply rules
+    await firewall_orchestrator.apply_rules(session)
+    
+    return {"status": "ok", "message": f"Rule moved to position {new_order}"}
 
 
 @router.post("/apply")

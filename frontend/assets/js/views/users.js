@@ -10,6 +10,15 @@ let users = [];
 let permissions = [];
 let editingUser = null;
 
+// Permission groups for better organization
+const PERMISSION_GROUPS = {
+    'Utenti': ['users.view', 'users.manage'],
+    'Firewall': ['firewall.view', 'firewall.manage'],
+    'Impostazioni': ['settings.view', 'settings.manage'],
+    'Moduli': ['modules.view', 'modules.manage'],
+    'Permessi': ['permissions.manage']
+};
+
 /**
  * Render the users view
  */
@@ -77,16 +86,20 @@ export async function render(container) {
                                     <small class="form-hint" id="password-hint">Minimo 6 caratteri</small>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Tipo Account</label>
-                                    <label class="form-check form-switch mt-2">
+                                    <label class="form-label" id="password-confirm-label">Conferma Password</label>
+                                    <input type="password" class="form-control" id="user-password-confirm" minlength="6">
+                                    <small class="form-hint text-danger d-none" id="password-mismatch">Le password non corrispondono</small>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" id="user-superuser">
-                                        <span class="form-check-label">Superuser (tutti i permessi)</span>
+                                        <span class="form-check-label"><strong>Superuser</strong> (tutti i permessi)</span>
                                     </label>
                                 </div>
                                 <div class="col-12" id="permissions-section">
                                     <label class="form-label">Permessi</label>
-                                    <div id="permissions-list" class="row g-2">
-                                        <!-- Permissions will be loaded here -->
+                                    <div id="permissions-list" class="row g-3">
+                                        <!-- Permissions will be loaded here grouped -->
                                     </div>
                                 </div>
                             </div>
@@ -122,6 +135,31 @@ function setupEventListeners() {
             const permSection = document.getElementById('permissions-section');
             permSection.style.display = e.target.checked ? 'none' : 'block';
         });
+    }
+
+    // Password confirmation check
+    const passwordConfirm = document.getElementById('user-password-confirm');
+    if (passwordConfirm) {
+        passwordConfirm.addEventListener('input', validatePasswordMatch);
+    }
+
+    const password = document.getElementById('user-password');
+    if (password) {
+        password.addEventListener('input', validatePasswordMatch);
+    }
+}
+
+function validatePasswordMatch() {
+    const password = document.getElementById('user-password').value;
+    const confirm = document.getElementById('user-password-confirm').value;
+    const mismatch = document.getElementById('password-mismatch');
+
+    if (confirm && password !== confirm) {
+        mismatch.classList.remove('d-none');
+        return false;
+    } else {
+        mismatch.classList.add('d-none');
+        return true;
     }
 }
 
@@ -202,6 +240,63 @@ function renderUsers() {
     });
 }
 
+function renderGroupedPermissions(userPerms) {
+    const permList = document.getElementById('permissions-list');
+    let html = '';
+
+    // Group permissions
+    for (const [groupName, groupSlugs] of Object.entries(PERMISSION_GROUPS)) {
+        const groupPerms = permissions.filter(p => groupSlugs.includes(p.slug));
+        if (groupPerms.length === 0) continue;
+
+        html += `
+            <div class="col-md-6">
+                <div class="card card-sm">
+                    <div class="card-header py-2">
+                        <h4 class="card-title m-0"><i class="ti ti-folder me-2"></i>${groupName}</h4>
+                    </div>
+                    <div class="card-body py-2">
+                        ${groupPerms.map(p => `
+                            <label class="form-check mb-1">
+                                <input class="form-check-input perm-check" type="checkbox" value="${p.slug}"
+                                       ${userPerms.includes(p.slug) ? 'checked' : ''}>
+                                <span class="form-check-label">${p.slug.split('.')[1]}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Any permissions not in groups
+    const groupedSlugs = Object.values(PERMISSION_GROUPS).flat();
+    const otherPerms = permissions.filter(p => !groupedSlugs.includes(p.slug));
+
+    if (otherPerms.length > 0) {
+        html += `
+            <div class="col-md-6">
+                <div class="card card-sm">
+                    <div class="card-header py-2">
+                        <h4 class="card-title m-0"><i class="ti ti-dots me-2"></i>Altri</h4>
+                    </div>
+                    <div class="card-body py-2">
+                        ${otherPerms.map(p => `
+                            <label class="form-check mb-1">
+                                <input class="form-check-input perm-check" type="checkbox" value="${p.slug}"
+                                       ${userPerms.includes(p.slug) ? 'checked' : ''}>
+                                <span class="form-check-label">${p.slug}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    permList.innerHTML = html;
+}
+
 function openUserModal(user = null) {
     editingUser = user;
 
@@ -210,26 +305,20 @@ function openUserModal(user = null) {
     document.getElementById('user-username').disabled = !!user;
     document.getElementById('user-email').value = user?.email || '';
     document.getElementById('user-password').value = '';
+    document.getElementById('user-password-confirm').value = '';
     document.getElementById('user-password').required = !user;
+    document.getElementById('user-password-confirm').required = !user;
     document.getElementById('password-label').classList.toggle('required', !user);
+    document.getElementById('password-confirm-label').classList.toggle('required', !user);
     document.getElementById('password-hint').textContent = user ? 'Lascia vuoto per non modificare' : 'Minimo 6 caratteri';
+    document.getElementById('password-mismatch').classList.add('d-none');
     document.getElementById('user-superuser').checked = user?.is_superuser || false;
 
     const permSection = document.getElementById('permissions-section');
     permSection.style.display = user?.is_superuser ? 'none' : 'block';
 
-    const permList = document.getElementById('permissions-list');
     const userPerms = user?.permissions || [];
-    permList.innerHTML = permissions.map(p => `
-        <div class="col-md-6">
-            <label class="form-check">
-                <input class="form-check-input perm-check" type="checkbox" value="${p.slug}"
-                       ${userPerms.includes(p.slug) ? 'checked' : ''}>
-                <span class="form-check-label">${p.slug}</span>
-                <small class="d-block text-muted">${escapeHtml(p.description)}</small>
-            </label>
-        </div>
-    `).join('');
+    renderGroupedPermissions(userPerms);
 
     new bootstrap.Modal(document.getElementById('user-modal')).show();
 }
@@ -239,6 +328,13 @@ async function handleUserSubmit(e) {
 
     const username = document.getElementById('user-username').value;
     const password = document.getElementById('user-password').value;
+    const passwordConfirm = document.getElementById('user-password-confirm').value;
+
+    // Validate password match
+    if (password && password !== passwordConfirm) {
+        showToast('Le password non corrispondono', 'error');
+        return;
+    }
 
     try {
         if (editingUser) {

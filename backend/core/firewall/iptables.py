@@ -332,11 +332,14 @@ def initialize_core_chains() -> bool:
             success = False
             continue
         
-        # Ensure jump rule exists (position 1 to be first after any existing rules)
-        # We use position 2 to allow for any critical rules that should come first
-        if not ensure_jump_rule(parent, madmin_chain, "filter", position=2):
-            logger.error(f"Failed to add jump from {parent} to {madmin_chain}")
-            success = False
+        # Ensure jump rule exists - use position 1 (first) for initial setup
+        # On fresh systems this works, and we append if insert fails
+        if not ensure_jump_rule(parent, madmin_chain, "filter", position=1):
+            # Fallback to append if insert at position 1 fails
+            logger.warning(f"Insert at position 1 failed, trying append for {madmin_chain}")
+            if not ensure_jump_rule(parent, madmin_chain, "filter", position=None):
+                logger.error(f"Failed to add jump from {parent} to {madmin_chain}")
+                success = False
     
     if success:
         logger.info("Core firewall chains initialized successfully")

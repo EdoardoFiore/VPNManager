@@ -5,6 +5,7 @@ Provides async PostgreSQL connection using SQLAlchemy 2.0 with asyncpg driver.
 Handles session management and database initialization.
 """
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy import text
 from sqlalchemy.orm import DeclarativeBase
 from sqlmodel import SQLModel
 from typing import AsyncGenerator
@@ -73,7 +74,7 @@ async def check_db_connection() -> bool:
     """
     try:
         async with engine.connect() as conn:
-            await conn.execute("SELECT 1")
+            await conn.execute(text("SELECT 1"))
             return True
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
