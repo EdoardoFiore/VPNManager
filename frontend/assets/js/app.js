@@ -168,8 +168,8 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(e => {
                 console.error(e);
-                // localStorage.removeItem('madmin_token');
-                // window.location.href = 'login.html';
+                localStorage.removeItem('madmin_token');
+                window.location.href = 'login.html';
             });
     }
 });

@@ -289,12 +289,41 @@ function renderChainTable(chainName, rules) {
     `;
 }
 
-// --- Actions ---
+// --- UI Logic ---
+function togglePortField(mode) {
+    const form = document.getElementById(mode === 'add' ? 'addMachineRuleForm' : 'editMachineRuleForm');
+    const proto = form.querySelector('[name="protocol"]').value;
+    const portInput = form.querySelector('[name="port"]');
+
+    if (proto === 'tcp' || proto === 'udp') {
+        portInput.parentElement.style.display = 'block';
+    } else {
+        portInput.parentElement.style.display = 'none';
+        portInput.value = ''; // Clear value
+    }
+}
+
+// Bind events
+document.addEventListener('DOMContentLoaded', () => {
+    // Existing init...
+    // Bind Protocol Change for Add
+    const addProto = document.querySelector('#addMachineRuleForm [name="protocol"]');
+    if (addProto) {
+        addProto.addEventListener('change', () => {
+            togglePortField('add');
+            generatePreview('add');
+        });
+        togglePortField('add'); // Init state
+    }
+});
+
 function showAddRuleModal() {
     const modal = new bootstrap.Modal(document.getElementById('modal-add-machine-rule'));
+    togglePortField('add');
     modal.show();
     generatePreview('add');
 }
+
 
 async function submitAddRule() {
     const form = document.getElementById('addMachineRuleForm');

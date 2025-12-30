@@ -44,8 +44,10 @@ class FirewallManager:
         
         with Session(engine) as session:
             rules = session.exec(select(FirewallRule).where(FirewallRule.enabled == True).order_by(FirewallRule.priority)).all()
+            logger.info(f"Applying {len(rules)} rules from Database.")
             
             for rule in rules:
+                logger.debug(f"Applying Rule ID {rule.id}: {rule.action} {rule.protocol} -> {rule.chain_name}")
                 self._apply_single_rule(rule)
 
     def _apply_single_rule(self, rule: FirewallRule):

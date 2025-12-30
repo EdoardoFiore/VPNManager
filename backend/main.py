@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 from backend.core.database import init_db, engine, get_session
 from backend.core.auth.router import router as auth_router
 from backend.core.firewall.router import router as firewall_router
+from backend.core.firewall.manager import firewall_mgr
 from backend.core.module_manager.router import router as modules_router
 from backend.core.ui_router import router as ui_router_obj
 from backend.core.module_manager.loader import loader
@@ -34,6 +35,9 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     seed_admin()
+    
+    # Initialize Core Firewall
+    firewall_mgr.initialize_chains()
     
     # Load Modules
     loader.discover_and_load(app)
