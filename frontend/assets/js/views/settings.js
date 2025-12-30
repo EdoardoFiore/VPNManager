@@ -31,7 +31,9 @@ export async function render(container) {
                                 <div class="input-group">
                                     <input type="color" class="form-control form-control-color" id="primary-color" ${canManage ? '' : 'disabled'}>
                                     <input type="text" class="form-control" id="primary-color-hex" placeholder="#206bc4" ${canManage ? '' : 'disabled'}>
+                                    ${canManage ? '<button type="button" class="btn btn-outline-secondary" id="reset-color" title="Ripristina predefinito"><i class="ti ti-refresh"></i></button>' : ''}
                                 </div>
+                                <small class="form-hint">Predefinito: #206bc4</small>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">URL Supporto</label>
@@ -40,40 +42,39 @@ export async function render(container) {
                             <div class="col-md-6">
                                 <label class="form-label">Logo</label>
                                 <div class="d-flex align-items-center gap-3">
-                                    <img id="logo-preview" src="/static/img/logo-default.png" alt="Logo" 
-                                         style="max-height: 50px; max-width: 150px;" class="border rounded p-1">
+                                    <div id="logo-preview" class="border rounded p-2 d-flex align-items-center justify-content-center bg-dark text-primary"
+                                         style="min-height: 50px; min-width: 120px;">
+                                        <i class="ti ti-server-cog" style="font-size: 1.5rem;"></i>
+                                        <span class="ms-2 text-white fw-bold">MADMIN</span>
+                                    </div>
                                     ${canManage ? `
                                     <div class="btn-group">
-                                        <label class="btn btn-outline-primary">
+                                        <label class="btn btn-outline-primary btn-sm">
                                             <i class="ti ti-upload me-1"></i>Carica
                                             <input type="file" id="logo-upload" accept="image/*" class="d-none">
                                         </label>
-                                        <button class="btn btn-outline-secondary" id="reset-logo" title="Ripristina predefinito">
-                                            <i class="ti ti-refresh"></i>
-                                        </button>
                                     </div>
                                     ` : ''}
                                 </div>
-                                <small class="form-hint">PNG o SVG, max 200x50px consigliato</small>
+                                <small class="form-hint">PNG o SVG, max 200x50px (funzionalità in sviluppo)</small>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Favicon</label>
                                 <div class="d-flex align-items-center gap-3">
-                                    <img id="favicon-preview" src="/static/img/favicon-default.png" alt="Favicon" 
-                                         style="width: 32px; height: 32px;" class="border rounded">
+                                    <div id="favicon-preview" class="border rounded d-flex align-items-center justify-content-center bg-dark text-primary"
+                                         style="width: 40px; height: 40px;">
+                                        <i class="ti ti-server-cog"></i>
+                                    </div>
                                     ${canManage ? `
                                     <div class="btn-group">
-                                        <label class="btn btn-outline-primary">
+                                        <label class="btn btn-outline-primary btn-sm">
                                             <i class="ti ti-upload me-1"></i>Carica
-                                            <input type="file" id="favicon-upload" accept="image/*" class="d-none">
+                                            <input type="file" id="favicon-upload" accept="image/*,.ico" class="d-none">
                                         </label>
-                                        <button class="btn btn-outline-secondary" id="reset-favicon" title="Ripristina predefinito">
-                                            <i class="ti ti-refresh"></i>
-                                        </button>
                                     </div>
                                     ` : ''}
                                 </div>
-                                <small class="form-hint">ICO o PNG, 32x32px o 64x64px</small>
+                                <small class="form-hint">ICO o PNG 32x32px (funzionalità in sviluppo)</small>
                             </div>
                             <div class="col-12">
                                 ${canManage ? '<button class="btn btn-primary" id="save-system">Salva Impostazioni</button>' : ''}
@@ -214,23 +215,14 @@ async function loadSettings() {
             apiGet('/settings/smtp'),
             apiGet('/settings/backup')
         ]);
-
         // System
         document.getElementById('company-name').value = system.company_name || '';
         document.getElementById('primary-color').value = system.primary_color || '#206bc4';
         document.getElementById('primary-color-hex').value = system.primary_color || '#206bc4';
         document.getElementById('support-url').value = system.support_url || '';
 
-        // Logo/favicon - use default if not set
-        const logoPreview = document.getElementById('logo-preview');
-        const faviconPreview = document.getElementById('favicon-preview');
-        if (system.logo_url) {
-            logoPreview.src = system.logo_url;
-        }
-        if (system.favicon_url) {
-            faviconPreview.src = system.favicon_url;
-        }
-
+        // Logo/favicon - currently using icon placeholders (upload not yet implemented)
+        // TODO: When file upload is implemented, update the preview elements here
         // SMTP
         document.getElementById('smtp-host').value = smtp.smtp_host || '';
         document.getElementById('smtp-port').value = smtp.smtp_port || 587;
@@ -270,13 +262,23 @@ function setupEventListeners() {
         }
     });
 
+    // Reset color to default
+    document.getElementById('reset-color')?.addEventListener('click', () => {
+        const defaultColor = '#206bc4';
+        colorPicker.value = defaultColor;
+        colorHex.value = defaultColor;
+        showToast('Colore ripristinato al predefinito', 'info');
+    });
+
     // Logo upload
     document.getElementById('logo-upload')?.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                document.getElementById('logo-preview').src = e.target.result;
+                // Update logo preview (div with icon) - show uploaded image
+                const preview = document.getElementById('logo-preview');
+                preview.innerHTML = `<img src="${e.target.result}" style="max-height: 100%;">`;
             };
             reader.readAsDataURL(file);
             // TODO: Upload to server
@@ -290,23 +292,17 @@ function setupEventListeners() {
         if (file) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                document.getElementById('favicon-preview').src = e.target.result;
+                // Update favicon preview (div with icon) - show uploaded image
+                const preview = document.getElementById('favicon-preview');
+                preview.innerHTML = `<img src="${e.target.result}" style="max-width: 100%; max-height: 100%;">`;
             };
             reader.readAsDataURL(file);
             showToast('Favicon caricata (salva per confermare)', 'info');
         }
     });
 
-    // Reset logo/favicon
-    document.getElementById('reset-logo')?.addEventListener('click', () => {
-        document.getElementById('logo-preview').src = '/static/img/logo-default.png';
-        showToast('Logo ripristinato al predefinito', 'info');
-    });
-
-    document.getElementById('reset-favicon')?.addEventListener('click', () => {
-        document.getElementById('favicon-preview').src = '/static/img/favicon-default.png';
-        showToast('Favicon ripristinata al predefinito', 'info');
-    });
+    // Note: Reset logo/favicon buttons removed since we use icon placeholders
+    // Upload functionality is still in development
 
     // Save system settings
     document.getElementById('save-system')?.addEventListener('click', async () => {

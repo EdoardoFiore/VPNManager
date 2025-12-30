@@ -42,6 +42,9 @@ async function init() {
         return;
     }
 
+    // Load and apply system settings (customizations)
+    await loadSystemSettings();
+
     // Setup event listeners
     setupLogout();
     setupNavigation();
@@ -56,6 +59,57 @@ async function init() {
     window.addEventListener('hashchange', handleRoute);
 
     console.log('MADMIN ready');
+}
+
+/**
+ * Load and apply system settings (company name, primary color, etc.)
+ */
+async function loadSystemSettings() {
+    try {
+        const response = await fetch('/api/settings/system', {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('madmin_token')}`
+            }
+        });
+
+        if (!response.ok) return;
+
+        const settings = await response.json();
+
+        // Apply company name to browser title and sidebar
+        if (settings.company_name) {
+            document.title = `${settings.company_name} - Dashboard`;
+            const brandText = document.querySelector('.navbar-brand span');
+            if (brandText) {
+                brandText.textContent = settings.company_name;
+            }
+        }
+
+        // Apply primary color as CSS variable
+        if (settings.primary_color) {
+            document.documentElement.style.setProperty('--madmin-primary', settings.primary_color);
+            document.documentElement.style.setProperty('--tblr-primary', settings.primary_color);
+            // Also update buttons
+            const style = document.createElement('style');
+            style.textContent = `
+                .btn-primary { background-color: ${settings.primary_color} !important; border-color: ${settings.primary_color} !important; }
+                .nav-link.active { background-color: ${settings.primary_color} !important; }
+                .text-primary { color: ${settings.primary_color} !important; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // Apply logo if set
+        if (settings.logo_url) {
+            const logoImg = document.querySelector('.navbar-brand img');
+            if (logoImg) {
+                logoImg.src = settings.logo_url;
+            }
+        }
+
+    } catch (error) {
+        console.error('Failed to load system settings:', error);
+    }
 }
 
 /**

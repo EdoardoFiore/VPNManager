@@ -66,11 +66,27 @@
 .dropdown-menu-user {
     position: absolute !important;
     bottom: 100% !important;
-    left: 0.5rem !important;
-    right: 0.5rem !important;
+    left: 0 !important;
+    right: 0 !important;
     top: auto !important;
-    margin-bottom: 0.5rem !important;
+    margin: 0 0.5rem 0.5rem 0.5rem !important;
     min-width: auto !important;
+    z-index: 1050 !important;
+    transform: translateY(-5px);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Ensure dropdown container has proper stacking */
+#user-dropdown {
+    position: relative;
+    z-index: 1040;
+}
+
+/* Fix navbar-collapse positioning for dropdown */
+.navbar-vertical .navbar-collapse {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 /* == Cards == */
