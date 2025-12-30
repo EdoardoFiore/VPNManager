@@ -322,23 +322,34 @@ async function handleRoute() {
     contentEl.innerHTML = loadingSpinner();
 
     try {
-        const viewLoader = views[viewName];
+        let viewModule;
 
-        if (!viewLoader) {
-            contentEl.innerHTML = `
-                <div class="card">
-                    <div class="card-body text-center py-5">
-                        <i class="ti ti-error-404 text-muted" style="font-size: 4rem;"></i>
-                        <h3 class="mt-3">Pagina non trovata</h3>
-                        <p class="text-muted">La pagina richiesta non esiste.</p>
-                        <a href="#dashboard" class="btn btn-primary">Torna alla Dashboard</a>
+        // Check if this is a module view (route starts with module ID like "wireguard", "openvpn", etc.)
+        // Module views are loaded dynamically from /static/modules/{moduleId}/views/main.js
+        if (!views[viewName]) {
+            // Try to load as module view
+            try {
+                viewModule = await import(`/static/modules/${viewName}/views/main.js`);
+            } catch (moduleError) {
+                // Not a core view and not a module - show 404
+                contentEl.innerHTML = `
+                    <div class="card">
+                        <div class="card-body text-center py-5">
+                            <i class="ti ti-error-404 text-muted" style="font-size: 4rem;"></i>
+                            <h3 class="mt-3">Pagina non trovata</h3>
+                            <p class="text-muted">La pagina richiesta non esiste.</p>
+                            <a href="#dashboard" class="btn btn-primary">Torna alla Dashboard</a>
+                        </div>
                     </div>
-                </div>
-            `;
-            return;
+                `;
+                return;
+            }
+        } else {
+            // Core view
+            const viewLoader = views[viewName];
+            viewModule = await viewLoader();
         }
 
-        const viewModule = await viewLoader();
         await viewModule.render(contentEl, params);
 
     } catch (error) {

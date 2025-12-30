@@ -4,7 +4,7 @@ MADMIN Module Models
 Database models and schemas for installed modules.
 """
 from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 import uuid
 
@@ -50,8 +50,21 @@ class ModuleMenuItem(SQLModel):
 class ModuleFirewallChain(SQLModel):
     """Firewall chain definition from a module."""
     name: str  # e.g., "MOD_WG_FORWARD"
-    parent: str  # INPUT, OUTPUT, FORWARD
+    parent: str  # INPUT, OUTPUT, FORWARD, or MADMIN_ chains
     priority: int = 50
+
+
+class ModuleSystemDependencies(SQLModel):
+    """System package dependencies for a module."""
+    apt: List[str] = []  # e.g., ["wireguard", "wireguard-tools"]
+    pip: List[str] = []  # Additional Python packages
+
+
+class ModuleInstallHooks(SQLModel):
+    """Lifecycle hooks for module installation."""
+    pre_install: Optional[str] = None   # e.g., "hooks/pre_install.py"
+    post_install: Optional[str] = None  # e.g., "hooks/post_install.py"
+    pre_uninstall: Optional[str] = None # e.g., "hooks/pre_uninstall.py"
 
 
 class ModuleManifest(SQLModel):
@@ -82,6 +95,18 @@ class ModuleManifest(SQLModel):
     
     # Static files directory (relative to module dir)
     static_dir: str = "static"
+    
+    # NEW: System-level dependencies (apt, pip)
+    system_dependencies: ModuleSystemDependencies = ModuleSystemDependencies()
+    
+    # NEW: Database migration scripts (relative paths)
+    database_migrations: List[str] = []  # e.g., ["migrations/001_initial.py"]
+    
+    # NEW: Install lifecycle hooks
+    install_hooks: ModuleInstallHooks = ModuleInstallHooks()
+    
+    # NEW: Frontend view entry point (relative to static/)
+    frontend_entry: Optional[str] = None  # e.g., "views/main.js"
 
 
 class InstalledModuleResponse(SQLModel):

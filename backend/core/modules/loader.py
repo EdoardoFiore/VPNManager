@@ -8,6 +8,8 @@ import json
 import logging
 import importlib.util
 import shutil
+import subprocess
+import asyncio
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +18,7 @@ from fastapi import FastAPI, APIRouter
 from fastapi.staticfiles import StaticFiles
 
 from config import get_settings
-from .models import InstalledModule, ModuleManifest, ModulePermission
+from .models import InstalledModule, ModuleManifest, ModulePermission, ModuleSystemDependencies, ModuleInstallHooks
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -155,6 +157,166 @@ class ModuleLoader:
                 priority=chain_def.priority
             )
     
+    async def install_system_dependencies(
+        self,
+        manifest: ModuleManifest,
+        module_path: Path
+    ) -> bool:
+        """
+        Install system-level dependencies (apt packages, pip packages).
+        Requires appropriate system permissions for apt operations.
+        
+        Returns True if all dependencies installed successfully.
+        """
+        deps = manifest.system_dependencies
+        
+        # Install apt packages
+        if deps.apt:
+            logger.info(f"Installing apt packages: {deps.apt}")
+            try:
+                # Check if packages are already installed
+                for pkg in deps.apt:
+                    check = subprocess.run(
+                        ["dpkg", "-s", pkg],
+                        capture_output=True
+                    )
+                    if check.returncode != 0:
+                        # Package not installed, install it
+                        result = subprocess.run(
+                            ["apt-get", "install", "-y", pkg],
+                            capture_output=True,
+                            text=True
+                        )
+                        if result.returncode != 0:
+                            logger.error(f"Failed to install apt package {pkg}: {result.stderr}")
+                            return False
+                        logger.info(f"Installed apt package: {pkg}")
+                    else:
+                        logger.info(f"Apt package already installed: {pkg}")
+            except Exception as e:
+                logger.error(f"Error installing apt packages: {e}")
+                return False
+        
+        # Install pip packages
+        if deps.pip:
+            logger.info(f"Installing pip packages: {deps.pip}")
+            try:
+                from config import get_settings
+                venv_pip = Path(get_settings().data_dir).parent / "venv" / "bin" / "pip"
+                pip_cmd = str(venv_pip) if venv_pip.exists() else "pip"
+                
+                for pkg in deps.pip:
+                    result = subprocess.run(
+                        [pip_cmd, "install", pkg],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode != 0:
+                        logger.error(f"Failed to install pip package {pkg}: {result.stderr}")
+                        return False
+                    logger.info(f"Installed pip package: {pkg}")
+            except Exception as e:
+                logger.error(f"Error installing pip packages: {e}")
+                return False
+        
+        return True
+    
+    async def run_database_migrations(
+        self,
+        manifest: ModuleManifest,
+        module_path: Path,
+        session: AsyncSession
+    ) -> bool:
+        """
+        Execute database migration scripts for a module.
+        Migration files are Python scripts with an 'upgrade(session)' function.
+        
+        Returns True if all migrations ran successfully.
+        """
+        if not manifest.database_migrations:
+            return True
+        
+        for migration_file in manifest.database_migrations:
+            migration_path = module_path / migration_file
+            
+            if not migration_path.exists():
+                logger.warning(f"Migration file not found: {migration_path}")
+                continue
+            
+            try:
+                # Dynamic import of migration module
+                spec = importlib.util.spec_from_file_location(
+                    f"migration_{migration_path.stem}",
+                    migration_path
+                )
+                if spec is None or spec.loader is None:
+                    logger.error(f"Failed to load migration spec: {migration_path}")
+                    return False
+                
+                migration_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(migration_module)
+                
+                # Execute upgrade function
+                if hasattr(migration_module, "upgrade"):
+                    await migration_module.upgrade(session)
+                    logger.info(f"Executed migration: {migration_file}")
+                else:
+                    logger.warning(f"Migration {migration_file} has no 'upgrade' function")
+                    
+            except Exception as e:
+                logger.error(f"Migration {migration_file} failed: {e}")
+                return False
+        
+        return True
+    
+    async def execute_hook(
+        self,
+        hook_path: Optional[str],
+        module_path: Path,
+        hook_name: str
+    ) -> bool:
+        """
+        Execute a module lifecycle hook script.
+        Hook files are Python scripts with a 'run()' async function.
+        
+        Returns True if hook executed successfully (or no hook defined).
+        """
+        if not hook_path:
+            return True
+        
+        full_path = module_path / hook_path
+        
+        if not full_path.exists():
+            logger.warning(f"Hook file not found: {full_path}")
+            return True  # Not a failure, just missing optional hook
+        
+        try:
+            spec = importlib.util.spec_from_file_location(
+                f"hook_{hook_name}",
+                full_path
+            )
+            if spec is None or spec.loader is None:
+                logger.error(f"Failed to load hook spec: {full_path}")
+                return False
+            
+            hook_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(hook_module)
+            
+            if hasattr(hook_module, "run"):
+                result = hook_module.run()
+                # Support both sync and async run functions
+                if asyncio.iscoroutine(result):
+                    await result
+                logger.info(f"Executed {hook_name} hook for module")
+                return True
+            else:
+                logger.warning(f"Hook {hook_path} has no 'run' function")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Hook {hook_name} failed: {e}")
+            return False
+    
     async def load_module(
         self,
         app: FastAPI,
@@ -268,6 +430,15 @@ class ModuleLoader:
         """
         Install a module from the staging directory.
         
+        Full installation lifecycle:
+        1. Parse manifest and validate
+        2. Execute pre-install hook
+        3. Install system dependencies (apt/pip)
+        4. Copy module to modules directory
+        5. Run database migrations
+        6. Execute post-install hook
+        7. Create database record
+        
         Args:
             session: Database session
             module_id: Module identifier in staging
@@ -294,15 +465,47 @@ class ModuleLoader:
             logger.error(f"Module {module_id} is already installed")
             return None
         
-        # Copy to modules directory
         target_path = self.modules_dir / module_id
+        
+        # 1. Execute pre-install hook (from staging)
+        if manifest.install_hooks.pre_install:
+            if not await self.execute_hook(
+                manifest.install_hooks.pre_install,
+                staging_path,
+                "pre_install"
+            ):
+                logger.error(f"Pre-install hook failed for {module_id}")
+                return None
+        
+        # 2. Install system dependencies
+        if not await self.install_system_dependencies(manifest, staging_path):
+            logger.error(f"Failed to install system dependencies for {module_id}")
+            return None
+        
+        # 3. Copy to modules directory
         try:
             shutil.copytree(staging_path, target_path)
         except Exception as e:
             logger.error(f"Failed to copy module {module_id}: {e}")
             return None
         
-        # Create database record
+        # 4. Run database migrations
+        if not await self.run_database_migrations(manifest, target_path, session):
+            logger.error(f"Database migrations failed for {module_id}")
+            # Rollback: remove copied files
+            shutil.rmtree(target_path, ignore_errors=True)
+            return None
+        
+        # 5. Execute post-install hook (from installed location)
+        if manifest.install_hooks.post_install:
+            if not await self.execute_hook(
+                manifest.install_hooks.post_install,
+                target_path,
+                "post_install"
+            ):
+                logger.warning(f"Post-install hook failed for {module_id}, continuing...")
+        
+        # 6. Create database record
         installed = InstalledModule(
             id=manifest.id,
             name=manifest.name,
@@ -314,7 +517,7 @@ class ModuleLoader:
         )
         session.add(installed)
         
-        logger.info(f"Installed module {module_id} from staging")
+        logger.info(f"Successfully installed module {module_id} from staging")
         return installed
     
     async def uninstall_module(

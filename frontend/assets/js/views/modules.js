@@ -1,5 +1,7 @@
 /**
  * MADMIN - Modules View
+ * 
+ * Manages installed modules, ZIP upload, and staging installation.
  */
 
 import { apiGet, apiPost, apiDelete, apiPatch } from '../api.js';
@@ -7,85 +9,119 @@ import { showToast, confirmDialog, formatDate, emptyState, escapeHtml, statusBad
 import { checkPermission } from '../app.js';
 
 let modules = [];
+let stagingModules = [];
 
 export async function render(container) {
+    const canManage = checkPermission('modules.manage');
+
     container.innerHTML = `
-        <div class="row row-deck row-cards">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title"><i class="ti ti-puzzle me-2"></i>Moduli Installati</h3>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-vcenter card-table">
-                            <thead>
-                                <tr>
-                                    <th>Modulo</th>
-                                    <th>Versione</th>
-                                    <th>Autore</th>
-                                    <th>Stato</th>
-                                    <th>Installato</th>
-                                    <th class="w-1"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="modules-tbody">
-                                <tr><td colspan="6" class="text-center py-4">
-                                    <div class="spinner-border spinner-border-sm"></div>
-                                </td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs">
+                    <li class="nav-item">
+                        <a href="#tab-installed" class="nav-link active" data-bs-toggle="tab">
+                            <i class="ti ti-package me-1"></i>Installati
+                        </a>
+                    </li>
+                    ${canManage ? `
+                    <li class="nav-item">
+                        <a href="#tab-upload" class="nav-link" data-bs-toggle="tab">
+                            <i class="ti ti-upload me-1"></i>Carica ZIP
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#tab-staging" class="nav-link" data-bs-toggle="tab">
+                            <i class="ti ti-folder me-1"></i>Disponibili
+                            <span class="badge bg-blue ms-1" id="staging-badge" style="display:none;">0</span>
+                        </a>
+                    </li>
+                    ` : ''}
+                </ul>
             </div>
-            
-            <!-- Install from Staging -->
-            ${checkPermission('modules.manage') ? `
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title"><i class="ti ti-download me-2"></i>Installa da Staging</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">ID Modulo in Staging</label>
-                                <input type="text" class="form-control" id="staging-module-id" placeholder="es. wireguard">
-                            </div>
-                            <div class="col-md-6 d-flex align-items-end">
-                                <button class="btn btn-primary" id="btn-install-staging">
-                                    <i class="ti ti-download me-2"></i>Installa
-                                </button>
+            <div class="card-body">
+                <div class="tab-content">
+                    <div class="tab-pane active show" id="tab-installed">
+                        <div id="installed-container">
+                            <div class="text-center py-4">
+                                <div class="spinner-border spinner-border-sm"></div>
                             </div>
                         </div>
-                        <small class="form-hint">I moduli devono essere presenti nella cartella staging del backend.</small>
                     </div>
+                    ${canManage ? `
+                    <div class="tab-pane" id="tab-upload">
+                        <div class="upload-area text-center py-5 border border-dashed rounded" id="upload-area">
+                            <i class="ti ti-cloud-upload text-muted" style="font-size: 4rem;"></i>
+                            <h4 class="mt-3">Carica Modulo</h4>
+                            <p class="text-muted">Trascina un file .zip o clicca per selezionare</p>
+                            <input type="file" id="module-file-input" class="d-none" accept=".zip">
+                            <button class="btn btn-primary" id="btn-select-file">
+                                <i class="ti ti-file-plus me-1"></i>Seleziona File
+                            </button>
+                        </div>
+                        <div id="upload-progress" class="d-none mt-3">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                            </div>
+                            <p class="text-center mt-2">Caricamento in corso...</p>
+                        </div>
+                        <div id="upload-result" class="d-none mt-3"></div>
+                    </div>
+                    <div class="tab-pane" id="tab-staging">
+                        <div id="staging-container">
+                            <div class="text-center py-4">
+                                <div class="spinner-border spinner-border-sm"></div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
-            ` : ''}
         </div>
     `;
 
     setupEventListeners();
     await loadModules();
+    if (canManage) {
+        await loadStagingModules();
+    }
 }
 
 function setupEventListeners() {
-    document.getElementById('btn-install-staging')?.addEventListener('click', async () => {
-        const moduleId = document.getElementById('staging-module-id').value.trim();
-        if (!moduleId) {
-            showToast('Inserisci ID modulo', 'warning');
-            return;
-        }
+    // File upload handlers
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('module-file-input');
+    const selectBtn = document.getElementById('btn-select-file');
 
-        try {
-            await apiPost('/modules/install', { source: 'staging', module_id: moduleId });
-            showToast('Modulo installato! Riavvio richiesto.', 'success');
-            document.getElementById('staging-module-id').value = '';
-            await loadModules();
-        } catch (e) {
-            showToast(e.message, 'error');
-        }
-    });
+    if (selectBtn) {
+        selectBtn.addEventListener('click', () => fileInput?.click());
+    }
+
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                uploadModuleFile(e.target.files[0]);
+            }
+        });
+    }
+
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('border-primary');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('border-primary');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('border-primary');
+            if (e.dataTransfer.files.length > 0) {
+                uploadModuleFile(e.dataTransfer.files[0]);
+            }
+        });
+    }
 }
 
 async function loadModules() {
@@ -97,42 +133,81 @@ async function loadModules() {
     }
 }
 
+async function loadStagingModules() {
+    try {
+        stagingModules = await apiGet('/modules/staging');
+        renderStagingModules();
+
+        // Update badge
+        const badge = document.getElementById('staging-badge');
+        if (badge) {
+            if (stagingModules.length > 0) {
+                badge.textContent = stagingModules.length;
+                badge.style.display = 'inline';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load staging modules:', e);
+    }
+}
+
 function renderModules() {
-    const tbody = document.getElementById('modules-tbody');
+    const container = document.getElementById('installed-container');
     const canManage = checkPermission('modules.manage');
 
     if (modules.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6">${emptyState('ti-puzzle', 'Nessun modulo installato', 'Installa moduli dalla sezione sottostante')}</td></tr>`;
+        container.innerHTML = emptyState('ti-puzzle', 'Nessun modulo installato', canManage ? 'Carica un modulo dalla tab "Carica ZIP"' : '');
         return;
     }
 
-    tbody.innerHTML = modules.map(m => `
-        <tr>
-            <td>
-                <div class="font-weight-medium">${escapeHtml(m.name)}</div>
-                <small class="text-muted">${m.id}</small>
-            </td>
-            <td><span class="badge bg-azure-lt">${m.version}</span></td>
-            <td>${m.author ? escapeHtml(m.author) : '-'}</td>
-            <td>${statusBadge(m.enabled)}</td>
-            <td>${formatDate(m.installed_at)}</td>
-            <td>
-                ${canManage ? `
-                    <div class="btn-group btn-group-sm">
-                        <button class="btn ${m.enabled ? 'btn-ghost-warning' : 'btn-ghost-success'} btn-toggle" 
-                                data-id="${m.id}" data-enabled="${m.enabled}">
-                            <i class="ti ti-${m.enabled ? 'player-pause' : 'player-play'}"></i>
-                        </button>
-                        <button class="btn btn-ghost-danger btn-uninstall" data-id="${m.id}">
-                            <i class="ti ti-trash"></i>
-                        </button>
-                    </div>
-                ` : ''}
-            </td>
-        </tr>
-    `).join('');
+    container.innerHTML = `
+        <div class="table-responsive">
+            <table class="table table-vcenter">
+                <thead>
+                    <tr>
+                        <th>Modulo</th>
+                        <th>Versione</th>
+                        <th>Autore</th>
+                        <th>Stato</th>
+                        <th>Installato</th>
+                        ${canManage ? '<th class="w-1"></th>' : ''}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${modules.map(m => `
+                        <tr>
+                            <td>
+                                <div class="font-weight-medium">${escapeHtml(m.name)}</div>
+                                <small class="text-muted">${m.id}</small>
+                            </td>
+                            <td><span class="badge bg-azure-lt">${m.version}</span></td>
+                            <td>${m.author ? escapeHtml(m.author) : '-'}</td>
+                            <td>${statusBadge(m.enabled)}</td>
+                            <td>${formatDate(m.installed_at)}</td>
+                            ${canManage ? `
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn ${m.enabled ? 'btn-ghost-warning' : 'btn-ghost-success'} btn-toggle" 
+                                            data-id="${m.id}" data-enabled="${m.enabled}">
+                                        <i class="ti ti-${m.enabled ? 'player-pause' : 'player-play'}"></i>
+                                    </button>
+                                    <button class="btn btn-ghost-danger btn-uninstall" data-id="${m.id}">
+                                        <i class="ti ti-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                            ` : ''}
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
 
-    tbody.querySelectorAll('.btn-toggle').forEach(btn => {
+    // Toggle buttons
+    container.querySelectorAll('.btn-toggle').forEach(btn => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
             const enabled = btn.dataset.enabled === 'true';
@@ -146,7 +221,8 @@ function renderModules() {
         });
     });
 
-    tbody.querySelectorAll('.btn-uninstall').forEach(btn => {
+    // Uninstall buttons
+    container.querySelectorAll('.btn-uninstall').forEach(btn => {
         btn.addEventListener('click', async () => {
             const confirmed = await confirmDialog('Disinstalla Modulo', 'Sei sicuro? I dati del modulo saranno rimossi.', 'Disinstalla', 'btn-danger');
             if (confirmed) {
@@ -154,10 +230,147 @@ function renderModules() {
                     await apiDelete(`/modules/${btn.dataset.id}`);
                     showToast('Modulo disinstallato', 'success');
                     await loadModules();
+                    await loadStagingModules();
                 } catch (e) {
                     showToast(e.message, 'error');
                 }
             }
         });
     });
+}
+
+function renderStagingModules() {
+    const container = document.getElementById('staging-container');
+    if (!container) return;
+
+    if (stagingModules.length === 0) {
+        container.innerHTML = emptyState('ti-folder-off', 'Nessun modulo in staging', 'Carica un file .zip dalla tab "Carica ZIP"');
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="row">
+            ${stagingModules.map(m => `
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h4 class="card-title">${escapeHtml(m.name)}</h4>
+                            <p class="text-muted small">${m.description || 'Nessuna descrizione'}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-secondary">v${m.version}</span>
+                                <button class="btn btn-primary btn-sm btn-install" data-id="${m.id}">
+                                    <i class="ti ti-download me-1"></i>Installa
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    // Install buttons
+    container.querySelectorAll('.btn-install').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                await apiPost('/modules/install', { source: 'staging', module_id: id });
+                showToast('Modulo installato! Riavvia il servizio.', 'success');
+                await loadModules();
+                await loadStagingModules();
+            } catch (e) {
+                showToast(e.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ti ti-download me-1"></i>Installa';
+            }
+        });
+    });
+}
+
+async function uploadModuleFile(file) {
+    if (!file.name.endsWith('.zip')) {
+        showToast('Il file deve essere un .zip', 'error');
+        return;
+    }
+
+    const uploadProgress = document.getElementById('upload-progress');
+    const uploadResult = document.getElementById('upload-result');
+    const uploadArea = document.getElementById('upload-area');
+
+    uploadArea.classList.add('d-none');
+    uploadProgress.classList.remove('d-none');
+    uploadResult.classList.add('d-none');
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/modules/upload', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('madmin_token')}`
+            },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Upload fallito');
+        }
+
+        const result = await response.json();
+
+        uploadProgress.classList.add('d-none');
+        uploadResult.classList.remove('d-none');
+        uploadResult.innerHTML = `
+            <div class="alert alert-success">
+                <h4><i class="ti ti-check me-2"></i>Modulo caricato!</h4>
+                <p><strong>${escapeHtml(result.name)}</strong> v${result.version} è stato estratto in staging.</p>
+                <button class="btn btn-primary btn-install-now" data-id="${result.id}">
+                    <i class="ti ti-download me-1"></i>Installa Ora
+                </button>
+                <button class="btn btn-outline-secondary ms-2 btn-reset-upload">
+                    Carica Altro
+                </button>
+            </div>
+        `;
+
+        uploadResult.querySelector('.btn-install-now')?.addEventListener('click', async (e) => {
+            const btn = e.target;
+            try {
+                btn.disabled = true;
+                await apiPost('/modules/install', { source: 'staging', module_id: result.id });
+                showToast('Modulo installato! Riavvia il servizio.', 'success');
+                await loadModules();
+                await loadStagingModules();
+                resetUploadArea();
+            } catch (err) {
+                showToast(err.message, 'error');
+                btn.disabled = false;
+            }
+        });
+
+        uploadResult.querySelector('.btn-reset-upload')?.addEventListener('click', resetUploadArea);
+
+        await loadStagingModules();
+
+    } catch (err) {
+        uploadProgress.classList.add('d-none');
+        uploadArea.classList.remove('d-none');
+        showToast('Errore: ' + err.message, 'error');
+    }
+}
+
+function resetUploadArea() {
+    const uploadProgress = document.getElementById('upload-progress');
+    const uploadResult = document.getElementById('upload-result');
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('module-file-input');
+
+    uploadProgress?.classList.add('d-none');
+    uploadResult?.classList.add('d-none');
+    uploadArea?.classList.remove('d-none');
+    if (fileInput) fileInput.value = '';
 }

@@ -3,18 +3,37 @@ MADMIN Modules Router
 
 API endpoints for module management.
 """
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import json
+import zipfile
+import tempfile
+import shutil
+from pathlib import Path
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from pydantic import BaseModel
 
 from core.database import get_session
 from core.auth.dependencies import require_permission
 from core.auth.models import User
-from .models import InstalledModule, InstalledModuleResponse, ModuleInstallRequest
+from config import get_settings
+from .models import InstalledModule, InstalledModuleResponse, ModuleInstallRequest, ModuleManifest
 from .loader import module_loader
 
 router = APIRouter(prefix="/api/modules", tags=["Modules"])
+settings = get_settings()
+
+
+class StagingModuleInfo(BaseModel):
+    """Info about a module in staging folder."""
+    id: str
+    name: str
+    version: str
+    description: Optional[str] = None
+    author: Optional[str] = None
+    path: str
 
 
 @router.get("/", response_model=List[InstalledModuleResponse])
@@ -48,6 +67,173 @@ async def get_menu_items(
 ):
     """Get all menu items from loaded modules for sidebar."""
     return module_loader.get_menu_items()
+
+
+@router.get("/staging", response_model=List[StagingModuleInfo])
+async def list_staging_modules(
+    current_user: User = Depends(require_permission("modules.manage")),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    List modules available in staging folder (not yet installed).
+    
+    Staging folder is scanned for directories containing manifest.json.
+    Already installed modules are filtered out.
+    """
+    staging_path = Path(settings.staging_dir)
+    
+    if not staging_path.exists():
+        return []
+    
+    # Get installed module IDs
+    result = await session.execute(select(InstalledModule.id))
+    installed_ids = {row[0] for row in result.fetchall()}
+    
+    available = []
+    
+    for item in staging_path.iterdir():
+        if not item.is_dir():
+            continue
+        
+        manifest_path = item / "manifest.json"
+        if not manifest_path.exists():
+            continue
+        
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest_data = json.load(f)
+            
+            module_id = manifest_data.get("id", item.name)
+            
+            # Skip if already installed
+            if module_id in installed_ids:
+                continue
+            
+            available.append(StagingModuleInfo(
+                id=module_id,
+                name=manifest_data.get("name", module_id),
+                version=manifest_data.get("version", "1.0.0"),
+                description=manifest_data.get("description"),
+                author=manifest_data.get("author"),
+                path=str(item)
+            ))
+        except (json.JSONDecodeError, IOError):
+            continue
+    
+    return available
+
+
+@router.post("/upload", response_model=StagingModuleInfo)
+async def upload_module_zip(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permission("modules.manage"))
+):
+    """
+    Upload a module ZIP file.
+    
+    The ZIP is extracted to the staging folder. It must contain:
+    - manifest.json at the root, OR
+    - A single subfolder containing manifest.json
+    
+    After upload, use /install endpoint to actually install the module.
+    """
+    if not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Il file deve essere un .zip")
+    
+    staging_path = Path(settings.staging_dir)
+    staging_path.mkdir(parents=True, exist_ok=True)
+    
+    # Save ZIP to temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+    
+    try:
+        with zipfile.ZipFile(tmp_path, 'r') as zf:
+            # Check ZIP structure
+            names = zf.namelist()
+            
+            # Case 1: manifest.json at root
+            if "manifest.json" in names:
+                # Read manifest to get module ID
+                with zf.open("manifest.json") as mf:
+                    manifest_data = json.load(mf)
+                module_id = manifest_data.get("id")
+                if not module_id:
+                    raise HTTPException(status_code=400, detail="manifest.json manca campo 'id'")
+                
+                # Extract to staging/module_id
+                target_path = staging_path / module_id
+                if target_path.exists():
+                    shutil.rmtree(target_path)
+                target_path.mkdir(parents=True)
+                zf.extractall(target_path)
+            
+            # Case 2: Single subfolder with manifest.json
+            else:
+                # Find subfolder
+                subfolders = set()
+                for name in names:
+                    parts = name.split("/")
+                    if len(parts) > 1 and parts[0]:
+                        subfolders.add(parts[0])
+                
+                if len(subfolders) != 1:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="ZIP deve contenere manifest.json alla root o una singola cartella con manifest.json"
+                    )
+                
+                subfolder = list(subfolders)[0]
+                manifest_name = f"{subfolder}/manifest.json"
+                
+                if manifest_name not in names:
+                    raise HTTPException(status_code=400, detail="manifest.json non trovato nel ZIP")
+                
+                with zf.open(manifest_name) as mf:
+                    manifest_data = json.load(mf)
+                module_id = manifest_data.get("id", subfolder)
+                
+                # Extract to staging/module_id
+                target_path = staging_path / module_id
+                if target_path.exists():
+                    shutil.rmtree(target_path)
+                target_path.mkdir(parents=True)
+                
+                # Extract by stripping the subfolder prefix
+                for name in names:
+                    if not name.startswith(subfolder + "/"):
+                        continue
+                    relative = name[len(subfolder) + 1:]
+                    if not relative:
+                        continue
+                    
+                    target = target_path / relative
+                    if name.endswith("/"):
+                        target.mkdir(parents=True, exist_ok=True)
+                    else:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        with zf.open(name) as src, open(target, "wb") as dst:
+                            dst.write(src.read())
+        
+        return StagingModuleInfo(
+            id=module_id,
+            name=manifest_data.get("name", module_id),
+            version=manifest_data.get("version", "1.0.0"),
+            description=manifest_data.get("description"),
+            author=manifest_data.get("author"),
+            path=str(target_path)
+        )
+    
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="File ZIP non valido")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="manifest.json non valido")
+    finally:
+        # Cleanup temp file
+        os.unlink(tmp_path)
+
 
 
 @router.post("/install", response_model=InstalledModuleResponse, status_code=status.HTTP_201_CREATED)
