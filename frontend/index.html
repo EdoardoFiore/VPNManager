@@ -17,8 +17,24 @@
 
 <body class="d-flex flex-column">
     <div class="page">
+        <!-- Mobile Header (shown on small screens) -->
+        <header class="mobile-header" style="display: none;">
+            <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Menu">
+                <i class="ti ti-menu-2"></i>
+            </button>
+            <h1 class="navbar-brand mb-0 ms-2">
+                <a href="#" class="text-white text-decoration-none">
+                    <i class="ti ti-server-cog text-primary"></i>
+                    <span class="ms-1" id="mobile-brand-name">MADMIN</span>
+                </a>
+            </h1>
+        </header>
+
+        <!-- Mobile Overlay -->
+        <div class="mobile-overlay" id="mobile-overlay"></div>
+
         <!-- Vertical Navbar (Sidebar) -->
-        <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+        <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark" id="sidebar">
             <div class="container-fluid">
                 <!-- Brand -->
                 <h1 class="navbar-brand navbar-brand-autodark">
@@ -124,6 +140,11 @@
                                 </li>
                                 <li class="list-inline-item">
                                     <span id="version">v1.0.0</span>
+                                </li>
+                                <li class="list-inline-item" style="display: none;">
+                                    <a href="#" id="support-link" class="link-secondary" target="_blank">
+                                        <i class="ti ti-help-circle me-1"></i>Supporto
+                                    </a>
                                 </li>
                             </ul>
                         </div>

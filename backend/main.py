@@ -101,11 +101,15 @@ def create_app() -> FastAPI:
     from core.firewall.router import router as firewall_router
     from core.modules.router import router as modules_router
     from core.settings.router import router as settings_router
+    from core.files.router import router as files_router
+    from core.backup.router import router as backup_router
     
     app.include_router(auth_router)
     app.include_router(firewall_router)
     app.include_router(modules_router)
     app.include_router(settings_router)
+    app.include_router(files_router)
+    app.include_router(backup_router)
     
     # UI Router for frontend
     @app.get("/api/ui/menu")
@@ -148,6 +152,13 @@ def create_app() -> FastAPI:
     # Mount static frontend files
     # This should be done after all API routes
     frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
+    uploads_dir = os.environ.get("MADMIN_UPLOAD_DIR", "/opt/madmin/uploads")
+    
+    # Mount uploads directory
+    if os.path.exists(uploads_dir) or True:  # Create if needed when accessed
+        os.makedirs(uploads_dir, exist_ok=True)
+        app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+    
     if os.path.exists(frontend_dir):
         app.mount("/static", StaticFiles(directory=os.path.join(frontend_dir, "assets")), name="static")
         

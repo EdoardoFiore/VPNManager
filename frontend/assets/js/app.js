@@ -48,6 +48,7 @@ async function init() {
     // Setup event listeners
     setupLogout();
     setupNavigation();
+    setupMobileMenu();
 
     // Load menu
     await loadMenu();
@@ -76,12 +77,18 @@ async function loadSystemSettings() {
 
         const settings = await response.json();
 
-        // Apply company name to browser title and sidebar
+        // Apply company name to browser title, sidebar, and mobile header
         if (settings.company_name) {
             document.title = `${settings.company_name} - Dashboard`;
+            // Desktop sidebar brand
             const brandText = document.querySelector('.navbar-brand span');
             if (brandText) {
                 brandText.textContent = settings.company_name;
+            }
+            // Mobile header brand
+            const mobileBrand = document.getElementById('mobile-brand-name');
+            if (mobileBrand) {
+                mobileBrand.textContent = settings.company_name;
             }
         }
 
@@ -89,7 +96,6 @@ async function loadSystemSettings() {
         if (settings.primary_color) {
             document.documentElement.style.setProperty('--madmin-primary', settings.primary_color);
             document.documentElement.style.setProperty('--tblr-primary', settings.primary_color);
-            // Also update buttons
             const style = document.createElement('style');
             style.textContent = `
                 .btn-primary { background-color: ${settings.primary_color} !important; border-color: ${settings.primary_color} !important; }
@@ -99,11 +105,32 @@ async function loadSystemSettings() {
             document.head.appendChild(style);
         }
 
-        // Apply logo if set
+        // Apply logo if set - replace icon with image
         if (settings.logo_url) {
-            const logoImg = document.querySelector('.navbar-brand img');
-            if (logoImg) {
-                logoImg.src = settings.logo_url;
+            const navbarBrand = document.querySelector('.navbar-brand a');
+            if (navbarBrand) {
+                navbarBrand.innerHTML = `<img src="${settings.logo_url}" alt="Logo" style="max-height: 32px;">`;
+            }
+        }
+
+        // Apply favicon if set
+        if (settings.favicon_url) {
+            let favicon = document.querySelector('link[rel="icon"]');
+            if (!favicon) {
+                favicon = document.createElement('link');
+                favicon.rel = 'icon';
+                document.head.appendChild(favicon);
+            }
+            favicon.href = settings.favicon_url;
+        }
+
+        // Show support URL in footer if configured
+        if (settings.support_url) {
+            const supportLink = document.getElementById('support-link');
+            if (supportLink) {
+                supportLink.href = settings.support_url;
+                // Also show the parent li element
+                supportLink.parentElement.style.display = 'list-item';
             }
         }
 
@@ -148,9 +175,39 @@ function setupNavigation() {
                 // Update active state
                 navMenu.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
                 link.classList.add('active');
+                // Close mobile menu on navigation
+                closeMobileMenu();
             }
         });
     }
+}
+
+/**
+ * Setup mobile menu toggle
+ */
+function setupMobileMenu() {
+    const toggleBtn = document.getElementById('mobile-menu-toggle');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('mobile-overlay');
+
+    if (!toggleBtn || !sidebar) return;
+
+    // Toggle menu on hamburger click
+    toggleBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('mobile-open');
+        overlay?.classList.toggle('show');
+    });
+
+    // Close on overlay click
+    overlay?.addEventListener('click', closeMobileMenu);
+}
+
+/**
+ * Close mobile menu
+ */
+function closeMobileMenu() {
+    document.getElementById('sidebar')?.classList.remove('mobile-open');
+    document.getElementById('mobile-overlay')?.classList.remove('show');
 }
 
 /**

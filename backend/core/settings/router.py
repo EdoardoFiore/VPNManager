@@ -146,6 +146,53 @@ async def update_smtp_settings(
     )
 
 
+from pydantic import BaseModel, EmailStr
+
+
+class SMTPTestRequest(BaseModel):
+    recipient_email: EmailStr
+
+
+@router.post("/smtp/test")
+async def test_smtp_settings(
+    data: SMTPTestRequest,
+    current_user: User = Depends(require_permission("settings.manage")),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Send a test email to verify SMTP configuration.
+    Uses the saved SMTP settings from database.
+    """
+    # Get SMTP settings
+    result = await session.execute(select(SMTPSettings).where(SMTPSettings.id == 1))
+    settings = result.scalar_one_or_none()
+    
+    if not settings or not settings.smtp_host:
+        raise HTTPException(
+            status_code=400,
+            detail="Configura prima le impostazioni SMTP"
+        )
+    
+    # Send test email
+    from core.email import send_test_email
+    
+    result = await send_test_email(
+        smtp_host=settings.smtp_host,
+        smtp_port=settings.smtp_port,
+        smtp_encryption=settings.smtp_encryption,
+        smtp_username=settings.smtp_username,
+        smtp_password=settings.smtp_password,
+        sender_email=settings.sender_email,
+        sender_name=settings.sender_name,
+        recipient_email=data.recipient_email
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result["message"])
+    
+    return result
+
+
 # --- Backup Settings ---
 
 @router.get("/backup", response_model=BackupSettingsResponse)

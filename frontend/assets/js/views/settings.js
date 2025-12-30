@@ -2,8 +2,8 @@
  * MADMIN - Settings View
  */
 
-import { apiGet, apiPatch } from '../api.js';
-import { showToast, escapeHtml } from '../utils.js';
+import { apiGet, apiPatch, apiPost } from '../api.js';
+import { showToast, escapeHtml, inputDialog } from '../utils.js';
 import { checkPermission } from '../app.js';
 
 /**
@@ -221,8 +221,22 @@ async function loadSettings() {
         document.getElementById('primary-color-hex').value = system.primary_color || '#206bc4';
         document.getElementById('support-url').value = system.support_url || '';
 
-        // Logo/favicon - currently using icon placeholders (upload not yet implemented)
-        // TODO: When file upload is implemented, update the preview elements here
+        // Logo preview - show uploaded image if URL exists
+        if (system.logo_url) {
+            const logoPreview = document.getElementById('logo-preview');
+            if (logoPreview) {
+                logoPreview.innerHTML = `<img src="${system.logo_url}" style="max-height: 100%;">`;
+            }
+        }
+
+        // Favicon preview - show uploaded image if URL exists
+        if (system.favicon_url) {
+            const faviconPreview = document.getElementById('favicon-preview');
+            if (faviconPreview) {
+                faviconPreview.innerHTML = `<img src="${system.favicon_url}" style="max-width: 100%; max-height: 100%;">`;
+            }
+        }
+
         // SMTP
         document.getElementById('smtp-host').value = smtp.smtp_host || '';
         document.getElementById('smtp-port').value = smtp.smtp_port || 587;
@@ -274,15 +288,34 @@ function setupEventListeners() {
     document.getElementById('logo-upload')?.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
+            // Show preview immediately
             const reader = new FileReader();
-            reader.onload = (e) => {
-                // Update logo preview (div with icon) - show uploaded image
+            reader.onload = (ev) => {
                 const preview = document.getElementById('logo-preview');
-                preview.innerHTML = `<img src="${e.target.result}" style="max-height: 100%;">`;
+                preview.innerHTML = `<img src="${ev.target.result}" style="max-height: 100%;">`;
             };
             reader.readAsDataURL(file);
-            // TODO: Upload to server
-            showToast('Logo caricato (salva per confermare)', 'info');
+
+            // Upload to server
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/files/upload', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('madmin_token')}` },
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Upload fallito');
+                const data = await response.json();
+
+                // Save URL to settings
+                await apiPatch('/settings/system', { logo_url: data.url });
+                showToast('Logo caricato e salvato', 'success');
+            } catch (err) {
+                showToast('Errore caricamento: ' + err.message, 'error');
+            }
         }
     });
 
@@ -290,19 +323,36 @@ function setupEventListeners() {
     document.getElementById('favicon-upload')?.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
+            // Show preview immediately
             const reader = new FileReader();
-            reader.onload = (e) => {
-                // Update favicon preview (div with icon) - show uploaded image
+            reader.onload = (ev) => {
                 const preview = document.getElementById('favicon-preview');
-                preview.innerHTML = `<img src="${e.target.result}" style="max-width: 100%; max-height: 100%;">`;
+                preview.innerHTML = `<img src="${ev.target.result}" style="max-width: 100%; max-height: 100%;">`;
             };
             reader.readAsDataURL(file);
-            showToast('Favicon caricata (salva per confermare)', 'info');
+
+            // Upload to server
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/files/upload', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('madmin_token')}` },
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Upload fallito');
+                const data = await response.json();
+
+                // Save URL to settings
+                await apiPatch('/settings/system', { favicon_url: data.url });
+                showToast('Favicon caricata e salvata', 'success');
+            } catch (err) {
+                showToast('Errore caricamento: ' + err.message, 'error');
+            }
         }
     });
-
-    // Note: Reset logo/favicon buttons removed since we use icon placeholders
-    // Upload functionality is still in development
 
     // Save system settings
     document.getElementById('save-system')?.addEventListener('click', async () => {
@@ -337,9 +387,36 @@ function setupEventListeners() {
         } catch (e) { showToast(e.message, 'error'); }
     });
 
-    // Test SMTP
+    // Test SMTP - use modal for recipient email
     document.getElementById('test-smtp')?.addEventListener('click', async () => {
-        showToast('Funzionalità test email in sviluppo', 'info');
+        const recipient = await inputDialog(
+            'Test Email SMTP',
+            'Email destinatario',
+            'esempio@dominio.it',
+            'email'
+        );
+        if (!recipient) return;
+
+        // Validate email format
+        if (!recipient.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+            showToast('Inserisci un indirizzo email valido', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('test-smtp');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Invio...';
+        btn.disabled = true;
+
+        try {
+            await apiPost('/settings/smtp/test', { recipient_email: recipient });
+            showToast(`Email di test inviata a ${recipient}`, 'success');
+        } catch (e) {
+            showToast('Errore invio: ' + e.message, 'error');
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
     });
 
     // Save backup settings

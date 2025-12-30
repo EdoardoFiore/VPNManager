@@ -320,16 +320,92 @@
 
 /* == Responsive Adjustments == */
 @media (max-width: 991.98px) {
-    .navbar-vertical {
+
+    /* Mobile header bar */
+    .mobile-header {
+        display: flex !important;
         position: fixed;
-        z-index: 1030;
-        height: 100vh;
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 56px;
+        background: var(--madmin-bg-dark);
+        z-index: 1025;
+        align-items: center;
+        padding: 0 1rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
 
-    .navbar-vertical.show {
+    .mobile-header .navbar-brand {
+        color: white;
+        margin: 0;
+    }
+
+    .mobile-menu-toggle {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 1.5rem;
+        padding: 0.5rem;
+        cursor: pointer;
+    }
+
+    /* Sidebar as slide-in drawer */
+    .navbar-vertical {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: var(--madmin-sidebar-width);
+        height: 100vh;
+        z-index: 1040;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        overflow-y: auto;
+    }
+
+    .navbar-vertical.mobile-open {
         transform: translateX(0);
+    }
+
+    /* Overlay backdrop */
+    .mobile-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1035;
+    }
+
+    .mobile-overlay.show {
+        display: block;
+    }
+
+    /* Adjust page wrapper for mobile header */
+    .page-wrapper {
+        margin-left: 0;
+        padding-top: 56px;
+    }
+
+    /* Hide desktop navbar toggler */
+    .navbar-vertical .navbar-toggler {
+        display: none;
+    }
+
+    /* Make navbar collapse always visible in sidebar */
+    .navbar-vertical .navbar-collapse {
+        display: flex !important;
+    }
+}
+
+/* Desktop: hide mobile elements */
+@media (min-width: 992px) {
+
+    .mobile-header,
+    .mobile-overlay {
+        display: none !important;
     }
 }
 
@@ -337,6 +413,7 @@
 .text-truncate-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }

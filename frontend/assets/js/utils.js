@@ -243,3 +243,70 @@ export function statusBadge(active) {
     }
     return '<span class="badge bg-secondary">Disattivato</span>';
 }
+
+/**
+ * Input dialog using Bootstrap modal
+ * @param {string} title - Modal title
+ * @param {string} label - Input label
+ * @param {string} placeholder - Input placeholder
+ * @param {string} type - Input type (text, email, etc.)
+ * @returns {Promise<string|null>} - Input value or null if cancelled
+ */
+export function inputDialog(title, label, placeholder = '', type = 'text') {
+    return new Promise((resolve) => {
+        const modalId = `input-modal-${Date.now()}`;
+        const inputId = `${modalId}-input`;
+        const modalHtml = `
+            <div class="modal modal-blur fade" id="${modalId}" tabindex="-1">
+                <div class="modal-dialog modal-sm">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${escapeHtml(title)}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">${escapeHtml(label)}</label>
+                                <input type="${type}" class="form-control" id="${inputId}" placeholder="${escapeHtml(placeholder)}">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-link" data-bs-dismiss="modal">Annulla</button>
+                            <button type="button" class="btn btn-primary" id="${modalId}-confirm">Conferma</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const modalEl = document.getElementById(modalId);
+        const modal = new bootstrap.Modal(modalEl);
+        const inputEl = document.getElementById(inputId);
+        const confirmBtn = document.getElementById(`${modalId}-confirm`);
+
+        // Confirm on button click
+        confirmBtn.addEventListener('click', () => {
+            resolve(inputEl.value || null);
+            modal.hide();
+        });
+
+        // Confirm on Enter key
+        inputEl.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                resolve(inputEl.value || null);
+                modal.hide();
+            }
+        });
+
+        // Cancel on modal close
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (!inputEl.value) resolve(null);
+            modalEl.remove();
+        });
+
+        modal.show();
+        setTimeout(() => inputEl.focus(), 300);
+    });
+}
