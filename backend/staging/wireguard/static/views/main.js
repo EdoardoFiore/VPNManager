@@ -8,6 +8,7 @@ import { apiGet, apiPost, apiDelete } from '/static/js/api.js';
 import { showToast, confirmDialog, loadingSpinner } from '/static/js/utils.js';
 
 let currentInstanceId = null;
+let networkInterfaces = [];  // Cache for system network interfaces
 
 export async function render(container, params) {
     if (params && params.length > 0) {
@@ -60,14 +61,14 @@ async function renderInstanceList(container) {
                             <label class="form-label">Modalità Tunnel</label>
                             <div class="btn-group w-100" role="group">
                                 <input type="radio" class="btn-check" name="tunnel-mode" id="tunnel-full" value="full" checked>
-                                <label class="btn btn-outline-primary" for="tunnel-full">
-                                    <i class="ti ti-world me-1"></i>Full Tunnel
-                                    <small class="d-block text-muted">Tutto il traffico via VPN</small>
+                                <label class="btn btn-outline-primary text-start" for="tunnel-full">
+                                    <i class="ti ti-world me-2"></i><strong>Full Tunnel</strong><br>
+                                    <small class="text-muted">Tutto il traffico via VPN</small>
                                 </label>
                                 <input type="radio" class="btn-check" name="tunnel-mode" id="tunnel-split" value="split">
-                                <label class="btn btn-outline-primary" for="tunnel-split">
-                                    <i class="ti ti-route me-1"></i>Split Tunnel
-                                    <small class="d-block text-muted">Solo rotte specifiche</small>
+                                <label class="btn btn-outline-primary text-start" for="tunnel-split">
+                                    <i class="ti ti-route me-2"></i><strong>Split Tunnel</strong><br>
+                                    <small class="text-muted">Solo rotte specifiche</small>
                                 </label>
                             </div>
                         </div>
@@ -87,14 +88,17 @@ async function renderInstanceList(container) {
                             <div class="mb-3">
                                 <label class="form-label">Rotte da inoltrare</label>
                                 <div id="routes-container">
-                                    <div class="input-group mb-2">
-                                        <input type="text" class="form-control route-input" placeholder="192.168.1.0/24">
+                                    <div class="route-row mb-2 d-flex gap-2 align-items-center">
+                                        <input type="text" class="form-control route-network" placeholder="192.168.1.0/24" style="flex: 2">
+                                        <select class="form-select route-interface" style="flex: 1">
+                                            <option value="">Interfaccia...</option>
+                                        </select>
                                         <button class="btn btn-outline-success btn-add-route" type="button">
                                             <i class="ti ti-plus"></i>
                                         </button>
                                     </div>
                                 </div>
-                                <small class="form-hint">Inserisci le subnet che devono transitare dalla VPN.</small>
+                                <small class="form-hint">Subnet → interfaccia di uscita per ogni rotta.</small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Server DNS (opzionale)</label>
@@ -117,8 +121,10 @@ async function renderInstanceList(container) {
     setupCreateForm();
 }
 
-function setupCreateForm() {
-    document.getElementById('btn-new-instance')?.addEventListener('click', () => {
+async function setupCreateForm() {
+    document.getElementById('btn-new-instance')?.addEventListener('click', async () => {
+        await loadNetworkInterfaces();
+        populateInterfaceSelects();
         new bootstrap.Modal(document.getElementById('modal-new-instance')).show();
     });
 
@@ -143,16 +149,50 @@ function setupCreateForm() {
     document.getElementById('btn-create-instance')?.addEventListener('click', createInstance);
 }
 
+async function loadNetworkInterfaces() {
+    try {
+        const data = await apiGet('/modules/wireguard/system/interfaces');
+        networkInterfaces = data.interfaces || [];
+    } catch (err) {
+        console.warn('Could not load interfaces:', err);
+        networkInterfaces = [{ name: 'eth0', state: 'unknown' }];
+    }
+}
+
+function populateInterfaceSelects() {
+    document.querySelectorAll('.route-interface').forEach(select => {
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">Auto (default)</option>' +
+            networkInterfaces.map(iface =>
+                `<option value="${iface.name}" ${iface.state === 'up' ? 'class="fw-bold"' : ''}>
+                    ${iface.name} ${iface.state === 'up' ? '●' : ''}
+                </option>`
+            ).join('');
+        if (currentVal) select.value = currentVal;
+    });
+}
+
 function addRouteInput() {
     const container = document.getElementById('routes-container');
     const div = document.createElement('div');
-    div.className = 'input-group mb-2';
+    div.className = 'route-row mb-2 d-flex gap-2 align-items-center';
     div.innerHTML = `
-        <input type="text" class="form-control route-input" placeholder="192.168.1.0/24">
+        <input type="text" class="form-control route-network" placeholder="192.168.1.0/24" style="flex: 2">
+        <select class="form-select route-interface" style="flex: 1">
+            <option value="">Auto (default)</option>
+        </select>
         <button class="btn btn-outline-danger btn-remove-route" type="button">
             <i class="ti ti-minus"></i>
         </button>
     `;
+    // Populate interface options
+    const select = div.querySelector('.route-interface');
+    networkInterfaces.forEach(iface => {
+        const opt = document.createElement('option');
+        opt.value = iface.name;
+        opt.textContent = `${iface.name} ${iface.state === 'up' ? '●' : ''}`;
+        select.appendChild(opt);
+    });
     div.querySelector('.btn-remove-route').addEventListener('click', () => div.remove());
     container.appendChild(div);
 }
@@ -226,9 +266,11 @@ async function createInstance() {
     // Collect routes for split tunnel
     let routes = [];
     if (tunnelMode === 'split') {
-        document.querySelectorAll('.route-input').forEach(input => {
-            if (input.value.trim()) {
-                routes.push({ network: input.value.trim() });
+        document.querySelectorAll('.route-row').forEach(row => {
+            const network = row.querySelector('.route-network')?.value.trim();
+            const iface = row.querySelector('.route-interface')?.value;
+            if (network) {
+                routes.push({ network, interface: iface || null });
             }
         });
     }
@@ -323,61 +365,85 @@ async function renderInstanceDetail(container) {
                 </div>
             </div>
             
-            <!-- Clients Card -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center w-100">
-                        <h3 class="card-title"><i class="ti ti-users me-2"></i>Client VPN (${clients.length})</h3>
-                        <button class="btn btn-primary" id="btn-new-client">
-                            <i class="ti ti-user-plus me-1"></i>Nuovo Client
-                        </button>
+            <!-- Tabs for Clients and Firewall -->
+            <ul class="nav nav-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="tab-clients" data-bs-toggle="tab" data-bs-target="#pane-clients" type="button">
+                        <i class="ti ti-users me-1"></i>Client (${clients.length})
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-firewall" data-bs-toggle="tab" data-bs-target="#pane-firewall" type="button">
+                        <i class="ti ti-shield me-1"></i>Firewall
+                    </button>
+                </li>
+            </ul>
+            
+            <div class="tab-content">
+                <!-- Clients Tab -->
+                <div class="tab-pane fade show active" id="pane-clients" role="tabpanel">
+                    <div class="card card-body border-top-0 rounded-top-0">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="mb-0">Client VPN</h4>
+                            <button class="btn btn-primary" id="btn-new-client">
+                                <i class="ti ti-user-plus me-1"></i>Nuovo Client
+                            </button>
+                        </div>
+                        ${clients.length === 0 ? `
+                            <div class="text-center py-4 text-muted">
+                                <i class="ti ti-users-minus" style="font-size: 2rem;"></i>
+                                <p class="mt-2">Nessun client configurato</p>
+                                <small>Clicca "Nuovo Client" per aggiungerne uno</small>
+                            </div>
+                        ` : `
+                            <div class="table-responsive">
+                                <table class="table table-vcenter">
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>IP Assegnato</th>
+                                            <th>Chiave Pubblica</th>
+                                            <th>Creato</th>
+                                            <th class="w-1">Azioni</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${clients.map(c => `
+                                            <tr>
+                                                <td><strong>${c.name}</strong></td>
+                                                <td><code>${c.allocated_ip}</code></td>
+                                                <td><code class="text-muted">${c.public_key.substring(0, 12)}...</code></td>
+                                                <td>${new Date(c.created_at).toLocaleDateString('it-IT')}</td>
+                                                <td>
+                                                    <div class="btn-group">
+                                                        <button class="btn btn-sm btn-outline-primary" onclick="downloadConfig('${c.name}')" title="Scarica Config">
+                                                            <i class="ti ti-download"></i>
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-secondary" onclick="showQR('${c.name}')" title="QR Code">
+                                                            <i class="ti ti-qrcode"></i>
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger" onclick="revokeClient('${c.name}')" title="Revoca">
+                                                            <i class="ti ti-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `}
                     </div>
                 </div>
-                <div class="card-body">
-                    ${clients.length === 0 ? `
+                
+                <!-- Firewall Tab -->
+                <div class="tab-pane fade" id="pane-firewall" role="tabpanel">
+                    <div class="card card-body border-top-0 rounded-top-0" id="firewall-content">
                         <div class="text-center py-4 text-muted">
-                            <i class="ti ti-users-minus" style="font-size: 2rem;"></i>
-                            <p class="mt-2">Nessun client configurato</p>
-                            <small>Clicca "Nuovo Client" per aggiungerne uno</small>
+                            <i class="ti ti-loader ti-spin" style="font-size: 2rem;"></i>
+                            <p class="mt-2">Caricamento...</p>
                         </div>
-                    ` : `
-                        <div class="table-responsive">
-                            <table class="table table-vcenter">
-                                <thead>
-                                    <tr>
-                                        <th>Nome</th>
-                                        <th>IP Assegnato</th>
-                                        <th>Chiave Pubblica</th>
-                                        <th>Creato</th>
-                                        <th class="w-1">Azioni</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${clients.map(c => `
-                                        <tr>
-                                            <td><strong>${c.name}</strong></td>
-                                            <td><code>${c.allocated_ip}</code></td>
-                                            <td><code class="text-muted">${c.public_key.substring(0, 12)}...</code></td>
-                                            <td>${new Date(c.created_at).toLocaleDateString('it-IT')}</td>
-                                            <td>
-                                                <div class="btn-group">
-                                                    <button class="btn btn-sm btn-outline-primary" onclick="downloadConfig('${c.name}')" title="Scarica Config">
-                                                        <i class="ti ti-download"></i>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-outline-secondary" onclick="showQR('${c.name}')" title="QR Code">
-                                                        <i class="ti ti-qrcode"></i>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-outline-danger" onclick="revokeClient('${c.name}')" title="Revoca">
-                                                        <i class="ti ti-trash"></i>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    `}
+                    </div>
                 </div>
             </div>
         `;
@@ -393,6 +459,18 @@ async function renderInstanceDetail(container) {
                 } catch (err) {
                     showToast(err.message, 'error');
                 }
+            }
+        });
+
+        // Load firewall tab when clicked
+        document.getElementById('tab-firewall')?.addEventListener('shown.bs.tab', async () => {
+            try {
+                const firewallModule = await import('./firewall.js');
+                await firewallModule.init(document.getElementById('firewall-content'), currentInstanceId);
+            } catch (err) {
+                document.getElementById('firewall-content').innerHTML = `
+                    <div class="alert alert-danger">${err.message}</div>
+                `;
             }
         });
     } catch (err) {

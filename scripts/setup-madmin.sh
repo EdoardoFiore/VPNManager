@@ -153,7 +153,16 @@ server {
     root $INSTALL_DIR/frontend;
     index index.html;
     
-    # Static assets
+    # Module static files (served by FastAPI, mounted dynamically)
+    location /static/modules {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_cache_valid 200 1d;
+    }
+    
+    # Core static assets (served directly from filesystem)
     location /static {
         alias $INSTALL_DIR/frontend/assets;
         expires 7d;

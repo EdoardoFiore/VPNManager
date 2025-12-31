@@ -17,12 +17,29 @@ from core.auth.models import User
 
 from .models import (
     WgInstance, WgInstanceCreate, WgInstanceRead,
-    WgClient, WgClientCreate, WgClientRead
+    WgClient, WgClientCreate, WgClientRead,
+    WgGroup, WgGroupCreate, WgGroupRead, WgGroupMember, WgGroupMemberRead,
+    WgGroupRule, WgGroupRuleCreate, WgGroupRuleRead, WgGroupRuleUpdate,
+    RuleOrderUpdate, FirewallPolicyUpdate
 )
 from .service import wireguard_service, WIREGUARD_CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# --- SYSTEM ---
+
+@router.get("/system/interfaces")
+async def get_network_interfaces(
+    _user: User = Depends(require_permission("wireguard.view"))
+):
+    """
+    Return list of physical network interfaces.
+    Used for route interface selection in split tunnel mode.
+    """
+    interfaces = wireguard_service.get_physical_interfaces()
+    return {"interfaces": interfaces}
 
 
 # --- INSTANCES ---
@@ -358,3 +375,332 @@ async def get_client_qr(
     qr_bytes = wireguard_service.generate_qr_code(config)
     
     return StreamingResponse(io.BytesIO(qr_bytes), media_type="image/png")
+
+
+# --- GROUPS ---
+
+@router.get("/instances/{instance_id}/groups", response_model=List[WgGroupRead])
+async def list_groups(
+    instance_id: str,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.view"))
+):
+    """List firewall groups for an instance."""
+    result = await db.execute(
+        select(WgGroup).where(WgGroup.instance_id == instance_id)
+    )
+    groups = result.scalars().all()
+    
+    response = []
+    for g in groups:
+        member_count = await db.execute(
+            select(func.count()).where(WgGroupMember.group_id == g.id)
+        )
+        rule_count = await db.execute(
+            select(func.count()).where(WgGroupRule.group_id == g.id)
+        )
+        response.append(WgGroupRead(
+            id=g.id, instance_id=g.instance_id, name=g.name, description=g.description,
+            member_count=member_count.scalar() or 0,
+            rule_count=rule_count.scalar() or 0
+        ))
+    return response
+
+
+@router.post("/instances/{instance_id}/groups", response_model=WgGroupRead, status_code=201)
+async def create_group(
+    instance_id: str,
+    data: WgGroupCreate,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Create a new firewall group."""
+    result = await db.execute(select(WgInstance).where(WgInstance.id == instance_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(404, "Istanza non trovata")
+    
+    group_id = f"{instance_id}_{data.name.lower().replace(' ', '_')}"
+    
+    existing = await db.execute(select(WgGroup).where(WgGroup.id == group_id))
+    if existing.scalar_one_or_none():
+        raise HTTPException(400, "Gruppo già esistente")
+    
+    group = WgGroup(id=group_id, instance_id=instance_id, name=data.name, description=data.description)
+    db.add(group)
+    await db.commit()
+    
+    return WgGroupRead(id=group.id, instance_id=group.instance_id, name=group.name, description=group.description)
+
+
+@router.delete("/instances/{instance_id}/groups/{group_id}", status_code=204)
+async def delete_group(
+    instance_id: str,
+    group_id: str,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Delete a firewall group."""
+    result = await db.execute(
+        select(WgGroup).where((WgGroup.id == group_id) & (WgGroup.instance_id == instance_id))
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(404, "Gruppo non trovato")
+    
+    await db.delete(group)
+    await db.commit()
+    
+    # Reapply firewall rules
+    wireguard_service.apply_group_firewall_rules(instance_id, db)
+
+
+# --- MEMBERS ---
+
+@router.get("/instances/{instance_id}/groups/{group_id}/members", response_model=List[WgGroupMemberRead])
+async def list_members(
+    instance_id: str,
+    group_id: str,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.view"))
+):
+    """List members of a group."""
+    result = await db.execute(
+        select(WgGroupMember, WgClient)
+        .join(WgClient, WgGroupMember.client_id == WgClient.id)
+        .where(WgGroupMember.group_id == group_id)
+    )
+    return [
+        WgGroupMemberRead(client_id=m.client_id, client_name=c.name, client_ip=c.allocated_ip)
+        for m, c in result.all()
+    ]
+
+
+@router.post("/instances/{instance_id}/groups/{group_id}/members", status_code=201)
+async def add_member(
+    instance_id: str,
+    group_id: str,
+    client_id: str,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Add a client to a group."""
+    import uuid as uuid_module
+    
+    # Validate group exists
+    result = await db.execute(
+        select(WgGroup).where((WgGroup.id == group_id) & (WgGroup.instance_id == instance_id))
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(404, "Gruppo non trovato")
+    
+    # Validate client exists
+    client_uuid = uuid_module.UUID(client_id)
+    result = await db.execute(
+        select(WgClient).where((WgClient.id == client_uuid) & (WgClient.instance_id == instance_id))
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(404, "Client non trovato")
+    
+    # Check if already member
+    existing = await db.execute(
+        select(WgGroupMember).where(
+            (WgGroupMember.group_id == group_id) & (WgGroupMember.client_id == client_uuid)
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(400, "Client già membro del gruppo")
+    
+    member = WgGroupMember(group_id=group_id, client_id=client_uuid)
+    db.add(member)
+    await db.commit()
+    
+    return {"status": "added"}
+
+
+@router.delete("/instances/{instance_id}/groups/{group_id}/members/{client_id}", status_code=204)
+async def remove_member(
+    instance_id: str,
+    group_id: str,
+    client_id: str,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Remove a client from a group."""
+    import uuid as uuid_module
+    client_uuid = uuid_module.UUID(client_id)
+    
+    result = await db.execute(
+        select(WgGroupMember).where(
+            (WgGroupMember.group_id == group_id) & (WgGroupMember.client_id == client_uuid)
+        )
+    )
+    member = result.scalar_one_or_none()
+    if not member:
+        raise HTTPException(404, "Membro non trovato")
+    
+    await db.delete(member)
+    await db.commit()
+
+
+# --- RULES ---
+
+@router.get("/instances/{instance_id}/groups/{group_id}/rules", response_model=List[WgGroupRuleRead])
+async def list_rules(
+    instance_id: str,
+    group_id: str,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.view"))
+):
+    """List rules for a group."""
+    result = await db.execute(
+        select(WgGroupRule).where(WgGroupRule.group_id == group_id).order_by(WgGroupRule.order)
+    )
+    return [
+        WgGroupRuleRead(
+            id=r.id, action=r.action, protocol=r.protocol, port=r.port,
+            destination=r.destination, description=r.description, order=r.order
+        ) for r in result.scalars().all()
+    ]
+
+
+@router.post("/instances/{instance_id}/groups/{group_id}/rules", response_model=WgGroupRuleRead, status_code=201)
+async def create_rule(
+    instance_id: str,
+    group_id: str,
+    data: WgGroupRuleCreate,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Create a new firewall rule."""
+    result = await db.execute(
+        select(WgGroup).where((WgGroup.id == group_id) & (WgGroup.instance_id == instance_id))
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(404, "Gruppo non trovato")
+    
+    # Get max order
+    max_order = await db.execute(
+        select(func.max(WgGroupRule.order)).where(WgGroupRule.group_id == group_id)
+    )
+    next_order = (max_order.scalar() or -1) + 1
+    
+    rule = WgGroupRule(
+        group_id=group_id, action=data.action, protocol=data.protocol,
+        port=data.port, destination=data.destination, description=data.description,
+        order=next_order
+    )
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    
+    return WgGroupRuleRead(
+        id=rule.id, action=rule.action, protocol=rule.protocol, port=rule.port,
+        destination=rule.destination, description=rule.description, order=rule.order
+    )
+
+
+@router.patch("/instances/{instance_id}/groups/{group_id}/rules/{rule_id}", response_model=WgGroupRuleRead)
+async def update_rule(
+    instance_id: str,
+    group_id: str,
+    rule_id: str,
+    data: WgGroupRuleUpdate,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Update a firewall rule."""
+    import uuid as uuid_module
+    
+    result = await db.execute(
+        select(WgGroupRule).where(
+            (WgGroupRule.id == uuid_module.UUID(rule_id)) & (WgGroupRule.group_id == group_id)
+        )
+    )
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(404, "Regola non trovata")
+    
+    for field, value in data.dict(exclude_unset=True).items():
+        setattr(rule, field, value)
+    
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    
+    return WgGroupRuleRead(
+        id=rule.id, action=rule.action, protocol=rule.protocol, port=rule.port,
+        destination=rule.destination, description=rule.description, order=rule.order
+    )
+
+
+@router.delete("/instances/{instance_id}/groups/{group_id}/rules/{rule_id}", status_code=204)
+async def delete_rule(
+    instance_id: str,
+    group_id: str,
+    rule_id: str,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Delete a firewall rule."""
+    import uuid as uuid_module
+    
+    result = await db.execute(
+        select(WgGroupRule).where(
+            (WgGroupRule.id == uuid_module.UUID(rule_id)) & (WgGroupRule.group_id == group_id)
+        )
+    )
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(404, "Regola non trovata")
+    
+    await db.delete(rule)
+    await db.commit()
+
+
+@router.put("/instances/{instance_id}/groups/{group_id}/rules/order")
+async def reorder_rules(
+    instance_id: str,
+    group_id: str,
+    orders: List[RuleOrderUpdate],
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Update rule order."""
+    for item in orders:
+        result = await db.execute(
+            select(WgGroupRule).where(
+                (WgGroupRule.id == item.id) & (WgGroupRule.group_id == group_id)
+            )
+        )
+        rule = result.scalar_one_or_none()
+        if rule:
+            rule.order = item.order
+            db.add(rule)
+    
+    await db.commit()
+    return {"status": "updated"}
+
+
+# --- FIREWALL POLICY ---
+
+@router.patch("/instances/{instance_id}/firewall-policy")
+async def update_firewall_policy(
+    instance_id: str,
+    data: FirewallPolicyUpdate,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Update instance default firewall policy."""
+    result = await db.execute(select(WgInstance).where(WgInstance.id == instance_id))
+    instance = result.scalar_one_or_none()
+    if not instance:
+        raise HTTPException(404, "Istanza non trovata")
+    
+    if data.policy not in ["ACCEPT", "DROP"]:
+        raise HTTPException(400, "Policy deve essere ACCEPT o DROP")
+    
+    instance.firewall_default_policy = data.policy
+    db.add(instance)
+    await db.commit()
+    
+    return {"status": "updated", "policy": data.policy}

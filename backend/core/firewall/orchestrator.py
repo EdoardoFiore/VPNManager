@@ -153,8 +153,8 @@ class FirewallOrchestrator:
         )
         module_chains = result.scalars().all()
         
-        # Get the core MADMIN chain for this parent
-        core_chain = iptables.CHAIN_MAP.get(parent_chain)
+        # Get the core MADMIN chain for this parent and table
+        core_chain = iptables.get_madmin_chain(table_name, parent_chain)
         
         # Remove all existing jumps to module chains and core chain
         for mc in module_chains:
@@ -344,10 +344,12 @@ class FirewallOrchestrator:
         """
         success = True
         
-        # Flush core chains
-        for chain_name in iptables.CHAIN_MAP.values():
-            if not iptables.flush_chain(chain_name, "filter"):
-                success = False
+        # Flush all core MADMIN chains across all tables
+        for table, chains in iptables.CHAIN_MAP.items():
+            for chain_name in chains.values():
+                if not iptables.flush_chain(chain_name, table):
+                    logger.warning(f"Failed to flush chain {chain_name} in table {table}")
+                    success = False
         
         # Get all enabled rules ordered by chain and order
         result = await session.execute(
@@ -359,9 +361,10 @@ class FirewallOrchestrator:
         
         # Apply each rule
         for rule in rules:
-            target_chain = iptables.CHAIN_MAP.get(rule.chain)
+            # Get the MADMIN chain for this rule's table and chain
+            target_chain = iptables.get_madmin_chain(rule.table_name, rule.chain)
             if not target_chain:
-                logger.warning(f"Unknown chain {rule.chain} for rule {rule.id}")
+                logger.warning(f"Unknown chain {rule.chain} in table {rule.table_name} for rule {rule.id}")
                 continue
             
             if not iptables.add_rule(

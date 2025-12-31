@@ -160,3 +160,63 @@ class WgClientRead(SQLModel):
     public_key: str
     created_at: datetime
     last_handshake: Optional[datetime]
+
+
+# --- Group Schemas ---
+
+class WgGroupCreate(SQLModel):
+    name: str
+    description: str = ""
+
+
+class WgGroupRead(SQLModel):
+    id: str
+    instance_id: str
+    name: str
+    description: str
+    member_count: int = 0
+    rule_count: int = 0
+
+
+class WgGroupMemberRead(SQLModel):
+    client_id: uuid.UUID
+    client_name: str
+    client_ip: str
+
+
+# --- Rule Schemas ---
+
+class WgGroupRuleCreate(SQLModel):
+    action: str  # ACCEPT, DROP
+    protocol: str  # tcp, udp, icmp, all
+    port: Optional[str] = None
+    destination: str
+    description: str = ""
+
+
+class WgGroupRuleRead(SQLModel):
+    id: uuid.UUID
+    action: str
+    protocol: str
+    port: Optional[str]
+    destination: str
+    description: str
+    order: int
+
+
+class WgGroupRuleUpdate(SQLModel):
+    action: Optional[str] = None
+    protocol: Optional[str] = None
+    port: Optional[str] = None
+    destination: Optional[str] = None
+    description: Optional[str] = None
+
+
+class RuleOrderUpdate(SQLModel):
+    id: uuid.UUID
+    order: int
+
+
+class FirewallPolicyUpdate(SQLModel):
+    policy: str  # ACCEPT or DROP
+

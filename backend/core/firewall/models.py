@@ -13,16 +13,22 @@ class MachineFirewallRule(SQLModel, table=True):
     """
     Machine-level firewall rule managed by the core.
     
-    Rules are applied to MADMIN_INPUT, MADMIN_OUTPUT, or MADMIN_FORWARD chains.
-    These chains are jumped to from the main iptables chains.
+    Rules can target any table (filter, nat, mangle, raw) and chain.
+    They are routed to the appropriate MADMIN_* chain based on table and chain.
+    
+    Supported chains per table:
+    - filter: INPUT, OUTPUT, FORWARD
+    - nat: PREROUTING, OUTPUT, POSTROUTING
+    - mangle: PREROUTING, INPUT, FORWARD, OUTPUT, POSTROUTING
+    - raw: PREROUTING, OUTPUT
     """
     __tablename__ = "machine_firewall_rule"
     
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     
     # Rule specification
-    chain: str = Field(max_length=20, index=True)  # INPUT, OUTPUT, FORWARD
-    action: str = Field(max_length=20)  # ACCEPT, DROP, REJECT, LOG, etc.
+    chain: str = Field(max_length=20, index=True)  # INPUT, OUTPUT, FORWARD, PREROUTING, POSTROUTING
+    action: str = Field(max_length=20)  # ACCEPT, DROP, REJECT, MASQUERADE, SNAT, DNAT, etc.
     protocol: Optional[str] = Field(default=None, max_length=10)  # tcp, udp, icmp, all
     
     # Source/Destination
@@ -41,7 +47,7 @@ class MachineFirewallRule(SQLModel, table=True):
     
     # Metadata
     comment: Optional[str] = Field(default=None, max_length=255)
-    table_name: str = Field(default="filter", max_length=20)  # filter, nat, mangle
+    table_name: str = Field(default="filter", max_length=20)  # filter, nat, mangle, raw
     order: int = Field(default=0, index=True)  # Lower = applied first
     enabled: bool = Field(default=True)
     

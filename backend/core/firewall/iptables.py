@@ -3,35 +3,90 @@ MADMIN Iptables Manager
 
 Low-level wrapper for iptables commands.
 Handles chain creation, rule application, and command execution.
+Supports all standard iptables tables: filter, nat, mangle, raw.
 """
 import subprocess
 import logging
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Chain name constants
+# =============================================================================
+# CHAIN CONSTANTS
+# =============================================================================
+
+# Filter table chains
 MADMIN_INPUT_CHAIN = "MADMIN_INPUT"
 MADMIN_OUTPUT_CHAIN = "MADMIN_OUTPUT"
 MADMIN_FORWARD_CHAIN = "MADMIN_FORWARD"
 
-# Mapping from logical chain names to MADMIN chains
-CHAIN_MAP = {
-    "INPUT": MADMIN_INPUT_CHAIN,
-    "OUTPUT": MADMIN_OUTPUT_CHAIN,
-    "FORWARD": MADMIN_FORWARD_CHAIN,
+# NAT table chains
+MADMIN_PREROUTING_NAT_CHAIN = "MADMIN_PREROUTING"
+MADMIN_POSTROUTING_NAT_CHAIN = "MADMIN_POSTROUTING"
+MADMIN_OUTPUT_NAT_CHAIN = "MADMIN_OUTPUT_NAT"
+
+# Mangle table chains
+MADMIN_PREROUTING_MANGLE_CHAIN = "MADMIN_PREROUTING_MANGLE"
+MADMIN_INPUT_MANGLE_CHAIN = "MADMIN_INPUT_MANGLE"
+MADMIN_FORWARD_MANGLE_CHAIN = "MADMIN_FORWARD_MANGLE"
+MADMIN_OUTPUT_MANGLE_CHAIN = "MADMIN_OUTPUT_MANGLE"
+MADMIN_POSTROUTING_MANGLE_CHAIN = "MADMIN_POSTROUTING_MANGLE"
+
+# Raw table chains
+MADMIN_PREROUTING_RAW_CHAIN = "MADMIN_PREROUTING_RAW"
+MADMIN_OUTPUT_RAW_CHAIN = "MADMIN_OUTPUT_RAW"
+
+
+# =============================================================================
+# CHAIN MAPPING
+# =============================================================================
+
+# Extended mapping: (logical_chain, table) -> MADMIN chain name
+# This allows rules to specify table_name and chain, and we route to correct MADMIN chain
+CHAIN_MAP: Dict[str, Dict[str, str]] = {
+    "filter": {
+        "INPUT": MADMIN_INPUT_CHAIN,
+        "OUTPUT": MADMIN_OUTPUT_CHAIN,
+        "FORWARD": MADMIN_FORWARD_CHAIN,
+    },
+    "nat": {
+        "PREROUTING": MADMIN_PREROUTING_NAT_CHAIN,
+        "OUTPUT": MADMIN_OUTPUT_NAT_CHAIN,
+        "POSTROUTING": MADMIN_POSTROUTING_NAT_CHAIN,
+    },
+    "mangle": {
+        "PREROUTING": MADMIN_PREROUTING_MANGLE_CHAIN,
+        "INPUT": MADMIN_INPUT_MANGLE_CHAIN,
+        "FORWARD": MADMIN_FORWARD_MANGLE_CHAIN,
+        "OUTPUT": MADMIN_OUTPUT_MANGLE_CHAIN,
+        "POSTROUTING": MADMIN_POSTROUTING_MANGLE_CHAIN,
+    },
+    "raw": {
+        "PREROUTING": MADMIN_PREROUTING_RAW_CHAIN,
+        "OUTPUT": MADMIN_OUTPUT_RAW_CHAIN,
+    },
 }
 
+# Helper function to get MADMIN chain for a given table and parent
+def get_madmin_chain(table: str, parent_chain: str) -> Optional[str]:
+    """Get the MADMIN chain name for a given table and parent chain."""
+    table_map = CHAIN_MAP.get(table, {})
+    return table_map.get(parent_chain)
+
+
+# =============================================================================
+# LOW-LEVEL IPTABLES OPERATIONS
+# =============================================================================
 
 def _run_iptables(table: str, args: List[str], suppress_errors: bool = False) -> Tuple[bool, str]:
     """
     Execute an iptables command.
     
     Args:
-        table: iptables table (filter, nat, mangle)
+        table: iptables table (filter, nat, mangle, raw)
         args: Command arguments (without 'iptables -t table')
         suppress_errors: If True, don't log errors
     
@@ -138,7 +193,7 @@ def ensure_jump_rule(
     
     success, _ = _run_iptables(table, args)
     if success:
-        logger.info(f"Added jump from {source_chain} to {target_chain}")
+        logger.info(f"Added jump from {source_chain} to {target_chain} in table {table}")
     return success
 
 
@@ -147,6 +202,10 @@ def remove_jump_rule(source_chain: str, target_chain: str, table: str = "filter"
     success, _ = _run_iptables(table, ["-D", source_chain, "-j", target_chain], suppress_errors=True)
     return success
 
+
+# =============================================================================
+# RULE BUILDING
+# =============================================================================
 
 def build_rule_args(
     chain: str,
@@ -166,7 +225,7 @@ def build_rule_args(
     
     Args:
         chain: Target chain name
-        action: Rule action (ACCEPT, DROP, REJECT, etc.)
+        action: Rule action (ACCEPT, DROP, REJECT, MASQUERADE, etc.)
         protocol: Protocol (tcp, udp, icmp, all)
         source: Source IP/CIDR
         destination: Destination IP/CIDR
@@ -278,6 +337,10 @@ def delete_rule_by_spec(
     return success
 
 
+# =============================================================================
+# PERSISTENCE
+# =============================================================================
+
 def save_rules() -> bool:
     """
     Save current iptables rules to persistent storage.
@@ -317,31 +380,49 @@ def save_rules() -> bool:
             return False
 
 
+# =============================================================================
+# INITIALIZATION
+# =============================================================================
+
 def initialize_core_chains() -> bool:
     """
-    Initialize MADMIN core chains.
-    Creates MADMIN_INPUT, MADMIN_OUTPUT, MADMIN_FORWARD chains
-    and sets up jumps from the main chains.
+    Initialize all MADMIN core chains across all tables.
+    
+    Creates chains for:
+    - filter: MADMIN_INPUT, MADMIN_OUTPUT, MADMIN_FORWARD
+    - nat: MADMIN_PREROUTING, MADMIN_OUTPUT_NAT, MADMIN_POSTROUTING
+    - mangle: MADMIN_*_MANGLE for all 5 chains
+    - raw: MADMIN_PREROUTING_RAW, MADMIN_OUTPUT_RAW
+    
+    And sets up jump rules from each parent chain to its MADMIN chain.
     """
+    logger.info("Initializing MADMIN core firewall chains for all tables...")
     success = True
     
-    for parent, madmin_chain in CHAIN_MAP.items():
-        # Create or flush the chain
-        if not create_or_flush_chain(madmin_chain, "filter"):
-            logger.error(f"Failed to create chain {madmin_chain}")
-            success = False
-            continue
-        
-        # Ensure jump rule exists - use position 1 (first) for initial setup
-        # On fresh systems this works, and we append if insert fails
-        if not ensure_jump_rule(parent, madmin_chain, "filter", position=1):
-            # Fallback to append if insert at position 1 fails
-            logger.warning(f"Insert at position 1 failed, trying append for {madmin_chain}")
-            if not ensure_jump_rule(parent, madmin_chain, "filter", position=None):
-                logger.error(f"Failed to add jump from {parent} to {madmin_chain}")
+    for table, chains in CHAIN_MAP.items():
+        for parent_chain, madmin_chain in chains.items():
+            # Create or flush the MADMIN chain
+            if not create_or_flush_chain(madmin_chain, table):
+                logger.error(f"Failed to create chain {madmin_chain} in table {table}")
                 success = False
+                continue
+            
+            # Ensure jump rule exists from parent to MADMIN chain
+            # Try position 1 first (highest priority), fallback to append
+            if not ensure_jump_rule(parent_chain, madmin_chain, table, position=1):
+                logger.warning(f"Insert at position 1 failed for {madmin_chain}, trying append")
+                if not ensure_jump_rule(parent_chain, madmin_chain, table, position=None):
+                    logger.error(f"Failed to add jump from {parent_chain} to {madmin_chain} in table {table}")
+                    success = False
     
     if success:
-        logger.info("Core firewall chains initialized successfully")
+        logger.info("All MADMIN core chains initialized successfully")
+        logger.info(f"  filter: {list(CHAIN_MAP['filter'].values())}")
+        logger.info(f"  nat: {list(CHAIN_MAP['nat'].values())}")
+        logger.info(f"  mangle: {list(CHAIN_MAP['mangle'].values())}")
+        logger.info(f"  raw: {list(CHAIN_MAP['raw'].values())}")
+    else:
+        logger.warning("Some MADMIN chains failed to initialize")
     
     return success
+
