@@ -11,6 +11,7 @@ let currentInstanceId = null;
 let currentGroupId = null;
 let groups = [];
 let clients = [];
+let instance = null;  // Current instance data including firewall_default_policy
 
 /**
  * Initialize the firewall view for an instance
@@ -20,13 +21,24 @@ export async function init(container, instanceId) {
     container.innerHTML = loadingSpinner();
 
     try {
-        // Load groups and clients
-        [groups, clients] = await Promise.all([
+        // Load instance, groups, and clients
+        [instance, groups, clients] = await Promise.all([
+            apiGet(`/modules/wireguard/instances/${instanceId}`),
             apiGet(`/modules/wireguard/instances/${instanceId}/groups`),
             apiGet(`/modules/wireguard/instances/${instanceId}/clients`)
         ]);
 
+        // Auto-select first group if available
+        if (groups.length > 0 && !currentGroupId) {
+            currentGroupId = groups[0].id;
+        }
+
         render(container);
+
+        // Load group details if a group is selected
+        if (currentGroupId) {
+            loadGroupDetails();
+        }
     } catch (err) {
         container.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
     }
@@ -34,6 +46,26 @@ export async function init(container, instanceId) {
 
 function render(container) {
     container.innerHTML = `
+        <!-- Instance Default Policy -->
+        <div class="card mb-3">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>Policy di default per client senza gruppo:</strong>
+                    <span class="badge ${instance?.firewall_default_policy === 'DROP' ? 'bg-danger' : 'bg-success'} ms-2">
+                        ${instance?.firewall_default_policy || 'ACCEPT'}
+                    </span>
+                </div>
+                <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="default-policy" id="policy-accept" value="ACCEPT" 
+                           ${instance?.firewall_default_policy !== 'DROP' ? 'checked' : ''}>
+                    <label class="btn btn-outline-success btn-sm" for="policy-accept">ACCEPT</label>
+                    <input type="radio" class="btn-check" name="default-policy" id="policy-drop" value="DROP"
+                           ${instance?.firewall_default_policy === 'DROP' ? 'checked' : ''}>
+                    <label class="btn btn-outline-danger btn-sm" for="policy-drop">DROP</label>
+                </div>
+            </div>
+        </div>
+        
         <div class="row">
             <!-- Groups List -->
             <div class="col-md-4">
@@ -100,7 +132,7 @@ function render(container) {
                     </div>
                     <div class="modal-footer">
                         <button class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-                        <button class="btn btn-primary" id="btn-add-member">Aggiungi</button>
+                        <button class="btn btn-primary" id="btn-confirm-add-member">Aggiungi</button>
                     </div>
                 </div>
             </div>
@@ -138,7 +170,7 @@ function render(container) {
                                 <label class="form-label">Destinazione</label>
                                 <input type="text" class="form-control" id="rule-destination" placeholder="0.0.0.0/0">
                             </div>
-                            <div class="col-4">
+                            <div class="col-4" id="port-field-container">
                                 <label class="form-label">Porta</label>
                                 <input type="text" class="form-control" id="rule-port" placeholder="80">
                             </div>
@@ -173,9 +205,9 @@ function renderGroupsList() {
                     <strong>${g.name}</strong>
                     <small class="d-block ${g.id === currentGroupId ? 'text-white-50' : 'text-muted'}">${g.description || 'Nessuna descrizione'}</small>
                 </div>
-                <div>
-                    <span class="badge bg-secondary">${g.member_count} <i class="ti ti-users"></i></span>
-                    <span class="badge bg-secondary">${g.rule_count} <i class="ti ti-shield"></i></span>
+                <div class="d-flex gap-1">
+                    <span class="badge bg-blue-lt text-blue">${g.member_count} <i class="ti ti-users"></i></span>
+                    <span class="badge bg-green-lt text-green">${g.rule_count} <i class="ti ti-shield"></i></span>
                 </div>
             </div>
         </a>
@@ -214,7 +246,7 @@ function renderGroupDetails() {
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0"><i class="ti ti-users me-2"></i>Membri</h5>
-                <button class="btn btn-sm btn-primary" id="btn-add-member">
+                <button class="btn btn-sm btn-primary" id="btn-show-add-member">
                     <i class="ti ti-user-plus me-1"></i>Aggiungi
                 </button>
             </div>
@@ -286,6 +318,7 @@ function renderRules(rules) {
         <table class="table table-vcenter table-sm">
             <thead>
                 <tr>
+                    <th style="width: 30px"></th>
                     <th style="width: 40px">#</th>
                     <th>Azione</th>
                     <th>Proto</th>
@@ -297,7 +330,8 @@ function renderRules(rules) {
             </thead>
             <tbody id="rules-tbody">
                 ${rules.map((r, i) => `
-                    <tr data-rule-id="${r.id}">
+                    <tr data-rule-id="${r.id}" data-order="${r.order}">
+                        <td class="cursor-move text-muted"><i class="ti ti-grip-vertical"></i></td>
                         <td class="text-muted">${i + 1}</td>
                         <td><span class="badge ${r.action === 'ACCEPT' ? 'bg-success' : 'bg-danger'}">${r.action}</span></td>
                         <td><code>${r.protocol}</code></td>
@@ -314,6 +348,9 @@ function renderRules(rules) {
             </tbody>
         </table>
     `;
+
+    // Initialize drag-drop sorting
+    initRuleSorting();
 }
 
 function setupEventHandlers(container) {
@@ -369,13 +406,13 @@ function setupEventHandlers(container) {
         }
     });
 
-    // Add member button
-    document.getElementById('btn-add-member')?.addEventListener('click', () => {
+    // Show add member modal
+    document.getElementById('btn-show-add-member')?.addEventListener('click', () => {
         new bootstrap.Modal(document.getElementById('modal-add-member')).show();
     });
 
-    // Add member submit
-    document.getElementById('btn-add-member')?.addEventListener('click', async () => {
+    // Confirm add member (in modal)
+    document.getElementById('btn-confirm-add-member')?.addEventListener('click', async () => {
         const clientId = document.getElementById('member-client-select').value;
         if (!clientId) {
             showToast('Seleziona un client', 'error');
@@ -394,16 +431,32 @@ function setupEventHandlers(container) {
 
     // Add rule button
     document.getElementById('btn-add-rule')?.addEventListener('click', () => {
+        // Reset port field visibility
+        document.getElementById('port-field-container').style.display = 'block';
+        document.getElementById('rule-protocol').value = 'all';
+        document.getElementById('port-field-container').style.display = 'none';
         new bootstrap.Modal(document.getElementById('modal-add-rule')).show();
+    });
+
+    // Protocol change - toggle port field visibility
+    document.getElementById('rule-protocol')?.addEventListener('change', (e) => {
+        const portContainer = document.getElementById('port-field-container');
+        if (e.target.value === 'all' || e.target.value === 'icmp') {
+            portContainer.style.display = 'none';
+            document.getElementById('rule-port').value = '';
+        } else {
+            portContainer.style.display = 'block';
+        }
     });
 
     // Create rule
     document.getElementById('btn-create-rule')?.addEventListener('click', async () => {
+        const protocol = document.getElementById('rule-protocol').value;
         const data = {
             action: document.getElementById('rule-action').value,
-            protocol: document.getElementById('rule-protocol').value,
+            protocol: protocol,
             destination: document.getElementById('rule-destination').value.trim() || '0.0.0.0/0',
-            port: document.getElementById('rule-port').value.trim() || null,
+            port: (protocol === 'tcp' || protocol === 'udp') ? (document.getElementById('rule-port').value.trim() || null) : null,
             description: document.getElementById('rule-description').value.trim()
         };
 
@@ -442,3 +495,66 @@ window.deleteRule = async (ruleId) => {
         }
     }
 };
+
+// Initialize drag-drop sorting for rules
+function initRuleSorting() {
+    const tbody = document.getElementById('rules-tbody');
+    if (!tbody || typeof Sortable === 'undefined') return;
+
+    new Sortable(tbody, {
+        animation: 150,
+        handle: '.cursor-move',
+        ghostClass: 'bg-light',
+        onEnd: async function (evt) {
+            // Collect new order
+            const rows = tbody.querySelectorAll('tr[data-rule-id]');
+            const orders = [];
+            rows.forEach((row, index) => {
+                orders.push({
+                    id: row.dataset.ruleId,
+                    order: index
+                });
+            });
+
+            // Update order numbers in UI
+            rows.forEach((row, index) => {
+                row.querySelector('td:nth-child(2)').textContent = index + 1;
+            });
+
+            // Save to API
+            try {
+                await apiPut(`/modules/wireguard/instances/${currentInstanceId}/groups/${currentGroupId}/rules/order`, orders);
+                showToast('Ordine aggiornato', 'success');
+            } catch (err) {
+                showToast(err.message, 'error');
+                loadGroupDetails(); // Reload on error
+            }
+        }
+    });
+}
+
+// Handle policy change
+document.addEventListener('change', async (e) => {
+    if (e.target.name === 'default-policy') {
+        const newPolicy = e.target.value;
+        try {
+            await apiPatch(`/modules/wireguard/instances/${currentInstanceId}/firewall-policy`, { policy: newPolicy });
+            instance.firewall_default_policy = newPolicy;
+            showToast(`Policy aggiornata a ${newPolicy}`, 'success');
+
+            // Update badge display
+            const badge = document.querySelector('.card-body .badge:not(.btn-check + label)');
+            if (badge) {
+                badge.className = `badge ${newPolicy === 'DROP' ? 'bg-danger' : 'bg-success'} ms-2`;
+                badge.textContent = newPolicy;
+            }
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+});
+
+// Add CSS for cursor
+const style = document.createElement('style');
+style.textContent = '.cursor-move { cursor: move; }';
+document.head.appendChild(style);

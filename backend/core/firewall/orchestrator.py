@@ -140,9 +140,9 @@ class FirewallOrchestrator:
         table_name: str = "filter"
     ) -> None:
         """
-        Rebuild jump rules for a parent chain based on module priorities.
+        Rebuild jump rules for a parent chain based on priorities.
         
-        Order: Module chains (by priority) -> Core MADMIN chain
+        Order: Core MADMIN chain first (highest priority) -> Module chains (by priority)
         """
         # Get all module chains for this parent, ordered by priority
         result = await session.execute(
@@ -162,16 +162,19 @@ class FirewallOrchestrator:
         if core_chain:
             iptables.remove_jump_rule(parent_chain, core_chain, table_name)
         
-        # Re-add jumps in priority order (using insert at position 1)
-        # Module chains first, then core chain
+        # Re-add jumps in correct priority order
+        # MADMIN core chain FIRST (highest priority), then modules by priority
         position = 1
+        
+        # Core chain comes first (machine firewall rules have priority)
+        if core_chain:
+            iptables.ensure_jump_rule(parent_chain, core_chain, table_name, position)
+            position += 1
+        
+        # Module chains follow in priority order (lower priority number = higher priority)
         for mc in module_chains:
             iptables.ensure_jump_rule(parent_chain, mc.chain_name, table_name, position)
             position += 1
-        
-        # Core chain comes last
-        if core_chain:
-            iptables.ensure_jump_rule(parent_chain, core_chain, table_name, position)
     
     # --- Rule Management ---
     

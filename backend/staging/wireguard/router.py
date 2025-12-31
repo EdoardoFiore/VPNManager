@@ -42,6 +42,26 @@ async def get_network_interfaces(
     return {"interfaces": interfaces}
 
 
+@router.post("/system/register-chains")
+async def register_module_chains(
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """
+    Register WireGuard module chains with the core firewall orchestrator.
+    This enables chain priority management via the UI.
+    Should be called once after module installation.
+    """
+    from .service import WireGuardService
+    
+    success = await WireGuardService.register_module_chains(db)
+    if success:
+        await db.commit()
+        return {"status": "ok", "message": "Chains registered successfully"}
+    else:
+        raise HTTPException(500, "Failed to register chains")
+
+
 # --- INSTANCES ---
 
 @router.get("/instances", response_model=List[WgInstanceRead])
@@ -450,8 +470,8 @@ async def delete_group(
     await db.delete(group)
     await db.commit()
     
-    # Reapply firewall rules
-    wireguard_service.apply_group_firewall_rules(instance_id, db)
+    # Remove group firewall rules
+    await wireguard_service.remove_group_firewall_rules(instance_id, group_id, db)
 
 
 # --- MEMBERS ---
@@ -514,6 +534,9 @@ async def add_member(
     db.add(member)
     await db.commit()
     
+    # Apply firewall rules for this instance
+    await wireguard_service.apply_group_firewall_rules(instance_id, db)
+    
     return {"status": "added"}
 
 
@@ -540,6 +563,9 @@ async def remove_member(
     
     await db.delete(member)
     await db.commit()
+    
+    # Reapply firewall rules
+    await wireguard_service.apply_group_firewall_rules(instance_id, db)
 
 
 # --- RULES ---
@@ -593,6 +619,9 @@ async def create_rule(
     await db.commit()
     await db.refresh(rule)
     
+    # Apply firewall rules
+    await wireguard_service.apply_group_firewall_rules(instance_id, db)
+    
     return WgGroupRuleRead(
         id=rule.id, action=rule.action, protocol=rule.protocol, port=rule.port,
         destination=rule.destination, description=rule.description, order=rule.order
@@ -627,6 +656,9 @@ async def update_rule(
     await db.commit()
     await db.refresh(rule)
     
+    # Apply firewall rules
+    await wireguard_service.apply_group_firewall_rules(instance_id, db)
+    
     return WgGroupRuleRead(
         id=rule.id, action=rule.action, protocol=rule.protocol, port=rule.port,
         destination=rule.destination, description=rule.description, order=rule.order
@@ -655,6 +687,9 @@ async def delete_rule(
     
     await db.delete(rule)
     await db.commit()
+    
+    # Reapply firewall rules
+    await wireguard_service.apply_group_firewall_rules(instance_id, db)
 
 
 @router.put("/instances/{instance_id}/groups/{group_id}/rules/order")
@@ -678,6 +713,10 @@ async def reorder_rules(
             db.add(rule)
     
     await db.commit()
+    
+    # Reapply firewall rules with new order
+    await wireguard_service.apply_group_firewall_rules(instance_id, db)
+    
     return {"status": "updated"}
 
 
@@ -702,5 +741,8 @@ async def update_firewall_policy(
     instance.firewall_default_policy = data.policy
     db.add(instance)
     await db.commit()
+    
+    # Reapply firewall rules with new policy
+    await wireguard_service.apply_group_firewall_rules(instance_id, db)
     
     return {"status": "updated", "policy": data.policy}

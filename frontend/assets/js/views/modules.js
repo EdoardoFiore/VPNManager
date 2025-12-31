@@ -4,12 +4,13 @@
  * Manages installed modules, ZIP upload, and staging installation.
  */
 
-import { apiGet, apiPost, apiDelete, apiPatch } from '../api.js';
+import { apiGet, apiPost, apiDelete, apiPatch, apiPut } from '../api.js';
 import { showToast, confirmDialog, formatDate, emptyState, escapeHtml, statusBadge } from '../utils.js';
 import { checkPermission } from '../app.js';
 
 let modules = [];
 let stagingModules = [];
+let moduleChains = [];
 
 export async function render(container) {
     const canManage = checkPermission('modules.manage');
@@ -46,6 +47,7 @@ export async function render(container) {
                                 <div class="spinner-border spinner-border-sm"></div>
                             </div>
                         </div>
+                        <div id="firewall-priority-section" class="mt-4"></div>
                     </div>
                     ${canManage ? `
                     <div class="tab-pane" id="tab-upload">
@@ -83,6 +85,7 @@ export async function render(container) {
     await loadModules();
     if (canManage) {
         await loadStagingModules();
+        await loadModuleChains();
     }
 }
 
@@ -130,6 +133,15 @@ async function loadModules() {
         renderModules();
     } catch (e) {
         showToast(e.message, 'error');
+    }
+}
+
+async function loadModuleChains() {
+    try {
+        moduleChains = await apiGet('/firewall/chains');
+        renderFirewallPriority();
+    } catch (e) {
+        console.error('Failed to load module chains:', e);
     }
 }
 
@@ -236,6 +248,91 @@ function renderModules() {
                 }
             }
         });
+    });
+}
+
+function renderFirewallPriority() {
+    const container = document.getElementById('firewall-priority-section');
+    if (!container) return;
+
+    // Group chains by parent (INPUT, FORWARD, etc)
+    const chainsByParent = {};
+    moduleChains.forEach(c => {
+        if (!chainsByParent[c.parent_chain]) {
+            chainsByParent[c.parent_chain] = [];
+        }
+        chainsByParent[c.parent_chain].push(c);
+    });
+
+    // Sort by priority within each group
+    Object.values(chainsByParent).forEach(chains => {
+        chains.sort((a, b) => a.priority - b.priority);
+    });
+
+    if (moduleChains.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">
+                    <i class="ti ti-shield me-2"></i>Priorità Firewall Moduli
+                </h4>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    L'ordine dei moduli determina la priorità delle loro regole firewall. 
+                    Trascina per riordinare. Le regole MADMIN (firewall macchina) hanno sempre priorità massima.
+                </p>
+                <div class="row">
+                    ${Object.entries(chainsByParent).map(([parent, chains]) => `
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label"><code>${parent}</code></label>
+                            <ul class="list-group" id="priority-list-${parent}" data-parent="${parent}">
+                                ${chains.map((c, idx) => `
+                                    <li class="list-group-item d-flex align-items-center" 
+                                        data-chain-id="${c.id}" data-priority="${c.priority}">
+                                        <i class="ti ti-grip-vertical cursor-move text-muted me-2"></i>
+                                        <span class="badge bg-azure-lt me-2">${idx + 1}</span>
+                                        <span>${c.chain_name.replace('MOD_', '').replace('_', ' ')}</span>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Initialize Sortable for each list
+    Object.keys(chainsByParent).forEach(parent => {
+        const list = document.getElementById(`priority-list-${parent}`);
+        if (list && typeof Sortable !== 'undefined') {
+            new Sortable(list, {
+                animation: 150,
+                handle: '.cursor-move',
+                onEnd: async (evt) => {
+                    const items = list.querySelectorAll('li[data-chain-id]');
+                    const orders = [];
+                    items.forEach((item, index) => {
+                        orders.push({ id: item.dataset.chainId, priority: index });
+                        // Update badge
+                        item.querySelector('.badge').textContent = index + 1;
+                    });
+
+                    try {
+                        await apiPut('/firewall/chains/order', orders);
+                        showToast('Priorità aggiornata', 'success');
+                    } catch (e) {
+                        showToast(e.message, 'error');
+                        await loadModuleChains();
+                    }
+                }
+            });
+        }
     });
 }
 

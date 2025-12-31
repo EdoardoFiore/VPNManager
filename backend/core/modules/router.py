@@ -269,6 +269,31 @@ async def install_module(
     
     await session.commit()
     
+    # Post-install: Try to register module firewall chains if the module has that capability
+    try:
+        modules_dir = Path(settings.modules_dir)
+        service_path = modules_dir / request.module_id / "service.py"
+        
+        if service_path.exists():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(f"{request.module_id}.service", service_path)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                
+                # Check for WireGuardService or similar service class with register_module_chains
+                for attr_name in dir(module):
+                    attr = getattr(module, attr_name)
+                    if isinstance(attr, type) and hasattr(attr, 'register_module_chains'):
+                        # Found a service class with register_module_chains
+                        await attr.register_module_chains(session)
+                        await session.commit()
+                        break
+    except Exception as e:
+        # Log but don't fail installation if chain registration fails
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to register module chains: {e}")
+    
     return InstalledModuleResponse(
         id=installed.id,
         name=installed.name,

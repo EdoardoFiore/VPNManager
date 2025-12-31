@@ -287,3 +287,54 @@ async def list_module_chains(
         )
         for c in chains
     ]
+
+
+class ModuleChainOrderUpdate(SQLModel):
+    """Schema for updating module chain priority."""
+    id: str
+    priority: int
+
+
+@router.put("/chains/order")
+async def update_chain_order(
+    orders: List[ModuleChainOrderUpdate],
+    current_user: User = Depends(require_permission("firewall.manage")),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Update the priority order of module chains.
+    Lower priority = processed first (after MADMIN).
+    """
+    from sqlalchemy import select
+    from .models import ModuleChain
+    
+    for item in orders:
+        try:
+            chain_uuid = uuid.UUID(item.id)
+        except ValueError:
+            continue
+        
+        result = await session.execute(
+            select(ModuleChain).where(ModuleChain.id == chain_uuid)
+        )
+        chain = result.scalar_one_or_none()
+        if chain:
+            chain.priority = item.priority
+            session.add(chain)
+    
+    await session.commit()
+    
+    # Rebuild all chain jumps to reflect new priorities
+    # Get unique parent chains that need rebuilding
+    result = await session.execute(select(ModuleChain))
+    all_chains = result.scalars().all()
+    
+    rebuilt = set()
+    for chain in all_chains:
+        key = (chain.parent_chain, chain.table_name)
+        if key not in rebuilt:
+            await firewall_orchestrator.rebuild_chain_jumps(session, chain.parent_chain, chain.table_name)
+            rebuilt.add(key)
+    
+    return {"status": "ok", "message": f"Updated priority for {len(orders)} chains"}
+

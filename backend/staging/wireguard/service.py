@@ -248,10 +248,10 @@ PersistentKeepalive = 25
     # POSTROUTING (nat) → WG_NAT → WG_{id}_NAT
     #
     
-    # Module-level main chain names
-    WG_INPUT_CHAIN = "WG_INPUT"
-    WG_FORWARD_CHAIN = "WG_FORWARD"
-    WG_NAT_CHAIN = "WG_NAT"
+    # Module-level main chain names (MOD_ prefix for module chains)
+    WG_INPUT_CHAIN = "MOD_WG_INPUT"
+    WG_FORWARD_CHAIN = "MOD_WG_FORWARD"
+    WG_NAT_CHAIN = "MOD_WG_NAT"
     
     @staticmethod
     def _run_iptables(table: str, args: List[str], suppress_errors: bool = False) -> bool:
@@ -340,15 +340,15 @@ PersistentKeepalive = 25
     @staticmethod
     def initialize_module_firewall_chains() -> bool:
         """
-        Initialize WireGuard module-level firewall chains.
+        Initialize WireGuard module-level firewall chains (iptables only).
         Should be called on module load/application startup.
         
         Creates:
-        - WG_INPUT: Main input chain for all WireGuard instances
-        - WG_FORWARD: Main forward chain for all WireGuard instances  
-        - WG_NAT: Main NAT chain for all WireGuard instances
+        - MOD_WG_INPUT: Main input chain for all WireGuard instances
+        - MOD_WG_FORWARD: Main forward chain for all WireGuard instances  
+        - MOD_WG_NAT: Main NAT chain for all WireGuard instances
         
-        And links them to MADMIN chains (or main chains if MADMIN doesn't exist).
+        Note: For database registration, use register_module_chains() instead.
         """
         logger.info("Initializing WireGuard module firewall chains...")
         
@@ -357,25 +357,64 @@ PersistentKeepalive = 25
         WireGuardService._create_chain_if_not_exists(WireGuardService.WG_FORWARD_CHAIN, "filter")
         WireGuardService._create_chain_if_not_exists(WireGuardService.WG_NAT_CHAIN, "nat")
         
-        # 2. Link module chains to parent chains
-        # Check if MADMIN chains exist
-        madmin_exists = WireGuardService._run_iptables(
-            "filter", ["-L", "MADMIN_INPUT", "-n"], suppress_errors=True
+        # 2. Cleanup old jumps
+        WireGuardService._run_iptables("filter", ["-D", "INPUT", "-j", WireGuardService.WG_INPUT_CHAIN], suppress_errors=True)
+        WireGuardService._run_iptables("filter", ["-D", "FORWARD", "-j", WireGuardService.WG_FORWARD_CHAIN], suppress_errors=True)
+        WireGuardService._run_iptables("nat", ["-D", "POSTROUTING", "-j", WireGuardService.WG_NAT_CHAIN], suppress_errors=True)
+        WireGuardService._run_iptables("filter", ["-D", "MADMIN_INPUT", "-j", WireGuardService.WG_INPUT_CHAIN], suppress_errors=True)
+        WireGuardService._run_iptables("filter", ["-D", "MADMIN_FORWARD", "-j", WireGuardService.WG_FORWARD_CHAIN], suppress_errors=True)
+        WireGuardService._run_iptables("filter", ["-D", "MADMIN_INPUT", "-j", "WG_INPUT"], suppress_errors=True)
+        WireGuardService._run_iptables("filter", ["-D", "MADMIN_FORWARD", "-j", "WG_FORWARD"], suppress_errors=True)
+        
+        logger.info("WireGuard iptables chains created")
+        return True
+    
+    @staticmethod
+    async def register_module_chains(db) -> bool:
+        """
+        Register WireGuard module chains with the core firewall orchestrator.
+        This enables chain priority management via the UI.
+        
+        Should be called after module installation or on startup.
+        """
+        from core.firewall.orchestrator import firewall_orchestrator
+        
+        logger.info("Registering WireGuard module chains with orchestrator...")
+        
+        # First ensure iptables chains exist
+        WireGuardService.initialize_module_firewall_chains()
+        
+        # Register with orchestrator (this creates DB entries and manages jump rules)
+        await firewall_orchestrator.register_module_chain(
+            db,
+            module_id="wireguard",
+            chain_name=WireGuardService.WG_INPUT_CHAIN,
+            parent_chain="INPUT",
+            priority=50,
+            table_name="filter"
         )
         
-        if madmin_exists:
-            # Link to MADMIN chains
-            WireGuardService._ensure_jump_rule("MADMIN_INPUT", WireGuardService.WG_INPUT_CHAIN, "filter")
-            WireGuardService._ensure_jump_rule("MADMIN_FORWARD", WireGuardService.WG_FORWARD_CHAIN, "filter")
-        else:
-            # Link directly to main chains
-            WireGuardService._ensure_jump_rule("INPUT", WireGuardService.WG_INPUT_CHAIN, "filter")
-            WireGuardService._ensure_jump_rule("FORWARD", WireGuardService.WG_FORWARD_CHAIN, "filter")
+        await firewall_orchestrator.register_module_chain(
+            db,
+            module_id="wireguard",
+            chain_name=WireGuardService.WG_FORWARD_CHAIN,
+            parent_chain="FORWARD",
+            priority=50,
+            table_name="filter"
+        )
         
-        # NAT chain - link to POSTROUTING
-        WireGuardService._ensure_jump_rule("POSTROUTING", WireGuardService.WG_NAT_CHAIN, "nat")
+        # NAT chain - register for POSTROUTING
+        # Note: NAT chains are in nat table, need separate handling
+        await firewall_orchestrator.register_module_chain(
+            db,
+            module_id="wireguard",
+            chain_name=WireGuardService.WG_NAT_CHAIN,
+            parent_chain="POSTROUTING",
+            priority=50,
+            table_name="nat"
+        )
         
-        logger.info("WireGuard module firewall chains initialized")
+        logger.info("WireGuard module chains registered successfully")
         return True
     
     @staticmethod
@@ -474,6 +513,132 @@ PersistentKeepalive = 25
         WireGuardService._delete_chain(nat_chain, "nat")
         
         logger.info(f"Firewall rules removed for WireGuard instance {instance_id}")
+        return True
+    
+    @staticmethod
+    async def apply_group_firewall_rules(instance_id: str, db) -> bool:
+        """
+        Apply firewall rules for all groups in an instance.
+        
+        Chain hierarchy:
+        WG_{instance}_FWD → WG_GRP_{group_id} → rules → default policy
+        
+        For each group member, traffic from their IP is matched and jumped
+        to the group's chain where rules are applied.
+        """
+        from sqlalchemy import select
+        from .models import WgInstance, WgGroup, WgGroupMember, WgGroupRule, WgClient
+        
+        logger.info(f"Applying group firewall rules for instance {instance_id}")
+        
+        # Get instance
+        result = await db.execute(select(WgInstance).where(WgInstance.id == instance_id))
+        instance = result.scalar_one_or_none()
+        if not instance:
+            logger.error(f"Instance {instance_id} not found")
+            return False
+        
+        # Instance forward chain name
+        instance_fwd_chain = f"WG_{instance_id}_FWD"
+        
+        # Get all groups for this instance
+        result = await db.execute(select(WgGroup).where(WgGroup.instance_id == instance_id))
+        groups = result.scalars().all()
+        
+        for group in groups:
+            group_chain = f"WG_GRP_{group.id.replace(instance_id + '_', '')}"  # Shorter name
+            
+            # Create group chain
+            WireGuardService._create_or_flush_chain(group_chain, "filter")
+            
+            # Get rules for this group (ordered)
+            result = await db.execute(
+                select(WgGroupRule)
+                .where(WgGroupRule.group_id == group.id)
+                .order_by(WgGroupRule.order)
+            )
+            rules = result.scalars().all()
+            
+            # Add rules to group chain
+            for rule in rules:
+                args = ["-A", group_chain]
+                
+                # Protocol
+                if rule.protocol and rule.protocol != "all":
+                    args.extend(["-p", rule.protocol])
+                
+                # Destination
+                if rule.destination and rule.destination != "0.0.0.0/0":
+                    args.extend(["-d", rule.destination])
+                
+                # Port (only for tcp/udp)
+                if rule.port and rule.protocol in ("tcp", "udp"):
+                    args.extend(["--dport", rule.port])
+                
+                # Action
+                args.extend(["-j", rule.action])
+                
+                WireGuardService._run_iptables("filter", args)
+            
+            # Add default policy at end of group chain
+            WireGuardService._run_iptables("filter", [
+                "-A", group_chain, "-j", instance.firewall_default_policy
+            ])
+            
+            # Get members of this group
+            result = await db.execute(
+                select(WgGroupMember, WgClient)
+                .join(WgClient, WgGroupMember.client_id == WgClient.id)
+                .where(WgGroupMember.group_id == group.id)
+            )
+            members = result.all()
+            
+            # For each member, add a jump rule from instance chain to group chain
+            for member, client in members:
+                client_ip = client.allocated_ip.split('/')[0]  # Remove /32
+                
+                # Add jump rule matching source IP at beginning of instance chain
+                # First remove any existing rule for this IP
+                WireGuardService._run_iptables("filter", [
+                    "-D", instance_fwd_chain, "-s", client_ip, "-j", group_chain
+                ], suppress_errors=True)
+                
+                # Insert at position 1 (before the default ACCEPT rules)
+                WireGuardService._run_iptables("filter", [
+                    "-I", instance_fwd_chain, "1", "-s", client_ip, "-j", group_chain
+                ])
+                
+                logger.info(f"  Added rule: {client_ip} -> {group_chain}")
+        
+        logger.info(f"Group firewall rules applied for instance {instance_id}")
+        return True
+    
+    @staticmethod
+    async def remove_group_firewall_rules(instance_id: str, group_id: str, db) -> bool:
+        """Remove firewall rules for a specific group."""
+        from sqlalchemy import select
+        from .models import WgGroupMember, WgClient
+        
+        instance_fwd_chain = f"WG_{instance_id}_FWD"
+        group_chain = f"WG_GRP_{group_id.replace(instance_id + '_', '')}"
+        
+        # Get members to remove their jump rules
+        result = await db.execute(
+            select(WgGroupMember, WgClient)
+            .join(WgClient, WgGroupMember.client_id == WgClient.id)
+            .where(WgGroupMember.group_id == group_id)
+        )
+        members = result.all()
+        
+        for member, client in members:
+            client_ip = client.allocated_ip.split('/')[0]
+            WireGuardService._run_iptables("filter", [
+                "-D", instance_fwd_chain, "-s", client_ip, "-j", group_chain
+            ], suppress_errors=True)
+        
+        # Delete group chain
+        WireGuardService._delete_chain(group_chain, "filter")
+        
         return True
 
 
