@@ -144,6 +144,8 @@ async def delete_instance(
         raise HTTPException(404, "Istanza non trovata")
     
     wireguard_service.stop_interface(instance.interface)
+    wireguard_service.remove_instance_firewall_rules(instance.id)
+    
     config_path = WIREGUARD_CONFIG_DIR / f"{instance.interface}.conf"
     if config_path.exists():
         config_path.unlink()
@@ -165,6 +167,10 @@ async def start_instance(
         raise HTTPException(404, "Istanza non trovata")
     
     if wireguard_service.start_interface(instance.interface):
+        # Apply firewall rules when interface starts
+        wireguard_service.apply_instance_firewall_rules(
+            instance.id, instance.port, instance.interface, instance.subnet
+        )
         return {"status": "running"}
     raise HTTPException(500, "Impossibile avviare istanza")
 
@@ -182,6 +188,8 @@ async def stop_instance(
         raise HTTPException(404, "Istanza non trovata")
     
     if wireguard_service.stop_interface(instance.interface):
+        # Remove firewall rules when interface stops
+        wireguard_service.remove_instance_firewall_rules(instance.id)
         return {"status": "stopped"}
     raise HTTPException(500, "Impossibile fermare istanza")
 
@@ -306,8 +314,8 @@ async def get_client_config(
     if not client:
         raise HTTPException(404, "Client non trovato")
     
-    from core.settings.models import SmtpSettings
-    smtp = await db.execute(select(SmtpSettings).where(SmtpSettings.id == 1))
+    from core.settings.models import SMTPSettings
+    smtp = await db.execute(select(SMTPSettings).where(SMTPSettings.id == 1))
     smtp_settings = smtp.scalar_one_or_none()
     endpoint = smtp_settings.public_url if smtp_settings and smtp_settings.public_url else "YOUR_SERVER_IP"
     
@@ -341,8 +349,8 @@ async def get_client_qr(
     if not client:
         raise HTTPException(404, "Client non trovato")
     
-    from core.settings.models import SmtpSettings
-    smtp = await db.execute(select(SmtpSettings).where(SmtpSettings.id == 1))
+    from core.settings.models import SMTPSettings
+    smtp = await db.execute(select(SMTPSettings).where(SMTPSettings.id == 1))
     smtp_settings = smtp.scalar_one_or_none()
     endpoint = smtp_settings.public_url if smtp_settings and smtp_settings.public_url else "YOUR_SERVER_IP"
     

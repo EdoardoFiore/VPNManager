@@ -197,6 +197,242 @@ PersistentKeepalive = 25
             return result.stdout
         except FileNotFoundError:
             raise RuntimeError("qrencode non installato")
+    
+    # --- Firewall Integration ---
+    # 
+    # Chain hierarchy:
+    # INPUT → MADMIN_INPUT → WG_INPUT → WG_{id}_INPUT
+    # FORWARD → MADMIN_FORWARD → WG_FORWARD → WG_{id}_FWD
+    # POSTROUTING (nat) → WG_NAT → WG_{id}_NAT
+    #
+    
+    # Module-level main chain names
+    WG_INPUT_CHAIN = "WG_INPUT"
+    WG_FORWARD_CHAIN = "WG_FORWARD"
+    WG_NAT_CHAIN = "WG_NAT"
+    
+    @staticmethod
+    def _run_iptables(table: str, args: List[str], suppress_errors: bool = False) -> bool:
+        """Execute an iptables command."""
+        cmd = ["iptables", "-t", table] + args
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            return True
+        except subprocess.CalledProcessError as e:
+            if not suppress_errors:
+                logger.error(f"iptables error: {e.stderr.strip()} cmd: {' '.join(cmd)}")
+            return False
+        except FileNotFoundError:
+            logger.error("iptables command not found")
+            return False
+    
+    @staticmethod
+    def _get_default_interface() -> str:
+        """Detect the default network interface."""
+        try:
+            result = subprocess.run(
+                ["/usr/sbin/ip", "-o", "-4", "route", "show", "default"],
+                capture_output=True, text=True, check=True
+            )
+            if result.stdout:
+                parts = result.stdout.split()
+                if "dev" in parts:
+                    return parts[parts.index("dev") + 1]
+        except Exception as e:
+            logger.warning(f"Could not detect default interface: {e}")
+        return "eth0"
+    
+    @staticmethod
+    def _create_or_flush_chain(chain_name: str, table: str = "filter") -> bool:
+        """Create chain if doesn't exist, or flush it."""
+        # Try to create
+        if not WireGuardService._run_iptables(table, ["-N", chain_name], suppress_errors=True):
+            # Creation failed (likely exists), flush it
+            return WireGuardService._run_iptables(table, ["-F", chain_name])
+        return True
+    
+    @staticmethod
+    def _create_chain_if_not_exists(chain_name: str, table: str = "filter") -> bool:
+        """Create chain only if it doesn't exist (don't flush)."""
+        return WireGuardService._run_iptables(table, ["-N", chain_name], suppress_errors=True) or \
+               WireGuardService._run_iptables(table, ["-L", chain_name, "-n"], suppress_errors=True)
+    
+    @staticmethod
+    def _ensure_jump_rule(source_chain: str, target_chain: str, table: str = "filter") -> bool:
+        """Ensure a jump rule exists from source to target chain (append, don't duplicate)."""
+        # Check if jump already exists
+        success, output = WireGuardService._run_iptables_with_output(
+            table, ["-L", source_chain, "-n"]
+        )
+        if success and target_chain in output:
+            return True  # Already exists
+        # Add the jump
+        return WireGuardService._run_iptables(table, ["-A", source_chain, "-j", target_chain])
+    
+    @staticmethod
+    def _run_iptables_with_output(table: str, args: List[str], suppress_errors: bool = False) -> tuple:
+        """Execute an iptables command and return (success, output)."""
+        cmd = ["iptables", "-t", table] + args
+        try:
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            return True, result.stdout
+        except subprocess.CalledProcessError as e:
+            if not suppress_errors:
+                logger.error(f"iptables error: {e.stderr.strip()} cmd: {' '.join(cmd)}")
+            return False, e.stderr
+        except FileNotFoundError:
+            logger.error("iptables command not found")
+            return False, ""
+    
+    @staticmethod
+    def _remove_jump_rule(source_chain: str, target_chain: str, table: str = "filter") -> bool:
+        """Remove a jump rule."""
+        return WireGuardService._run_iptables(table, ["-D", source_chain, "-j", target_chain], suppress_errors=True)
+    
+    @staticmethod
+    def _delete_chain(chain_name: str, table: str = "filter") -> bool:
+        """Flush and delete a chain."""
+        WireGuardService._run_iptables(table, ["-F", chain_name], suppress_errors=True)
+        return WireGuardService._run_iptables(table, ["-X", chain_name], suppress_errors=True)
+    
+    @staticmethod
+    def initialize_module_firewall_chains() -> bool:
+        """
+        Initialize WireGuard module-level firewall chains.
+        Should be called on module load/application startup.
+        
+        Creates:
+        - WG_INPUT: Main input chain for all WireGuard instances
+        - WG_FORWARD: Main forward chain for all WireGuard instances  
+        - WG_NAT: Main NAT chain for all WireGuard instances
+        
+        And links them to MADMIN chains (or main chains if MADMIN doesn't exist).
+        """
+        logger.info("Initializing WireGuard module firewall chains...")
+        
+        # 1. Create module main chains (don't flush - preserve existing instance rules)
+        WireGuardService._create_chain_if_not_exists(WireGuardService.WG_INPUT_CHAIN, "filter")
+        WireGuardService._create_chain_if_not_exists(WireGuardService.WG_FORWARD_CHAIN, "filter")
+        WireGuardService._create_chain_if_not_exists(WireGuardService.WG_NAT_CHAIN, "nat")
+        
+        # 2. Link module chains to parent chains
+        # Check if MADMIN chains exist
+        madmin_exists = WireGuardService._run_iptables(
+            "filter", ["-L", "MADMIN_INPUT", "-n"], suppress_errors=True
+        )
+        
+        if madmin_exists:
+            # Link to MADMIN chains
+            WireGuardService._ensure_jump_rule("MADMIN_INPUT", WireGuardService.WG_INPUT_CHAIN, "filter")
+            WireGuardService._ensure_jump_rule("MADMIN_FORWARD", WireGuardService.WG_FORWARD_CHAIN, "filter")
+        else:
+            # Link directly to main chains
+            WireGuardService._ensure_jump_rule("INPUT", WireGuardService.WG_INPUT_CHAIN, "filter")
+            WireGuardService._ensure_jump_rule("FORWARD", WireGuardService.WG_FORWARD_CHAIN, "filter")
+        
+        # NAT chain - link to POSTROUTING
+        WireGuardService._ensure_jump_rule("POSTROUTING", WireGuardService.WG_NAT_CHAIN, "nat")
+        
+        logger.info("WireGuard module firewall chains initialized")
+        return True
+    
+    @staticmethod
+    def apply_instance_firewall_rules(instance_id: str, port: int, interface: str, subnet: str) -> bool:
+        """
+        Apply firewall rules for a WireGuard instance.
+        
+        Creates instance-specific chains:
+        - WG_{id}_INPUT: Allows UDP port and interface traffic
+        - WG_{id}_FWD: Allows forwarding to/from VPN interface
+        - WG_{id}_NAT: Masquerades traffic from VPN subnet
+        
+        And links them to the module main chains (WG_INPUT, WG_FORWARD, WG_NAT).
+        """
+        # Ensure module chains are initialized first
+        WireGuardService.initialize_module_firewall_chains()
+        
+        # Instance chain names
+        input_chain = f"WG_{instance_id}_INPUT"
+        forward_chain = f"WG_{instance_id}_FWD"
+        nat_chain = f"WG_{instance_id}_NAT"
+        
+        wan_interface = WireGuardService._get_default_interface()
+        
+        logger.info(f"Applying firewall rules for WireGuard instance {instance_id}")
+        
+        # 1. Create/flush instance chains
+        WireGuardService._create_or_flush_chain(input_chain, "filter")
+        WireGuardService._create_or_flush_chain(forward_chain, "filter")
+        WireGuardService._create_or_flush_chain(nat_chain, "nat")
+        
+        # 2. Add rules to INPUT chain
+        # Allow UDP traffic on WireGuard port
+        WireGuardService._run_iptables("filter", [
+            "-A", input_chain, "-p", "udp", "--dport", str(port), "-j", "ACCEPT"
+        ])
+        # Allow all traffic from WireGuard interface
+        WireGuardService._run_iptables("filter", [
+            "-A", input_chain, "-i", interface, "-j", "ACCEPT"
+        ])
+        # Return to continue processing
+        WireGuardService._run_iptables("filter", [
+            "-A", input_chain, "-j", "RETURN"
+        ])
+        
+        # 3. Add rules to FORWARD chain
+        # Allow forwarding to/from VPN interface
+        WireGuardService._run_iptables("filter", [
+            "-A", forward_chain, "-i", interface, "-j", "ACCEPT"
+        ])
+        WireGuardService._run_iptables("filter", [
+            "-A", forward_chain, "-o", interface, "-j", "ACCEPT"
+        ])
+        WireGuardService._run_iptables("filter", [
+            "-A", forward_chain, "-j", "RETURN"
+        ])
+        
+        # 4. Add rules to NAT chain
+        # Masquerade traffic from VPN subnet going to WAN
+        WireGuardService._run_iptables("nat", [
+            "-A", nat_chain, "-s", subnet, "-o", wan_interface, "-j", "MASQUERADE"
+        ])
+        WireGuardService._run_iptables("nat", [
+            "-A", nat_chain, "-j", "RETURN"
+        ])
+        
+        # 5. Link instance chains to module main chains
+        WireGuardService._ensure_jump_rule(WireGuardService.WG_INPUT_CHAIN, input_chain, "filter")
+        WireGuardService._ensure_jump_rule(WireGuardService.WG_FORWARD_CHAIN, forward_chain, "filter")
+        WireGuardService._ensure_jump_rule(WireGuardService.WG_NAT_CHAIN, nat_chain, "nat")
+        
+        logger.info(f"Firewall rules applied for WireGuard instance {instance_id}")
+        logger.info(f"  Chains created: {input_chain}, {forward_chain}, {nat_chain}")
+        logger.info(f"  Linked to: WG_INPUT, WG_FORWARD, WG_NAT")
+        return True
+    
+    @staticmethod
+    def remove_instance_firewall_rules(instance_id: str) -> bool:
+        """
+        Remove firewall rules for a WireGuard instance.
+        """
+        input_chain = f"WG_{instance_id}_INPUT"
+        forward_chain = f"WG_{instance_id}_FWD"
+        nat_chain = f"WG_{instance_id}_NAT"
+        
+        logger.info(f"Removing firewall rules for WireGuard instance {instance_id}")
+        
+        # Remove jumps from module main chains
+        WireGuardService._remove_jump_rule(WireGuardService.WG_INPUT_CHAIN, input_chain, "filter")
+        WireGuardService._remove_jump_rule(WireGuardService.WG_FORWARD_CHAIN, forward_chain, "filter")
+        WireGuardService._remove_jump_rule(WireGuardService.WG_NAT_CHAIN, nat_chain, "nat")
+        
+        # Delete instance chains
+        WireGuardService._delete_chain(input_chain, "filter")
+        WireGuardService._delete_chain(forward_chain, "filter")
+        WireGuardService._delete_chain(nat_chain, "nat")
+        
+        logger.info(f"Firewall rules removed for WireGuard instance {instance_id}")
+        return True
 
 
 wireguard_service = WireGuardService()
