@@ -2,10 +2,12 @@
  * MADMIN - Network Interfaces View
  * 
  * Displays network interface information with IP, MAC, status, and traffic stats.
+ * Allows netplan configuration for static IP or DHCP.
  */
 
-import { apiGet } from '../api.js';
-import { showToast } from '../utils.js';
+import { apiGet, apiPost, apiDelete } from '../api.js';
+import { showToast, confirmDialog } from '../utils.js';
+import { checkPermission } from '../app.js';
 
 /**
  * Format bytes to human readable string
@@ -22,6 +24,8 @@ function formatBytes(bytes) {
  * Render the network interfaces view
  */
 export async function render(container) {
+    const canManage = checkPermission('settings.manage');
+
     container.innerHTML = `
         <div class="row row-deck row-cards">
             <div class="col-12">
@@ -31,6 +35,11 @@ export async function render(container) {
                             <i class="ti ti-network me-2"></i>Interfacce di Rete
                         </h3>
                         <div class="card-actions">
+                            ${canManage ? `
+                            <button class="btn btn-outline-warning me-2" id="btn-apply-netplan" title="Applica Configurazione">
+                                <i class="ti ti-check me-1"></i>Applica Netplan
+                            </button>
+                            ` : ''}
                             <button class="btn btn-ghost-primary" id="btn-refresh-interfaces" title="Aggiorna">
                                 <i class="ti ti-refresh"></i>
                             </button>
@@ -45,10 +54,80 @@ export async function render(container) {
                 </div>
             </div>
         </div>
+        
+        <!-- Netplan Config Modal -->
+        <div class="modal" id="modal-netplan" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="ti ti-settings me-2"></i>Configura <span id="modal-iface-name"></span>
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="netplan-interface">
+                        
+                        <div class="mb-3">
+                            <label class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="netplan-dhcp" checked>
+                                <span class="form-check-label">Usa DHCP (automatico)</span>
+                            </label>
+                        </div>
+                        
+                        <div id="static-config" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">Indirizzo IP (CIDR)</label>
+                                <input type="text" class="form-control" id="netplan-address" 
+                                       placeholder="es. 192.168.1.100/24">
+                                <small class="form-hint">Formato: IP/prefisso (es. 192.168.1.100/24)</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Gateway predefinito</label>
+                                <input type="text" class="form-control" id="netplan-gateway" 
+                                       placeholder="es. 192.168.1.1">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">DNS Server</label>
+                                <input type="text" class="form-control" id="netplan-dns" 
+                                       placeholder="es. 8.8.8.8, 8.8.4.4">
+                                <small class="form-hint">Separati da virgola</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">MTU (opzionale)</label>
+                            <input type="number" class="form-control" id="netplan-mtu" 
+                                   placeholder="1500" min="576" max="9000">
+                        </div>
+                        
+                        <div class="alert alert-warning">
+                            <i class="ti ti-alert-triangle me-2"></i>
+                            <strong>Attenzione:</strong> Dopo il salvataggio, clicca "Applica Netplan" per attivare le modifiche.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-link" data-bs-dismiss="modal">Annulla</button>
+                        <button type="button" class="btn btn-primary" id="btn-save-netplan">
+                            <i class="ti ti-device-floppy me-1"></i>Salva
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     `;
 
-    // Setup refresh button
+    // Setup event listeners
     document.getElementById('btn-refresh-interfaces')?.addEventListener('click', loadInterfaces);
+    document.getElementById('btn-apply-netplan')?.addEventListener('click', applyNetplan);
+    document.getElementById('btn-save-netplan')?.addEventListener('click', saveNetplanConfig);
+
+    // DHCP toggle
+    document.getElementById('netplan-dhcp')?.addEventListener('change', (e) => {
+        document.getElementById('static-config').style.display = e.target.checked ? 'none' : 'block';
+    });
 
     // Load interfaces
     await loadInterfaces();
@@ -81,6 +160,11 @@ async function loadInterfaces() {
             </div>
         `;
 
+        // Setup configure buttons
+        document.querySelectorAll('[data-configure-iface]').forEach(btn => {
+            btn.addEventListener('click', () => openNetplanModal(btn.dataset.configureIface));
+        });
+
     } catch (error) {
         console.error('Error loading interfaces:', error);
         container.innerHTML = `
@@ -97,8 +181,9 @@ async function loadInterfaces() {
  */
 function renderInterfaceCard(iface) {
     const isUp = iface.is_up;
-    const statusClass = isUp ? 'bg-green' : 'bg-secondary';
+    const statusClass = isUp ? 'bg-success' : 'bg-secondary';
     const statusText = isUp ? 'Attiva' : 'Inattiva';
+    const canManage = checkPermission('settings.manage');
 
     // Determine interface type icon
     let icon = 'ti-network';
@@ -112,6 +197,16 @@ function renderInterfaceCard(iface) {
         icon = 'ti-wifi';
     }
 
+    // Netplan config badge
+    let netplanBadge = '';
+    if (iface.netplan) {
+        if (iface.netplan.dhcp4) {
+            netplanBadge = '<span class="badge bg-info text-white ms-1">DHCP</span>';
+        } else if (iface.netplan.addresses?.length > 0) {
+            netplanBadge = '<span class="badge bg-purple text-white ms-1">Statico</span>';
+        }
+    }
+
     return `
         <div class="col-md-6 col-lg-4">
             <div class="card">
@@ -123,8 +218,14 @@ function renderInterfaceCard(iface) {
                         <div class="flex-fill">
                             <h4 class="mb-0">${iface.name}</h4>
                             <span class="badge ${statusClass}">${statusText}</span>
-                            ${iface.speed > 0 ? `<span class="badge bg-azure-lt ms-1">${iface.speed} Mbps</span>` : ''}
+                            ${iface.speed > 0 ? `<span class="badge bg-azure text-white ms-1">${iface.speed} Mbps</span>` : ''}
+                            ${netplanBadge}
                         </div>
+                        ${canManage && !iface.name.startsWith('docker') && !iface.name.startsWith('veth') ? `
+                        <button class="btn btn-sm btn-ghost-primary" data-configure-iface="${iface.name}" title="Configura">
+                            <i class="ti ti-settings"></i>
+                        </button>
+                        ` : ''}
                     </div>
                     
                     <dl class="row mb-0 small">
@@ -151,14 +252,14 @@ function renderInterfaceCard(iface) {
                     <div class="row text-center small">
                         <div class="col-6">
                             <div class="text-muted mb-1">
-                                <i class="ti ti-arrow-down text-green"></i> Ricevuti
+                                <i class="ti ti-arrow-down text-success"></i> Ricevuti
                             </div>
                             <strong>${formatBytes(iface.bytes_recv)}</strong>
                             <div class="text-muted">${iface.packets_recv.toLocaleString()} pkt</div>
                         </div>
                         <div class="col-6">
                             <div class="text-muted mb-1">
-                                <i class="ti ti-arrow-up text-blue"></i> Inviati
+                                <i class="ti ti-arrow-up text-primary"></i> Inviati
                             </div>
                             <strong>${formatBytes(iface.bytes_sent)}</strong>
                             <div class="text-muted">${iface.packets_sent.toLocaleString()} pkt</div>
@@ -176,3 +277,113 @@ function renderInterfaceCard(iface) {
         </div>
     `;
 }
+
+/**
+ * Open netplan config modal
+ */
+async function openNetplanModal(interfaceName) {
+    document.getElementById('netplan-interface').value = interfaceName;
+    document.getElementById('modal-iface-name').textContent = interfaceName;
+
+    // Reset form
+    document.getElementById('netplan-dhcp').checked = true;
+    document.getElementById('static-config').style.display = 'none';
+    document.getElementById('netplan-address').value = '';
+    document.getElementById('netplan-gateway').value = '';
+    document.getElementById('netplan-dns').value = '';
+    document.getElementById('netplan-mtu').value = '';
+
+    // Try to load existing config
+    try {
+        const response = await apiGet(`/network/interfaces/${interfaceName}/config`);
+        if (response.config) {
+            const config = response.config;
+            document.getElementById('netplan-dhcp').checked = config.dhcp4;
+            document.getElementById('static-config').style.display = config.dhcp4 ? 'none' : 'block';
+
+            if (config.addresses?.length > 0) {
+                document.getElementById('netplan-address').value = config.addresses[0];
+            }
+            if (config.gateway4) {
+                document.getElementById('netplan-gateway').value = config.gateway4;
+            }
+            if (config.dns_servers?.length > 0) {
+                document.getElementById('netplan-dns').value = config.dns_servers.join(', ');
+            }
+            if (config.mtu) {
+                document.getElementById('netplan-mtu').value = config.mtu;
+            }
+        }
+    } catch (error) {
+        // No existing config, start fresh
+    }
+
+    new bootstrap.Modal(document.getElementById('modal-netplan')).show();
+}
+
+/**
+ * Save netplan configuration
+ */
+async function saveNetplanConfig() {
+    const interfaceName = document.getElementById('netplan-interface').value;
+    const dhcp4 = document.getElementById('netplan-dhcp').checked;
+
+    const data = {
+        interface: interfaceName,
+        dhcp4: dhcp4
+    };
+
+    if (!dhcp4) {
+        const address = document.getElementById('netplan-address').value.trim();
+        const gateway = document.getElementById('netplan-gateway').value.trim();
+        const dns = document.getElementById('netplan-dns').value.trim();
+
+        if (!address) {
+            showToast('Inserisci un indirizzo IP', 'error');
+            return;
+        }
+
+        data.addresses = [address];
+        if (gateway) data.gateway = gateway;
+        if (dns) {
+            data.dns_servers = dns.split(',').map(s => s.trim()).filter(s => s);
+        }
+    }
+
+    const mtu = document.getElementById('netplan-mtu').value;
+    if (mtu) {
+        data.mtu = parseInt(mtu);
+    }
+
+    try {
+        await apiPost(`/network/interfaces/${interfaceName}/config`, data);
+        showToast('Configurazione salvata. Clicca "Applica Netplan" per attivare.', 'success');
+        bootstrap.Modal.getInstance(document.getElementById('modal-netplan'))?.hide();
+        await loadInterfaces();
+    } catch (error) {
+        showToast('Errore: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Apply netplan configuration
+ */
+async function applyNetplan() {
+    const confirmed = await confirmDialog(
+        'Applica Configurazione Rete',
+        'Stai per applicare le modifiche alla configurazione di rete. Questo potrebbe interrompere temporaneamente la connettività. Continuare?',
+        'Applica',
+        'btn-warning'
+    );
+
+    if (!confirmed) return;
+
+    try {
+        await apiPost('/network/netplan/apply', {});
+        showToast('Configurazione applicata con successo', 'success');
+        await loadInterfaces();
+    } catch (error) {
+        showToast('Errore applicazione: ' + error.message, 'error');
+    }
+}
+

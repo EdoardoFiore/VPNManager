@@ -35,7 +35,8 @@ class CronService:
         """
         Parse a crontab line into a structured dict.
         
-        Returns None for comments or empty lines.
+        Returns None for empty lines only.
+        Handles both active entries and disabled (commented) entries.
         """
         line = line.strip()
         
@@ -43,18 +44,40 @@ class CronService:
         if not line:
             return None
         
-        # Handle comments
+        # Handle comments/disabled entries
         if line.startswith('#'):
-            return {
-                "id": index,
-                "enabled": False,
-                "raw": line,
-                "comment": line[1:].strip(),
-                "schedule": None,
-                "command": None
-            }
+            # Check if this is a disabled cron entry (# schedule command)
+            content = line[1:].strip()
+            parts = content.split(None, 5)
+            if len(parts) >= 6:
+                # Looks like a disabled cron entry
+                schedule = ' '.join(parts[:5])
+                command = parts[5]
+                return {
+                    "id": index,
+                    "enabled": False,
+                    "raw": line,
+                    "comment": None,
+                    "schedule": schedule,
+                    "command": command,
+                    "minute": parts[0],
+                    "hour": parts[1],
+                    "day": parts[2],
+                    "month": parts[3],
+                    "weekday": parts[4]
+                }
+            else:
+                # Regular comment
+                return {
+                    "id": index,
+                    "enabled": False,
+                    "raw": line,
+                    "comment": content,
+                    "schedule": None,
+                    "command": None
+                }
         
-        # Parse crontab entry
+        # Parse active crontab entry
         # Format: minute hour day month weekday command
         parts = line.split(None, 5)
         if len(parts) >= 6:

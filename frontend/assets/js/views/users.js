@@ -10,15 +10,6 @@ let users = [];
 let permissions = [];
 let editingUser = null;
 
-// Permission groups for better organization
-const PERMISSION_GROUPS = {
-    'Utenti': ['users.view', 'users.manage'],
-    'Firewall': ['firewall.view', 'firewall.manage'],
-    'Impostazioni': ['settings.view', 'settings.manage'],
-    'Moduli': ['modules.view', 'modules.manage'],
-    'Permessi': ['permissions.manage']
-};
-
 /**
  * Render the users view
  */
@@ -244,50 +235,71 @@ function renderGroupedPermissions(userPerms) {
     const permList = document.getElementById('permissions-list');
     let html = '';
 
-    // Group permissions
-    for (const [groupName, groupSlugs] of Object.entries(PERMISSION_GROUPS)) {
-        const groupPerms = permissions.filter(p => groupSlugs.includes(p.slug));
-        if (groupPerms.length === 0) continue;
+    // Define display names for core groups
+    const coreGroupNames = {
+        'users': 'Utenti',
+        'firewall': 'Firewall',
+        'settings': 'Impostazioni',
+        'modules': 'Moduli',
+        'permissions': 'Permessi'
+    };
 
-        html += `
-            <div class="col-md-6">
-                <div class="card card-sm">
-                    <div class="card-header py-2">
-                        <h4 class="card-title m-0"><i class="ti ti-folder me-2"></i>${groupName}</h4>
-                    </div>
-                    <div class="card-body py-2">
-                        ${groupPerms.map(p => `
-                            <label class="form-check mb-1">
-                                <input class="form-check-input perm-check" type="checkbox" value="${p.slug}"
-                                       ${userPerms.includes(p.slug) ? 'checked' : ''}>
-                                <span class="form-check-label">${p.slug.split('.')[1]}</span>
-                            </label>
-                        `).join('')}
-                    </div>
-                </div>
-            </div>
-        `;
+    // Group permissions dynamically by prefix (module name)
+    const groups = {};
+    for (const perm of permissions) {
+        const prefix = perm.slug.split('.')[0];
+        if (!groups[prefix]) {
+            groups[prefix] = [];
+        }
+        groups[prefix].push(perm);
     }
 
-    // Any permissions not in groups
-    const groupedSlugs = Object.values(PERMISSION_GROUPS).flat();
-    const otherPerms = permissions.filter(p => !groupedSlugs.includes(p.slug));
+    // Sort groups: core groups first, then module groups alphabetically
+    const coreOrder = ['users', 'firewall', 'settings', 'modules', 'permissions'];
+    const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
+        const aIsCore = coreOrder.includes(a);
+        const bIsCore = coreOrder.includes(b);
+        if (aIsCore && !bIsCore) return -1;
+        if (!aIsCore && bIsCore) return 1;
+        if (aIsCore && bIsCore) return coreOrder.indexOf(a) - coreOrder.indexOf(b);
+        return a.localeCompare(b);
+    });
 
-    if (otherPerms.length > 0) {
+    // Render each group
+    for (const groupKey of sortedGroupKeys) {
+        const groupPerms = groups[groupKey];
+        // Determine display name: core names or capitalize module name
+        const displayName = coreGroupNames[groupKey] ||
+            groupKey.charAt(0).toUpperCase() + groupKey.slice(1);
+
+        // Determine icon based on group
+        let icon = 'ti-folder';
+        if (groupKey === 'users') icon = 'ti-users';
+        else if (groupKey === 'firewall') icon = 'ti-shield';
+        else if (groupKey === 'settings') icon = 'ti-settings';
+        else if (groupKey === 'modules') icon = 'ti-puzzle';
+        else if (groupKey === 'permissions') icon = 'ti-lock';
+        else if (groupKey === 'wireguard') icon = 'ti-lock';
+        // Modules get puzzle-2 icon by default
+        else icon = 'ti-puzzle-2';
+
         html += `
             <div class="col-md-6">
                 <div class="card card-sm">
                     <div class="card-header py-2">
-                        <h4 class="card-title m-0"><i class="ti ti-dots me-2"></i>Altri</h4>
+                        <h4 class="card-title m-0"><i class="ti ${icon} me-2"></i>${displayName}</h4>
                     </div>
                     <div class="card-body py-2">
-                        ${otherPerms.map(p => `
+                        ${groupPerms.map(p => {
+            const action = p.slug.split('.').slice(1).join('.');
+            return `
                             <label class="form-check mb-1">
                                 <input class="form-check-input perm-check" type="checkbox" value="${p.slug}"
                                        ${userPerms.includes(p.slug) ? 'checked' : ''}>
-                                <span class="form-check-label">${p.slug}</span>
+                                <span class="form-check-label">${action}</span>
                             </label>
-                        `).join('')}
+                        `;
+        }).join('')}
                     </div>
                 </div>
             </div>

@@ -37,6 +37,8 @@ def _rule_to_response(rule) -> MachineFirewallRuleResponse:
         in_interface=rule.in_interface,
         out_interface=rule.out_interface,
         state=rule.state,
+        limit_rate=rule.limit_rate,
+        limit_burst=rule.limit_burst,
         comment=rule.comment,
         table_name=rule.table_name,
         order=rule.order,

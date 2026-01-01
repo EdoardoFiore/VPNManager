@@ -3,6 +3,8 @@ MADMIN Services Router
 
 API endpoints for systemd service management.
 """
+import threading
+import time
 from fastapi import APIRouter, Depends, HTTPException
 from core.auth.dependencies import get_current_user, require_permission
 from core.auth.models import User
@@ -10,6 +12,12 @@ from core.auth.models import User
 from .service import systemd_service
 
 router = APIRouter(prefix="/api/services", tags=["services"])
+
+
+def _delayed_restart(service_name: str, delay: float = 0.5):
+    """Execute restart after a short delay to allow HTTP response to complete."""
+    time.sleep(delay)
+    systemd_service.restart(service_name)
 
 
 @router.get("/{service_name}/status")
@@ -41,6 +49,9 @@ async def restart_service(
     
     Only whitelisted services can be restarted.
     Requires settings.manage permission.
+    
+    For self-restart (madmin.service), uses a delayed restart to allow
+    the HTTP response to be sent before the service goes down.
     """
     if not systemd_service.is_allowed(service_name):
         raise HTTPException(
@@ -48,6 +59,17 @@ async def restart_service(
             detail=f"Service '{service_name}' is not in the allowed list"
         )
     
+    # Normalize service name
+    normalized_name = service_name if service_name.endswith('.service') else f"{service_name}.service"
+    
+    # For self-restart, use delayed restart to allow response to be sent
+    if normalized_name == "madmin.service":
+        thread = threading.Thread(target=_delayed_restart, args=(service_name, 0.5))
+        thread.daemon = True
+        thread.start()
+        return {"success": True, "message": "Riavvio in corso..."}
+    
+    # Normal restart for other services
     success, message = systemd_service.restart(service_name)
     
     if not success:
