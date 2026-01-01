@@ -1,12 +1,12 @@
 # MADMIN - Machine Administration Panel
 
-A modern, modular web-based administration panel for Linux servers with a focus on VPN and firewall management.
+A modern, modular web-based administration panel for Linux servers.
 
 ## 🚀 Features
 
 ### Core System
 - **User Authentication** - JWT-based authentication with role-based access control (RBAC)
-- **Dashboard** - System overview with CPU, memory, disk, and network statistics
+- **Dashboard** - System overview with machine statistics
 - **Firewall Management** - Machine-level firewall rules with drag-drop ordering
 - **Module System** - Hot-pluggable modules for extending functionality
 - **Settings** - Customizable branding, backup/restore, and system configuration
@@ -30,7 +30,6 @@ VPNManager/
 │   │   └── settings/           # System settings
 │   ├── modules/                # Installed modules
 │   └── staging/                # Modules awaiting installation
-│       └── wireguard/          # WireGuard VPN module
 ├── frontend/
 │   ├── assets/
 │   │   ├── css/               # Stylesheets
@@ -64,14 +63,11 @@ MADMIN uses a hierarchical chain structure for flexible firewall management:
 MAIN CHAINS (INPUT, FORWARD, OUTPUT)
     └── MADMIN_* chains (machine-level rules)
     └── MOD_*_* chains (module chains, priority ordered)
-        └── Instance chains (per-VPN instance)
-            └── Group chains (per-user group)
 ```
 
 ### Priority System
 - MADMIN rules are processed first (highest priority)
 - Module chains are processed in configurable order
-- Instance and group rules provide granular control
 
 ## 🔌 Module System
 
@@ -146,9 +142,7 @@ Authorization: Bearer eyJ...
 
 ## 📦 Available Modules
 
-| Module | Description | Status |
-|--------|-------------|--------|
-| WireGuard | Modern VPN with peer-based firewall groups | ✅ Available |
+See `backend/staging/` for available modules.
 
 ## 🤝 Contributing
 

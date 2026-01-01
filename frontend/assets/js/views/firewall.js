@@ -150,6 +150,17 @@ export async function render(container) {
                                         <option value="NEW,ESTABLISHED,RELATED">NEW,ESTABLISHED,RELATED</option>
                                     </select>
                                 </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Rate Limit</label>
+                                    <input type="text" class="form-control" id="rule-limit-rate" 
+                                           placeholder="es. 10/second, 100/minute">
+                                    <small class="form-hint">Limita le connessioni (iptables -m limit)</small>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Burst</label>
+                                    <input type="number" class="form-control" id="rule-limit-burst" 
+                                           placeholder="es. 5" min="1">
+                                </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Abilitata</label>
                                     <label class="form-check form-switch mt-2">
@@ -227,7 +238,8 @@ function setupEventListeners() {
 
     // Update preview on any field change
     ['rule-chain', 'rule-action', 'rule-protocol', 'rule-port', 'rule-source',
-        'rule-destination', 'rule-in-interface', 'rule-out-interface', 'rule-state']
+        'rule-destination', 'rule-in-interface', 'rule-out-interface', 'rule-state',
+        'rule-limit-rate', 'rule-limit-burst']
         .forEach(id => {
             document.getElementById(id)?.addEventListener('change', updateIptablesPreview);
             document.getElementById(id)?.addEventListener('input', updateIptablesPreview);
@@ -296,6 +308,8 @@ function updateIptablesPreview() {
     const inIface = document.getElementById('rule-in-interface')?.value;
     const outIface = document.getElementById('rule-out-interface')?.value;
     const state = document.getElementById('rule-state')?.value;
+    const limitRate = document.getElementById('rule-limit-rate')?.value;
+    const limitBurst = document.getElementById('rule-limit-burst')?.value;
 
     let cmd = `iptables -t ${table} -A ${chain}`;
 
@@ -306,6 +320,10 @@ function updateIptablesPreview() {
     if (outIface) cmd += ` -o ${outIface}`;
     if (state) cmd += ` -m state --state ${state}`;
     if (port && (protocol === 'tcp' || protocol === 'udp')) cmd += ` --dport ${port}`;
+    if (limitRate) {
+        cmd += ` -m limit --limit ${limitRate}`;
+        if (limitBurst) cmd += ` --limit-burst ${limitBurst}`;
+    }
     cmd += ` -j ${action}`;
 
     preview.textContent = cmd;
@@ -538,6 +556,8 @@ function openRuleModal(rule = null) {
     document.getElementById('rule-in-interface').value = rule?.in_interface || '';
     document.getElementById('rule-out-interface').value = rule?.out_interface || '';
     document.getElementById('rule-state').value = rule?.state || '';
+    document.getElementById('rule-limit-rate').value = rule?.limit_rate || '';
+    document.getElementById('rule-limit-burst').value = rule?.limit_burst || '';
     document.getElementById('rule-enabled').checked = rule?.enabled !== false;
     document.getElementById('rule-comment').value = rule?.comment || '';
 
@@ -568,6 +588,8 @@ async function handleRuleSubmit(e) {
         in_interface: document.getElementById('rule-in-interface').value || null,
         out_interface: document.getElementById('rule-out-interface').value || null,
         state: document.getElementById('rule-state').value || null,
+        limit_rate: document.getElementById('rule-limit-rate').value || null,
+        limit_burst: parseInt(document.getElementById('rule-limit-burst').value) || null,
         enabled: document.getElementById('rule-enabled').checked,
         comment: document.getElementById('rule-comment').value || null,
     };

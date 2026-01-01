@@ -218,6 +218,8 @@ def build_rule_args(
     out_interface: Optional[str] = None,
     state: Optional[str] = None,
     comment: Optional[str] = None,
+    limit_rate: Optional[str] = None,
+    limit_burst: Optional[int] = None,
     operation: str = "-A"
 ) -> List[str]:
     """
@@ -234,6 +236,8 @@ def build_rule_args(
         out_interface: Output interface
         state: Connection state (NEW, ESTABLISHED, etc.)
         comment: Rule comment
+        limit_rate: Rate limit (e.g., "10/second", "100/minute")
+        limit_burst: Burst limit for rate limiting
         operation: -A (append), -I (insert), -D (delete)
     
     Returns:
@@ -263,6 +267,12 @@ def build_rule_args(
         # Support both single port and range
         args.extend(["--dport", str(port)])
     
+    if limit_rate:
+        # Rate limiting: -m limit --limit <rate> [--limit-burst <burst>]
+        args.extend(["-m", "limit", "--limit", limit_rate])
+        if limit_burst:
+            args.extend(["--limit-burst", str(limit_burst)])
+    
     if comment:
         # Sanitize comment for iptables
         safe_comment = re.sub(r'[^a-zA-Z0-9_\-\. ]', '', comment)[:255]
@@ -284,7 +294,9 @@ def add_rule(
     in_interface: Optional[str] = None,
     out_interface: Optional[str] = None,
     state: Optional[str] = None,
-    comment: Optional[str] = None
+    comment: Optional[str] = None,
+    limit_rate: Optional[str] = None,
+    limit_burst: Optional[int] = None
 ) -> bool:
     """Add a firewall rule to a chain."""
     args = build_rule_args(
@@ -298,6 +310,8 @@ def add_rule(
         out_interface=out_interface,
         state=state,
         comment=comment,
+        limit_rate=limit_rate,
+        limit_burst=limit_burst,
         operation="-A"
     )
     

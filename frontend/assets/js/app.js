@@ -13,6 +13,8 @@ const views = {
     'dashboard': () => import('./views/dashboard.js'),
     'users': () => import('./views/users.js'),
     'firewall': () => import('./views/firewall.js'),
+    'network': () => import('./views/network.js'),
+    'crontab': () => import('./views/crontab.js'),
     'settings': () => import('./views/settings.js'),
     'modules': () => import('./views/modules.js'),
 };
@@ -375,6 +377,8 @@ function getViewTitle(viewName) {
         'dashboard': 'Dashboard',
         'users': 'Gestione Utenti',
         'firewall': 'Firewall Macchina',
+        'network': 'Interfacce di Rete',
+        'crontab': 'Gestione Crontab',
         'settings': 'Impostazioni',
         'modules': 'Gestione Moduli',
     };

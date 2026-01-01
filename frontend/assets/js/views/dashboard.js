@@ -5,6 +5,8 @@
 import { apiGet } from '../api.js';
 import { formatRelativeTime } from '../utils.js';
 
+let autoRefreshInterval = null;
+
 /**
  * Render the dashboard view
  */
@@ -22,6 +24,60 @@ export async function render(container) {
                             <div>
                                 <h2 class="mb-1">Benvenuto in MADMIN</h2>
                                 <p class="mb-0 opacity-75">Sistema di amministrazione modulare per il tuo server</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System Stats Card -->
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <i class="ti ti-cpu me-2"></i>Statistiche Sistema
+                        </h3>
+                        <div class="card-actions">
+                            <div class="form-check form-switch me-3">
+                                <input class="form-check-input" type="checkbox" id="auto-refresh-toggle">
+                                <label class="form-check-label" for="auto-refresh-toggle">Auto (30s)</label>
+                            </div>
+                            <button class="btn btn-ghost-primary" id="btn-refresh-stats" title="Aggiorna">
+                                <i class="ti ti-refresh"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="system-stats-container">
+                            <div class="col-md-4 mb-3">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="ti ti-cpu me-2 text-blue"></i>
+                                    <span class="fw-bold">CPU</span>
+                                    <span class="ms-auto text-muted" id="cpu-percent">--</span>
+                                </div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-blue" id="cpu-bar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="ti ti-device-desktop me-2 text-green"></i>
+                                    <span class="fw-bold">RAM</span>
+                                    <span class="ms-auto text-muted" id="ram-info">--</span>
+                                </div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-green" id="ram-bar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="ti ti-database me-2 text-orange"></i>
+                                    <span class="fw-bold">Disco</span>
+                                    <span class="ms-auto text-muted" id="disk-info">--</span>
+                                </div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-orange" id="disk-bar" style="width: 0%"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -145,7 +201,7 @@ export async function render(container) {
                             <dd class="col-7" id="system-version">-</dd>
                             
                             <dt class="col-5">Backend:</dt>
-                            <dd class="col-7">FastAPI + PostgreSQL</dd>
+                            <dd class="col-7">FastAPI + SQLite</dd>
                             
                             <dt class="col-5">Frontend:</dt>
                             <dd class="col-7">Tabler UI + ES Modules</dd>
@@ -159,8 +215,109 @@ export async function render(container) {
         </div>
     `;
 
+    // Setup event listeners
+    setupEventListeners();
+
     // Load data
     await loadDashboardData();
+    await loadSystemStats();
+}
+
+/**
+ * Setup event listeners
+ */
+function setupEventListeners() {
+    // Refresh stats button
+    document.getElementById('btn-refresh-stats')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-refresh-stats');
+        btn.innerHTML = '<i class="ti ti-loader ti-spin"></i>';
+        await loadSystemStats();
+        btn.innerHTML = '<i class="ti ti-refresh"></i>';
+    });
+
+    // Auto-refresh toggle
+    document.getElementById('auto-refresh-toggle')?.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            // Start auto-refresh every 30 seconds
+            autoRefreshInterval = setInterval(loadSystemStats, 30000);
+        } else {
+            // Stop auto-refresh
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+    });
+}
+
+/**
+ * Format bytes to human readable string
+ */
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+/**
+ * Load system statistics
+ */
+async function loadSystemStats() {
+    try {
+        const stats = await apiGet('/system/stats');
+
+        if (!stats.available) {
+            document.getElementById('system-stats-container').innerHTML = `
+                <div class="col-12 text-center text-muted">
+                    <i class="ti ti-alert-circle me-2"></i>
+                    Statistiche non disponibili: ${stats.error || 'psutil non installato'}
+                </div>
+            `;
+            return;
+        }
+
+        // CPU
+        const cpuPercent = stats.cpu.percent;
+        document.getElementById('cpu-percent').textContent = `${cpuPercent.toFixed(1)}%`;
+        document.getElementById('cpu-bar').style.width = `${cpuPercent}%`;
+        document.getElementById('cpu-bar').className = `progress-bar ${getProgressColor(cpuPercent)}`;
+
+        // RAM
+        const ramPercent = stats.memory.percent;
+        const ramUsed = formatBytes(stats.memory.used);
+        const ramTotal = formatBytes(stats.memory.total);
+        document.getElementById('ram-info').textContent = `${ramPercent.toFixed(1)}% (${ramUsed} / ${ramTotal})`;
+        document.getElementById('ram-bar').style.width = `${ramPercent}%`;
+        document.getElementById('ram-bar').className = `progress-bar ${getProgressColor(ramPercent)}`;
+
+        // Disk
+        const diskPercent = stats.disk.percent;
+        const diskUsed = formatBytes(stats.disk.used);
+        const diskTotal = formatBytes(stats.disk.total);
+        document.getElementById('disk-info').textContent = `${diskPercent.toFixed(1)}% (${diskUsed} / ${diskTotal})`;
+        document.getElementById('disk-bar').style.width = `${diskPercent}%`;
+        document.getElementById('disk-bar').className = `progress-bar ${getProgressColor(diskPercent)}`;
+
+    } catch (error) {
+        console.error('Error loading system stats:', error);
+        document.getElementById('system-stats-container').innerHTML = `
+            <div class="col-12 text-center text-danger">
+                <i class="ti ti-alert-circle me-2"></i>
+                Errore caricamento statistiche
+            </div>
+        `;
+    }
+}
+
+/**
+ * Get progress bar color based on percentage
+ */
+function getProgressColor(percent) {
+    if (percent < 60) return 'bg-green';
+    if (percent < 80) return 'bg-yellow';
+    return 'bg-red';
 }
 
 /**

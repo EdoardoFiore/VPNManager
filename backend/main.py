@@ -103,6 +103,10 @@ def create_app() -> FastAPI:
     from core.settings.router import router as settings_router
     from core.files.router import router as files_router
     from core.backup.router import router as backup_router
+    from core.system.router import router as system_router
+    from core.services.router import router as services_router
+    from core.network.router import router as network_router
+    from core.cron.router import router as cron_router
     
     app.include_router(auth_router)
     app.include_router(firewall_router)
@@ -110,6 +114,10 @@ def create_app() -> FastAPI:
     app.include_router(settings_router)
     app.include_router(files_router)
     app.include_router(backup_router)
+    app.include_router(system_router)
+    app.include_router(services_router)
+    app.include_router(network_router)
+    app.include_router(cron_router)
     
     # UI Router for frontend
     @app.get("/api/ui/menu")
@@ -123,6 +131,8 @@ def create_app() -> FastAPI:
             {"label": "Dashboard", "icon": "home", "route": "#dashboard", "permission": None},
             {"label": "Utenti", "icon": "users", "route": "#users", "permission": "users.view"},
             {"label": "Firewall Macchina", "icon": "shield", "route": "#firewall", "permission": "firewall.view"},
+            {"label": "Rete", "icon": "network", "route": "#network", "permission": None},
+            {"label": "Crontab", "icon": "clock", "route": "#crontab", "permission": "settings.view"},
             {"label": "Impostazioni", "icon": "settings", "route": "#settings", "permission": "settings.view"},
             {"label": "Moduli", "icon": "puzzle", "route": "#modules", "permission": "modules.view"},
         ]

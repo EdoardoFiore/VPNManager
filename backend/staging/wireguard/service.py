@@ -145,6 +145,78 @@ AllowedIPs = {allowed_ips}
             return False
     
     @staticmethod
+    def get_peer_status(interface: str) -> dict:
+        """
+        Get status of all peers on an interface.
+        
+        Parses 'wg show {interface} dump' output.
+        
+        Returns:
+            dict mapping public_key -> {
+                'endpoint': str or None,
+                'allowed_ips': str,
+                'latest_handshake': int (unix timestamp or 0),
+                'last_seen': str (ISO format or None),
+                'is_connected': bool (handshake < 180 seconds),
+                'rx_bytes': int,
+                'tx_bytes': int
+            }
+        """
+        import time
+        from datetime import datetime, timezone
+        
+        peers = {}
+        
+        try:
+            result = subprocess.run(
+                ['wg', 'show', interface, 'dump'],
+                capture_output=True, text=True, check=True
+            )
+            
+            lines = result.stdout.strip().split('\n')
+            # First line is interface info, skip it
+            # Subsequent lines are peers
+            # Format: public_key, preshared_key, endpoint, allowed_ips, latest_handshake, rx_bytes, tx_bytes, persistent_keepalive
+            
+            for line in lines[1:]:  # Skip interface line
+                parts = line.split('\t')
+                if len(parts) >= 7:
+                    public_key = parts[0]
+                    endpoint = parts[2] if parts[2] != '(none)' else None
+                    allowed_ips = parts[3]
+                    latest_handshake = int(parts[4]) if parts[4] else 0
+                    rx_bytes = int(parts[5]) if parts[5] else 0
+                    tx_bytes = int(parts[6]) if parts[6] else 0
+                    
+                    # Calculate connection status
+                    now = int(time.time())
+                    handshake_age = now - latest_handshake if latest_handshake > 0 else float('inf')
+                    is_connected = handshake_age < 180  # Connected if handshake < 3 minutes
+                    
+                    # Format last seen as ISO timestamp
+                    last_seen = None
+                    if latest_handshake > 0:
+                        last_seen = datetime.fromtimestamp(latest_handshake, tz=timezone.utc).isoformat()
+                    
+                    peers[public_key] = {
+                        'endpoint': endpoint,
+                        'allowed_ips': allowed_ips,
+                        'latest_handshake': latest_handshake,
+                        'last_seen': last_seen,
+                        'is_connected': is_connected,
+                        'rx_bytes': rx_bytes,
+                        'tx_bytes': tx_bytes
+                    }
+            
+        except subprocess.CalledProcessError:
+            # Interface might not be running
+            pass
+        except Exception as e:
+            logger.warning(f"Could not get peer status for {interface}: {e}")
+        
+        return peers
+    
+    @staticmethod
     def get_physical_interfaces() -> List[dict]:
         """
         List physical network interfaces.

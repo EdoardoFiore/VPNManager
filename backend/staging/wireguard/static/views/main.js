@@ -10,6 +10,30 @@ import { showToast, confirmDialog, loadingSpinner } from '/static/js/utils.js';
 let currentInstanceId = null;
 let networkInterfaces = [];  // Cache for system network interfaces
 
+// Helper function to format bytes to human readable string
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// Helper function to format ISO timestamp to "X ago" format
+function formatTimeAgo(isoString) {
+    if (!isoString) return 'Mai';
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+
+    if (diffSec < 60) return 'Adesso';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)} min fa`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} ore fa`;
+    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)} giorni fa`;
+    return date.toLocaleDateString('it-IT');
+}
+
 export async function render(container, params) {
     if (params && params.length > 0) {
         currentInstanceId = params[0];
@@ -400,20 +424,37 @@ async function renderInstanceDetail(container) {
                                 <table class="table table-vcenter">
                                     <thead>
                                         <tr>
+                                            <th>Stato</th>
                                             <th>Nome</th>
                                             <th>IP Assegnato</th>
-                                            <th>Chiave Pubblica</th>
-                                            <th>Creato</th>
+                                            <th>Traffico</th>
+                                            <th>Ultima Connessione</th>
                                             <th class="w-1">Azioni</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         ${clients.map(c => `
                                             <tr>
+                                                <td>
+                                                    ${c.is_connected
+                ? '<span class="status-dot status-dot-animated bg-green" title="Connesso"></span>'
+                : '<span class="status-dot bg-secondary" title="Offline"></span>'
+            }
+                                                </td>
                                                 <td><strong>${c.name}</strong></td>
                                                 <td><code>${c.allocated_ip}</code></td>
-                                                <td><code class="text-muted">${c.public_key.substring(0, 12)}...</code></td>
-                                                <td>${new Date(c.created_at).toLocaleDateString('it-IT')}</td>
+                                                <td>
+                                                    <small class="text-muted">
+                                                        <i class="ti ti-arrow-down text-green"></i> ${formatBytes(c.rx_bytes || 0)}
+                                                        <i class="ti ti-arrow-up text-blue ms-2"></i> ${formatBytes(c.tx_bytes || 0)}
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    ${c.last_seen
+                ? `<small class="text-muted">${formatTimeAgo(c.last_seen)}</small>`
+                : '<small class="text-muted">Mai connesso</small>'
+            }
+                                                </td>
                                                 <td>
                                                     <div class="btn-group">
                                                         <button class="btn btn-sm btn-outline-primary" onclick="downloadConfig('${c.name}')" title="Scarica Config">

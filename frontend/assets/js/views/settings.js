@@ -205,6 +205,30 @@ export async function render(container) {
                     </div>
                 </div>
             </div>
+            
+            <!-- System Management -->
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="ti ti-server me-2"></i>Gestione Sistema</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-8">
+                                <h4 class="mb-1">Riavvia MADMIN</h4>
+                                <p class="text-muted mb-0">Riavvia il servizio MADMIN per applicare eventuali modifiche di configurazione.</p>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                ${canManage ? `
+                                <button class="btn btn-warning" id="btn-restart-madmin">
+                                    <i class="ti ti-refresh me-1"></i>Riavvia MADMIN
+                                </button>
+                                ` : '<span class="text-muted">Permessi insufficienti</span>'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
 
@@ -458,5 +482,29 @@ function setupEventListeners() {
             await apiPatch('/settings/backup', data);
             showToast('Impostazioni backup salvate', 'success');
         } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // Restart MADMIN service
+    document.getElementById('btn-restart-madmin')?.addEventListener('click', async () => {
+        if (!confirm('Sei sicuro di voler riavviare MADMIN? La connessione sarà temporaneamente interrotta.')) {
+            return;
+        }
+
+        const btn = document.getElementById('btn-restart-madmin');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Riavvio...';
+        btn.disabled = true;
+
+        try {
+            await apiPost('/services/madmin.service/restart', {});
+            showToast('Servizio MADMIN riavviato. La pagina si ricaricherà tra 5 secondi...', 'success');
+            setTimeout(() => {
+                location.reload();
+            }, 5000);
+        } catch (e) {
+            showToast('Errore riavvio: ' + e.message, 'error');
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
     });
 }

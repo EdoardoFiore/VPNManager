@@ -45,6 +45,10 @@ class MachineFirewallRule(SQLModel, table=True):
     # Connection state (NEW, ESTABLISHED, RELATED, INVALID)
     state: Optional[str] = Field(default=None, max_length=50)
     
+    # Rate limiting (iptables -m limit)
+    limit_rate: Optional[str] = Field(default=None, max_length=20)  # e.g., "10/second", "100/minute"
+    limit_burst: Optional[int] = Field(default=None)  # Burst limit for rate limiting
+    
     # Metadata
     comment: Optional[str] = Field(default=None, max_length=255)
     table_name: str = Field(default="filter", max_length=20)  # filter, nat, mangle, raw
@@ -89,6 +93,8 @@ class MachineFirewallRuleCreate(SQLModel):
     in_interface: Optional[str] = None
     out_interface: Optional[str] = None
     state: Optional[str] = None
+    limit_rate: Optional[str] = None
+    limit_burst: Optional[int] = None
     comment: Optional[str] = None
     table_name: str = "filter"
     enabled: bool = True
@@ -105,6 +111,8 @@ class MachineFirewallRuleUpdate(SQLModel):
     in_interface: Optional[str] = None
     out_interface: Optional[str] = None
     state: Optional[str] = None
+    limit_rate: Optional[str] = None
+    limit_burst: Optional[int] = None
     comment: Optional[str] = None
     table_name: Optional[str] = None
     enabled: Optional[bool] = None
@@ -122,6 +130,8 @@ class MachineFirewallRuleResponse(SQLModel):
     in_interface: Optional[str]
     out_interface: Optional[str]
     state: Optional[str]
+    limit_rate: Optional[str]
+    limit_burst: Optional[int]
     comment: Optional[str]
     table_name: str
     order: int

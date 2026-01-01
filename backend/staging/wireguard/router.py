@@ -248,15 +248,42 @@ async def list_clients(
     db: AsyncSession = Depends(get_session),
     _user: User = Depends(require_permission("wireguard.view"))
 ):
-    """List clients for an instance."""
+    """List clients for an instance with live connection status."""
+    # Get instance to determine interface name
+    inst_result = await db.execute(select(WgInstance).where(WgInstance.id == instance_id))
+    instance = inst_result.scalar_one_or_none()
+    if not instance:
+        raise HTTPException(404, "Istanza non trovata")
+    
+    # Get live peer status from wg show
+    peer_status = wireguard_service.get_peer_status(instance.interface)
+    
+    # Get clients from database
     result = await db.execute(
         select(WgClient).where(WgClient.instance_id == instance_id)
     )
-    return [WgClientRead(
-        id=c.id, name=c.name, allocated_ip=c.allocated_ip,
-        public_key=c.public_key, created_at=c.created_at,
-        last_handshake=c.last_handshake
-    ) for c in result.scalars().all()]
+    clients = result.scalars().all()
+    
+    response = []
+    for c in clients:
+        # Merge with live status if available
+        status = peer_status.get(c.public_key, {})
+        
+        response.append(WgClientRead(
+            id=c.id,
+            name=c.name,
+            allocated_ip=c.allocated_ip,
+            public_key=c.public_key,
+            created_at=c.created_at,
+            last_handshake=c.last_handshake,
+            is_connected=status.get('is_connected', False),
+            last_seen=status.get('last_seen'),
+            rx_bytes=status.get('rx_bytes', 0),
+            tx_bytes=status.get('tx_bytes', 0),
+            endpoint=status.get('endpoint')
+        ))
+    
+    return response
 
 
 @router.post("/instances/{instance_id}/clients", response_model=WgClientRead, status_code=201)

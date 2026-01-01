@@ -160,6 +160,12 @@ class WgClientRead(SQLModel):
     public_key: str
     created_at: datetime
     last_handshake: Optional[datetime]
+    # Live status fields (from wg show)
+    is_connected: Optional[bool] = None
+    last_seen: Optional[str] = None
+    rx_bytes: Optional[int] = None
+    tx_bytes: Optional[int] = None
+    endpoint: Optional[str] = None
 
 
 # --- Group Schemas ---
