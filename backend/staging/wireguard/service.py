@@ -474,9 +474,12 @@ PersistentKeepalive = 25
         WireGuardService._run_iptables("filter", [
             "-A", forward_chain, "-o", interface, "-j", "ACCEPT"
         ])
-        # The -i interface traffic will be handled by:
-        # 1. Group member rules (inserted at top by apply_group_firewall_rules)
-        # 2. Instance default policy (added at end by apply_group_firewall_rules)
+        
+        # 4. Add default policy at end (ACCEPT by default, can be changed per-instance)
+        # This ensures connectivity even before groups are configured
+        WireGuardService._run_iptables("filter", [
+            "-A", forward_chain, "-j", "ACCEPT"
+        ])
         
         # 4. Add rules to NAT chain
         # Masquerade traffic from VPN subnet going to WAN
@@ -521,6 +524,28 @@ PersistentKeepalive = 25
         WireGuardService._delete_chain(nat_chain, "nat")
         
         logger.info(f"Firewall rules removed for WireGuard instance {instance_id}")
+        return True
+    
+    @staticmethod
+    async def remove_all_group_chains(instance_id: str, db) -> bool:
+        """
+        Remove all group chains for an instance.
+        Should be called before deleting an instance.
+        """
+        from sqlalchemy import select
+        from .models import WgGroup
+        
+        logger.info(f"Removing group chains for instance {instance_id}")
+        
+        # Get all groups for this instance
+        result = await db.execute(select(WgGroup).where(WgGroup.instance_id == instance_id))
+        groups = result.scalars().all()
+        
+        for group in groups:
+            group_chain = f"WG_GRP_{group.id.replace(instance_id + '_', '')}"
+            WireGuardService._delete_chain(group_chain, "filter")
+            logger.info(f"  Deleted chain: {group_chain}")
+        
         return True
     
     @staticmethod

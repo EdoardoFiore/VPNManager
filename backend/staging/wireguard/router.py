@@ -181,6 +181,10 @@ async def delete_instance(
         raise HTTPException(404, "Istanza non trovata")
     
     wireguard_service.stop_interface(instance.interface)
+    # Remove group chains first (needs DB access)
+    from .service import WireGuardService
+    await WireGuardService.remove_all_group_chains(instance.id, db)
+    # Then remove instance chains
     wireguard_service.remove_instance_firewall_rules(instance.id)
     
     config_path = WIREGUARD_CONFIG_DIR / f"{instance.interface}.conf"
@@ -208,6 +212,9 @@ async def start_instance(
         wireguard_service.apply_instance_firewall_rules(
             instance.id, instance.port, instance.interface, instance.subnet
         )
+        # Also apply group rules (member jumps, default policy)
+        from .service import WireGuardService
+        await WireGuardService.apply_group_firewall_rules(instance.id, db)
         return {"status": "running"}
     raise HTTPException(500, "Impossibile avviare istanza")
 
@@ -226,6 +233,8 @@ async def stop_instance(
     
     if wireguard_service.stop_interface(instance.interface):
         # Remove firewall rules when interface stops
+        from .service import WireGuardService
+        await WireGuardService.remove_all_group_chains(instance.id, db)
         wireguard_service.remove_instance_firewall_rules(instance.id)
         return {"status": "stopped"}
     raise HTTPException(500, "Impossibile fermare istanza")

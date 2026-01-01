@@ -48,8 +48,8 @@ function render(container) {
     container.innerHTML = `
         <!-- Instance Default Policy -->
         <div class="card mb-3">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <span class="text-muted">Policy di default (client senza gruppo):</span>
+            <div class="card-body py-2 d-flex align-items-center gap-3">
+                <strong>Default Policy</strong>
                 <div class="btn-group" role="group">
                     <input type="radio" class="btn-check" name="default-policy" id="policy-accept" value="ACCEPT" 
                            ${instance?.firewall_default_policy !== 'DROP' ? 'checked' : ''}>
@@ -581,8 +581,8 @@ function initRuleSorting() {
 
     new Sortable(tbody, {
         animation: 150,
-        handle: '.cursor-move',
-        ghostClass: 'bg-light',
+        handle: 'td.cursor-move',
+        ghostClass: 'table-active',
         onEnd: async function (evt) {
             // Collect new order
             const rows = tbody.querySelectorAll('tr[data-rule-id]');
