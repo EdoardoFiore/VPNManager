@@ -6,6 +6,7 @@ interface control, IP allocation, QR code generation.
 """
 import subprocess
 import logging
+import urllib.request
 from typing import Tuple, List, Optional
 from pathlib import Path
 from ipaddress import ip_network
@@ -16,6 +17,41 @@ from .models import WgInstance, WgClient
 
 logger = logging.getLogger(__name__)
 WIREGUARD_CONFIG_DIR = Path("/etc/wireguard")
+
+# Cached public IP
+_cached_public_ip = None
+
+
+def get_public_ip() -> Optional[str]:
+    """
+    Get server's public IP address.
+    Tries multiple services, caches result.
+    """
+    global _cached_public_ip
+    if _cached_public_ip:
+        return _cached_public_ip
+    
+    services = [
+        "https://api.ipify.org",
+        "https://icanhazip.com",
+        "https://checkip.amazonaws.com",
+        "https://ifconfig.me/ip"
+    ]
+    
+    for url in services:
+        try:
+            with urllib.request.urlopen(url, timeout=5) as response:
+                ip = response.read().decode('utf-8').strip()
+                if ip:
+                    _cached_public_ip = ip
+                    logger.info(f"Detected public IP: {ip}")
+                    return ip
+        except Exception as e:
+            logger.debug(f"Failed to get IP from {url}: {e}")
+            continue
+    
+    logger.warning("Could not detect public IP from any service")
+    return None
 
 
 class WireGuardService:

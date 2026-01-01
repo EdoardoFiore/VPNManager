@@ -28,6 +28,10 @@ class WgInstance(SQLModel, table=True):
     firewall_default_policy: str = Field(default="ACCEPT")
     status: str = Field(default="stopped")
     
+    # Public endpoint for client configs (IP or domain)
+    # If empty, will auto-detect public IP
+    endpoint: Optional[str] = Field(default=None, max_length=255)
+    
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
@@ -132,6 +136,7 @@ class WgInstanceCreate(SQLModel):
     tunnel_mode: str = "full"
     routes: List[Dict] = []
     dns_servers: List[str] = ["8.8.8.8", "1.1.1.1"]
+    endpoint: Optional[str] = None  # Public IP/domain for client configs
 
 
 class WgInstanceRead(SQLModel):
@@ -146,6 +151,7 @@ class WgInstanceRead(SQLModel):
     dns_servers: List[str]
     firewall_default_policy: str
     status: str
+    endpoint: Optional[str] = None
     client_count: int = 0
 
 

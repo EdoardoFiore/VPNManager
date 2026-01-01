@@ -5,11 +5,13 @@ FastAPI endpoints for WireGuard VPN management.
 """
 import logging
 import io
-from typing import List
+from datetime import datetime
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlmodel import SQLModel
 
 from core.database import get_session
 from core.auth.dependencies import require_permission
@@ -164,8 +166,38 @@ async def get_instance(
         routes=instance.routes, dns_servers=instance.dns_servers,
         firewall_default_policy=instance.firewall_default_policy,
         status="running" if wireguard_service.get_interface_status(instance.interface) else "stopped",
+        endpoint=instance.endpoint,
         client_count=count.scalar() or 0
     )
+
+
+class WgInstanceUpdate(SQLModel):
+    """Schema for updating instance settings."""
+    endpoint: Optional[str] = None
+
+
+@router.patch("/instances/{instance_id}")
+async def update_instance(
+    instance_id: str,
+    data: WgInstanceUpdate,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.manage"))
+):
+    """Update WireGuard instance settings."""
+    result = await db.execute(select(WgInstance).where(WgInstance.id == instance_id))
+    instance = result.scalar_one_or_none()
+    if not instance:
+        raise HTTPException(404, "Istanza non trovata")
+    
+    # Update endpoint if provided (allow setting to None)
+    if "endpoint" in data.model_dump(exclude_unset=True):
+        instance.endpoint = data.endpoint
+    
+    instance.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(instance)
+    
+    return {"success": True, "message": "Istanza aggiornata"}
 
 
 @router.delete("/instances/{instance_id}", status_code=204)
@@ -387,10 +419,9 @@ async def get_client_config(
     if not client:
         raise HTTPException(404, "Client non trovato")
     
-    from core.settings.models import SMTPSettings
-    smtp = await db.execute(select(SMTPSettings).where(SMTPSettings.id == 1))
-    smtp_settings = smtp.scalar_one_or_none()
-    endpoint = smtp_settings.public_url if smtp_settings and smtp_settings.public_url else "YOUR_SERVER_IP"
+    # Get endpoint: instance-specific > auto-detect > fallback
+    from .service import get_public_ip
+    endpoint = instance.endpoint or get_public_ip() or "YOUR_SERVER_IP"
     
     config = wireguard_service.generate_client_config(instance, client, endpoint)
     
@@ -422,10 +453,9 @@ async def get_client_qr(
     if not client:
         raise HTTPException(404, "Client non trovato")
     
-    from core.settings.models import SMTPSettings
-    smtp = await db.execute(select(SMTPSettings).where(SMTPSettings.id == 1))
-    smtp_settings = smtp.scalar_one_or_none()
-    endpoint = smtp_settings.public_url if smtp_settings and smtp_settings.public_url else "YOUR_SERVER_IP"
+    # Get endpoint: instance-specific > auto-detect > fallback
+    from .service import get_public_ip
+    endpoint = instance.endpoint or get_public_ip() or "YOUR_SERVER_IP"
     
     config = wireguard_service.generate_client_config(instance, client, endpoint)
     qr_bytes = wireguard_service.generate_qr_code(config)

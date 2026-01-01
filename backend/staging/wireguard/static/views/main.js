@@ -379,6 +379,18 @@ async function renderInstanceDetail(container) {
                             <strong>${instance.client_count}</strong>
                         </div>
                     </div>
+                    <hr>
+                    <div class="row align-items-center">
+                        <div class="col-md-10">
+                            <span class="text-muted">Endpoint Pubblico:</span>
+                            <code id="display-endpoint">${instance.endpoint || '(auto-detect)'}</code>
+                        </div>
+                        <div class="col-md-2 text-end">
+                            <button class="btn btn-sm btn-outline-primary" id="btn-edit-endpoint">
+                                <i class="ti ti-edit me-1"></i>Modifica
+                            </button>
+                        </div>
+                    </div>
                     ${instance.tunnel_mode === 'split' && instance.routes?.length ? `
                         <hr>
                         <h4>Rotte Split Tunnel</h4>
@@ -436,18 +448,20 @@ async function renderInstanceDetail(container) {
                                         ${clients.map(c => `
                                             <tr>
                                                 <td>
-                                                    ${c.is_connected
-                ? '<span class="status-dot status-dot-animated bg-green" title="Connesso"></span>'
+                                                    ${c.is_connected === true
+                ? '<span class="status-dot status-dot-animated bg-success" title="Connesso"></span>'
                 : '<span class="status-dot bg-secondary" title="Offline"></span>'
             }
                                                 </td>
                                                 <td><strong>${c.name}</strong></td>
                                                 <td><code>${c.allocated_ip}</code></td>
                                                 <td>
+                                                    ${c.is_connected === true ? `
                                                     <small class="text-muted">
-                                                        <i class="ti ti-arrow-down text-green"></i> ${formatBytes(c.rx_bytes || 0)}
-                                                        <i class="ti ti-arrow-up text-blue ms-2"></i> ${formatBytes(c.tx_bytes || 0)}
+                                                        <i class="ti ti-arrow-down text-success"></i> ${formatBytes(c.rx_bytes || 0)}
+                                                        <i class="ti ti-arrow-up text-primary ms-2"></i> ${formatBytes(c.tx_bytes || 0)}
                                                     </small>
+                                                    ` : '<small class="text-muted">-</small>'}
                                                 </td>
                                                 <td>
                                                     ${c.last_seen
@@ -510,6 +524,29 @@ async function renderInstanceDetail(container) {
                 </div>
             </div>
         </div>
+        
+        <!-- Edit Endpoint Modal -->
+        <div class="modal" id="modal-edit-endpoint" tabindex="-1">
+            <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Modifica Endpoint</h5>
+                        <button class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label" for="edit-endpoint-value">Endpoint Pubblico (IP o dominio)</label>
+                            <input type="text" class="form-control" id="edit-endpoint-value" placeholder="es. vpn.example.com o 1.2.3.4">
+                            <small class="form-hint">Lascia vuoto per usare auto-detect dell'IP pubblico</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                        <button class="btn btn-primary" id="btn-save-endpoint">Salva</button>
+                    </div>
+                </div>
+            </div>
+        </div>
         `;
 
         // New client button - open modal
@@ -530,6 +567,27 @@ async function renderInstanceDetail(container) {
                 showToast('Client creato con successo', 'success');
                 bootstrap.Modal.getInstance(document.getElementById('modal-new-client'))?.hide();
                 renderInstanceDetail(container);
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+
+        // Edit endpoint button
+        document.getElementById('btn-edit-endpoint')?.addEventListener('click', () => {
+            document.getElementById('edit-endpoint-value').value = instance.endpoint || '';
+            new bootstrap.Modal(document.getElementById('modal-edit-endpoint')).show();
+        });
+
+        // Save endpoint
+        document.getElementById('btn-save-endpoint')?.addEventListener('click', async () => {
+            const endpoint = document.getElementById('edit-endpoint-value').value.trim() || null;
+            try {
+                await apiPatch(`/modules/wireguard/instances/${currentInstanceId}`, { endpoint });
+                showToast('Endpoint aggiornato', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('modal-edit-endpoint'))?.hide();
+                // Update display without full reload
+                document.getElementById('display-endpoint').textContent = endpoint || '(auto-detect)';
+                instance.endpoint = endpoint;
             } catch (err) {
                 showToast(err.message, 'error');
             }
