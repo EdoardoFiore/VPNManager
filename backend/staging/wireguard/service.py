@@ -366,7 +366,13 @@ PersistentKeepalive = 25
         WireGuardService._run_iptables("filter", ["-D", "MADMIN_INPUT", "-j", "WG_INPUT"], suppress_errors=True)
         WireGuardService._run_iptables("filter", ["-D", "MADMIN_FORWARD", "-j", "WG_FORWARD"], suppress_errors=True)
         
+        # 3. Add jumps to main chains (after MADMIN)
+        WireGuardService._run_iptables("filter", ["-A", "INPUT", "-j", WireGuardService.WG_INPUT_CHAIN])
+        WireGuardService._run_iptables("filter", ["-A", "FORWARD", "-j", WireGuardService.WG_FORWARD_CHAIN])
+        WireGuardService._run_iptables("nat", ["-A", "POSTROUTING", "-j", WireGuardService.WG_NAT_CHAIN])
+        
         logger.info("WireGuard iptables chains created")
+        logger.info(f"  Added jumps: INPUT→{WireGuardService.WG_INPUT_CHAIN}, FORWARD→{WireGuardService.WG_FORWARD_CHAIN}")
         return True
     
     @staticmethod
@@ -432,10 +438,11 @@ PersistentKeepalive = 25
         # Ensure module chains are initialized first
         WireGuardService.initialize_module_firewall_chains()
         
-        # Instance chain names
-        input_chain = f"WG_{instance_id}_INPUT"
-        forward_chain = f"WG_{instance_id}_FWD"
-        nat_chain = f"WG_{instance_id}_NAT"
+        # Instance chain names - strip wg_ prefix if present to avoid WG_wg_name redundancy
+        chain_id = instance_id.replace('wg_', '') if instance_id.startswith('wg_') else instance_id
+        input_chain = f"WG_{chain_id}_INPUT"
+        forward_chain = f"WG_{chain_id}_FWD"
+        nat_chain = f"WG_{chain_id}_NAT"
         
         wan_interface = WireGuardService._get_default_interface()
         
@@ -461,16 +468,15 @@ PersistentKeepalive = 25
         ])
         
         # 3. Add rules to FORWARD chain
-        # Allow forwarding to/from VPN interface
-        WireGuardService._run_iptables("filter", [
-            "-A", forward_chain, "-i", interface, "-j", "ACCEPT"
-        ])
+        # NOTE: We DON'T add blanket -i interface ACCEPT here because:
+        # - Traffic FROM VPN clients should go through group rules → default policy
+        # - Only traffic TO VPN clients (responses) should be allowed unconditionally
         WireGuardService._run_iptables("filter", [
             "-A", forward_chain, "-o", interface, "-j", "ACCEPT"
         ])
-        WireGuardService._run_iptables("filter", [
-            "-A", forward_chain, "-j", "RETURN"
-        ])
+        # The -i interface traffic will be handled by:
+        # 1. Group member rules (inserted at top by apply_group_firewall_rules)
+        # 2. Instance default policy (added at end by apply_group_firewall_rules)
         
         # 4. Add rules to NAT chain
         # Masquerade traffic from VPN subnet going to WAN
@@ -496,9 +502,11 @@ PersistentKeepalive = 25
         """
         Remove firewall rules for a WireGuard instance.
         """
-        input_chain = f"WG_{instance_id}_INPUT"
-        forward_chain = f"WG_{instance_id}_FWD"
-        nat_chain = f"WG_{instance_id}_NAT"
+        # Instance chain names - strip wg_ prefix if present
+        chain_id = instance_id.replace('wg_', '') if instance_id.startswith('wg_') else instance_id
+        input_chain = f"WG_{chain_id}_INPUT"
+        forward_chain = f"WG_{chain_id}_FWD"
+        nat_chain = f"WG_{chain_id}_NAT"
         
         logger.info(f"Removing firewall rules for WireGuard instance {instance_id}")
         
@@ -538,8 +546,9 @@ PersistentKeepalive = 25
             logger.error(f"Instance {instance_id} not found")
             return False
         
-        # Instance forward chain name
-        instance_fwd_chain = f"WG_{instance_id}_FWD"
+        # Instance forward chain name - strip wg_ prefix if present
+        chain_id = instance_id.replace('wg_', '') if instance_id.startswith('wg_') else instance_id
+        instance_fwd_chain = f"WG_{chain_id}_FWD"
         
         # Get all groups for this instance
         result = await db.execute(select(WgGroup).where(WgGroup.instance_id == instance_id))
@@ -580,9 +589,9 @@ PersistentKeepalive = 25
                 
                 WireGuardService._run_iptables("filter", args)
             
-            # Add default policy at end of group chain
+            # Group chain ends with RETURN - default policy is at instance level
             WireGuardService._run_iptables("filter", [
-                "-A", group_chain, "-j", instance.firewall_default_policy
+                "-A", group_chain, "-j", "RETURN"
             ])
             
             # Get members of this group
@@ -610,7 +619,25 @@ PersistentKeepalive = 25
                 
                 logger.info(f"  Added rule: {client_ip} -> {group_chain}")
         
+        # After processing all groups, update the instance forward chain to use the default policy
+        # Remove old generic rules (they'll be at the end)
+        WireGuardService._run_iptables("filter", [
+            "-D", instance_fwd_chain, "-j", "ACCEPT"
+        ], suppress_errors=True)
+        WireGuardService._run_iptables("filter", [
+            "-D", instance_fwd_chain, "-j", "RETURN"
+        ], suppress_errors=True)
+        WireGuardService._run_iptables("filter", [
+            "-D", instance_fwd_chain, "-j", "DROP"
+        ], suppress_errors=True)
+        
+        # Add the instance default policy at the end (for non-grouped clients)
+        WireGuardService._run_iptables("filter", [
+            "-A", instance_fwd_chain, "-j", instance.firewall_default_policy
+        ])
+        
         logger.info(f"Group firewall rules applied for instance {instance_id}")
+        logger.info(f"  Default policy for non-grouped clients: {instance.firewall_default_policy}")
         return True
     
     @staticmethod

@@ -446,19 +446,51 @@ async function renderInstanceDetail(container) {
                     </div>
                 </div>
             </div>
+        </div>
+        
+        <!-- New Client Modal -->
+        <div class="modal" id="modal-new-client" tabindex="-1">
+            <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Nuovo Client</h5>
+                        <button class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label" for="new-client-name">Nome del client</label>
+                            <input type="text" class="form-control" id="new-client-name" placeholder="es. iPhone-Mario">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                        <button class="btn btn-primary" id="btn-confirm-new-client">Crea</button>
+                    </div>
+                </div>
+            </div>
+        </div>
         `;
 
-        // New client button
-        document.getElementById('btn-new-client')?.addEventListener('click', async () => {
-            const name = prompt('Nome del nuovo client:');
-            if (name && name.trim()) {
-                try {
-                    await apiPost(`/modules/wireguard/instances/${currentInstanceId}/clients`, { name: name.trim() });
-                    showToast('Client creato con successo', 'success');
-                    renderInstanceDetail(container);
-                } catch (err) {
-                    showToast(err.message, 'error');
-                }
+        // New client button - open modal
+        document.getElementById('btn-new-client')?.addEventListener('click', () => {
+            document.getElementById('new-client-name').value = '';
+            new bootstrap.Modal(document.getElementById('modal-new-client')).show();
+        });
+
+        // Confirm new client
+        document.getElementById('btn-confirm-new-client')?.addEventListener('click', async () => {
+            const name = document.getElementById('new-client-name').value.trim();
+            if (!name) {
+                showToast('Inserisci un nome per il client', 'error');
+                return;
+            }
+            try {
+                await apiPost(`/modules/wireguard/instances/${currentInstanceId}/clients`, { name });
+                showToast('Client creato con successo', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('modal-new-client'))?.hide();
+                renderInstanceDetail(container);
+            } catch (err) {
+                showToast(err.message, 'error');
             }
         });
 

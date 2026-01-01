@@ -49,12 +49,7 @@ function render(container) {
         <!-- Instance Default Policy -->
         <div class="card mb-3">
             <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <strong>Policy di default per client senza gruppo:</strong>
-                    <span class="badge ${instance?.firewall_default_policy === 'DROP' ? 'bg-danger' : 'bg-success'} ms-2">
-                        ${instance?.firewall_default_policy || 'ACCEPT'}
-                    </span>
-                </div>
+                <span class="text-muted">Policy di default (client senza gruppo):</span>
                 <div class="btn-group" role="group">
                     <input type="radio" class="btn-check" name="default-policy" id="policy-accept" value="ACCEPT" 
                            ${instance?.firewall_default_policy !== 'DROP' ? 'checked' : ''}>
@@ -331,7 +326,7 @@ function renderRules(rules) {
             <tbody id="rules-tbody">
                 ${rules.map((r, i) => `
                     <tr data-rule-id="${r.id}" data-order="${r.order}">
-                        <td class="cursor-move text-muted"><i class="ti ti-grip-vertical"></i></td>
+                        <td class="cursor-move text-muted" style="cursor: grab;"><i class="ti ti-grip-vertical"></i></td>
                         <td class="text-muted">${i + 1}</td>
                         <td><span class="badge ${r.action === 'ACCEPT' ? 'bg-success' : 'bg-danger'}">${r.action}</span></td>
                         <td><code>${r.protocol}</code></td>
@@ -339,9 +334,14 @@ function renderRules(rules) {
                         <td>${r.port || '*'}</td>
                         <td class="text-muted">${r.description || ''}</td>
                         <td>
-                            <button class="btn btn-sm btn-ghost-danger" onclick="deleteRule('${r.id}')">
-                                <i class="ti ti-trash"></i>
-                            </button>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-ghost-primary" onclick="editRule('${r.id}')">
+                                    <i class="ti ti-pencil"></i>
+                                </button>
+                                <button class="btn btn-ghost-danger" onclick="deleteRule('${r.id}')">
+                                    <i class="ti ti-trash"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 `).join('')}
@@ -449,8 +449,10 @@ function setupEventHandlers(container) {
         }
     });
 
-    // Create rule
+    // Create/Edit rule
     document.getElementById('btn-create-rule')?.addEventListener('click', async () => {
+        const modal = document.getElementById('modal-add-rule');
+        const editRuleId = modal?.dataset.editRuleId;
         const protocol = document.getElementById('rule-protocol').value;
         const data = {
             action: document.getElementById('rule-action').value,
@@ -461,13 +463,36 @@ function setupEventHandlers(container) {
         };
 
         try {
-            await apiPost(`/modules/wireguard/instances/${currentInstanceId}/groups/${currentGroupId}/rules`, data);
-            showToast('Regola creata', 'success');
-            bootstrap.Modal.getInstance(document.getElementById('modal-add-rule'))?.hide();
+            if (editRuleId) {
+                // Edit existing rule
+                await apiPatch(`/modules/wireguard/instances/${currentInstanceId}/groups/${currentGroupId}/rules/${editRuleId}`, data);
+                showToast('Regola aggiornata', 'success');
+            } else {
+                // Create new rule
+                await apiPost(`/modules/wireguard/instances/${currentInstanceId}/groups/${currentGroupId}/rules`, data);
+                showToast('Regola creata', 'success');
+            }
+            bootstrap.Modal.getInstance(modal)?.hide();
             loadGroupDetails();
+            refreshGroupsList();
         } catch (err) {
             showToast(err.message, 'error');
         }
+    });
+
+    // Reset modal when closed
+    document.getElementById('modal-add-rule')?.addEventListener('hidden.bs.modal', () => {
+        const modal = document.getElementById('modal-add-rule');
+        delete modal.dataset.editRuleId;
+        modal.querySelector('.modal-title').textContent = 'Nuova Regola';
+        document.getElementById('btn-create-rule').textContent = 'Crea';
+        // Reset form
+        document.getElementById('rule-action').value = 'DROP';
+        document.getElementById('rule-protocol').value = 'all';
+        document.getElementById('rule-destination').value = '';
+        document.getElementById('rule-port').value = '';
+        document.getElementById('rule-description').value = '';
+        document.getElementById('port-field-container').style.display = 'none';
     });
 }
 
@@ -478,6 +503,7 @@ window.removeMember = async (clientId) => {
             await apiDelete(`/modules/wireguard/instances/${currentInstanceId}/groups/${currentGroupId}/members/${clientId}`);
             showToast('Membro rimosso', 'success');
             loadGroupDetails();
+            refreshGroupsList();
         } catch (err) {
             showToast(err.message, 'error');
         }
@@ -490,11 +516,63 @@ window.deleteRule = async (ruleId) => {
             await apiDelete(`/modules/wireguard/instances/${currentInstanceId}/groups/${currentGroupId}/rules/${ruleId}`);
             showToast('Regola eliminata', 'success');
             loadGroupDetails();
+            refreshGroupsList();
         } catch (err) {
             showToast(err.message, 'error');
         }
     }
 };
+
+window.editRule = async (ruleId) => {
+    // Find rule data
+    const rulesData = await apiGet(`/modules/wireguard/instances/${currentInstanceId}/groups/${currentGroupId}/rules`);
+    const rule = rulesData.find(r => r.id === ruleId);
+    if (!rule) return;
+
+    // Populate modal fields
+    document.getElementById('rule-action').value = rule.action;
+    document.getElementById('rule-protocol').value = rule.protocol;
+    document.getElementById('rule-destination').value = rule.destination || '';
+    document.getElementById('rule-port').value = rule.port || '';
+    document.getElementById('rule-description').value = rule.description || '';
+
+    // Show/hide port field based on protocol
+    const portContainer = document.getElementById('port-field-container');
+    if (portContainer) {
+        portContainer.style.display = (rule.protocol === 'tcp' || rule.protocol === 'udp') ? '' : 'none';
+    }
+
+    // Mark as editing
+    const modal = document.getElementById('modal-add-rule');
+    modal.dataset.editRuleId = ruleId;
+    modal.querySelector('.modal-title').textContent = 'Modifica Regola';
+    document.getElementById('btn-create-rule').textContent = 'Salva';
+
+    new bootstrap.Modal(modal).show();
+};
+
+// Refresh groups list (updates member/rule counts)
+async function refreshGroupsList() {
+    try {
+        groups = await apiGet(`/modules/wireguard/instances/${currentInstanceId}/groups`);
+        const listEl = document.getElementById('groups-list');
+        if (listEl) {
+            listEl.innerHTML = renderGroupsList();
+            // Re-attach click handlers
+            listEl.querySelectorAll('[data-group-id]').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    currentGroupId = e.currentTarget.dataset.groupId;
+                    document.querySelectorAll('[data-group-id]').forEach(g => g.classList.remove('active'));
+                    e.currentTarget.classList.add('active');
+                    loadGroupDetails();
+                });
+            });
+        }
+    } catch (err) {
+        console.error('Failed to refresh groups list:', err);
+    }
+}
 
 // Initialize drag-drop sorting for rules
 function initRuleSorting() {
@@ -541,13 +619,6 @@ document.addEventListener('change', async (e) => {
             await apiPatch(`/modules/wireguard/instances/${currentInstanceId}/firewall-policy`, { policy: newPolicy });
             instance.firewall_default_policy = newPolicy;
             showToast(`Policy aggiornata a ${newPolicy}`, 'success');
-
-            // Update badge display
-            const badge = document.querySelector('.card-body .badge:not(.btn-check + label)');
-            if (badge) {
-                badge.className = `badge ${newPolicy === 'DROP' ? 'bg-danger' : 'bg-success'} ms-2`;
-                badge.textContent = newPolicy;
-            }
         } catch (err) {
             showToast(err.message, 'error');
         }
