@@ -5,7 +5,7 @@
  */
 
 import { apiGet, apiPost, apiDelete, apiPatch } from '../api.js';
-import { showToast, escapeHtml } from '../utils.js';
+import { showToast, escapeHtml, confirmDialog } from '../utils.js';
 import { checkPermission } from '../app.js';
 
 let presets = {};
@@ -350,7 +350,13 @@ async function toggleCronJob(entryId) {
  * Delete a cron job
  */
 async function deleteCronJob(entryId) {
-    if (!confirm('Sei sicuro di eliminare questo cron job?')) return;
+    const confirmed = await confirmDialog(
+        'Elimina Cron Job',
+        'Sei sicuro di eliminare questo cron job?',
+        'Elimina',
+        'btn-danger'
+    );
+    if (!confirmed) return;
 
     try {
         await apiDelete(`/cron/entries/${entryId}`);

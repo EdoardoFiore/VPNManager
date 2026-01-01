@@ -3,7 +3,7 @@
  */
 
 import { apiGet, apiPatch, apiPost } from '../api.js';
-import { showToast, escapeHtml, inputDialog } from '../utils.js';
+import { showToast, escapeHtml, inputDialog, confirmDialog } from '../utils.js';
 import { checkPermission } from '../app.js';
 
 /**
@@ -486,9 +486,13 @@ function setupEventListeners() {
 
     // Restart MADMIN service
     document.getElementById('btn-restart-madmin')?.addEventListener('click', async () => {
-        if (!confirm('Sei sicuro di voler riavviare MADMIN? La connessione sarà temporaneamente interrotta.')) {
-            return;
-        }
+        const confirmed = await confirmDialog(
+            'Riavvia MADMIN',
+            'Sei sicuro di voler riavviare MADMIN? La connessione sarà temporaneamente interrotta.',
+            'Riavvia',
+            'btn-warning'
+        );
+        if (!confirmed) return;
 
         const btn = document.getElementById('btn-restart-madmin');
         const originalText = btn.innerHTML;
