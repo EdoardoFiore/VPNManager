@@ -477,6 +477,9 @@ async function renderInstanceDetail(container) {
                                                         <button class="btn btn-sm btn-outline-secondary" onclick="showQR('${c.name}')" title="QR Code">
                                                             <i class="ti ti-qrcode"></i>
                                                         </button>
+                                                        <button class="btn btn-sm btn-outline-success" onclick="openSendEmailModal('${c.name}')" title="Invia via Email">
+                                                            <i class="ti ti-mail"></i>
+                                                        </button>
                                                         <button class="btn btn-sm btn-outline-danger" onclick="revokeClient('${c.name}')" title="Revoca">
                                                             <i class="ti ti-trash"></i>
                                                         </button>
@@ -543,6 +546,32 @@ async function renderInstanceDetail(container) {
                     <div class="modal-footer">
                         <button class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
                         <button class="btn btn-primary" id="btn-save-endpoint">Salva</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Send Email Modal -->
+        <div class="modal" id="modal-send-email" tabindex="-1">
+            <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Invia Config via Email</h5>
+                        <button class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="send-email-client-name">
+                        <div class="mb-3">
+                            <label class="form-label" for="send-email-address">Email destinatario</label>
+                            <input type="email" class="form-control" id="send-email-address" placeholder="utente@example.com">
+                            <small class="form-hint">Il destinatario riceverà un link valido 48 ore</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                        <button class="btn btn-success" id="btn-send-email">
+                            <i class="ti ti-mail me-1"></i>Invia
+                        </button>
                     </div>
                 </div>
             </div>
@@ -720,3 +749,38 @@ window.revokeClient = async (name) => {
         }
     }
 };
+
+window.openSendEmailModal = (clientName) => {
+    document.getElementById('send-email-client-name').value = clientName;
+    document.getElementById('send-email-address').value = '';
+    new bootstrap.Modal(document.getElementById('modal-send-email')).show();
+};
+
+// Setup send email button handler (called during renderInstanceDetail)
+document.addEventListener('click', async (e) => {
+    if (e.target.id === 'btn-send-email' || e.target.closest('#btn-send-email')) {
+        const clientName = document.getElementById('send-email-client-name').value;
+        const email = document.getElementById('send-email-address').value.trim();
+
+        if (!email) {
+            showToast('Inserisci un indirizzo email', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('btn-send-email');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Invio...';
+        btn.disabled = true;
+
+        try {
+            await apiPost(`/modules/wireguard/instances/${currentInstanceId}/clients/${clientName}/send-config`, { email });
+            showToast(`Email inviata a ${email}`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('modal-send-email'))?.hide();
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        }
+    }
+});

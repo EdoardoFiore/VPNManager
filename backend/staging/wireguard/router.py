@@ -8,7 +8,7 @@ import io
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlmodel import SQLModel
@@ -22,7 +22,8 @@ from .models import (
     WgClient, WgClientCreate, WgClientRead,
     WgGroup, WgGroupCreate, WgGroupRead, WgGroupMember, WgGroupMemberRead,
     WgGroupRule, WgGroupRuleCreate, WgGroupRuleRead, WgGroupRuleUpdate,
-    RuleOrderUpdate, FirewallPolicyUpdate
+    RuleOrderUpdate, FirewallPolicyUpdate,
+    WgMagicToken, SendConfigRequest
 )
 from .service import wireguard_service, WIREGUARD_CONFIG_DIR
 
@@ -457,6 +458,218 @@ async def get_client_qr(
     from .service import get_public_ip
     endpoint = instance.endpoint or get_public_ip() or "YOUR_SERVER_IP"
     
+    config = wireguard_service.generate_client_config(instance, client, endpoint)
+    qr_bytes = wireguard_service.generate_qr_code(config)
+    
+    return StreamingResponse(io.BytesIO(qr_bytes), media_type="image/png")
+
+
+@router.post("/instances/{instance_id}/clients/{client_name}/send-config")
+async def send_client_config_email(
+    instance_id: str,
+    client_name: str,
+    data: SendConfigRequest,
+    db: AsyncSession = Depends(get_session),
+    _user: User = Depends(require_permission("wireguard.clients"))
+):
+    """
+    Send client config via email with magic token link.
+    Token is valid for 48 hours and can only be used once.
+    """
+    import secrets
+    from datetime import timedelta
+    from core.settings.models import SMTPSettings
+    from core.email import send_email
+    
+    # Get instance and client
+    result = await db.execute(select(WgInstance).where(WgInstance.id == instance_id))
+    instance = result.scalar_one_or_none()
+    if not instance:
+        raise HTTPException(404, "Istanza non trovata")
+    
+    result = await db.execute(
+        select(WgClient).where(
+            (WgClient.instance_id == instance_id) & (WgClient.name == client_name)
+        )
+    )
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(404, "Client non trovato")
+    
+    # Get SMTP settings
+    smtp_result = await db.execute(select(SMTPSettings).where(SMTPSettings.id == 1))
+    smtp_settings = smtp_result.scalar_one_or_none()
+    if not smtp_settings or not smtp_settings.smtp_host:
+        raise HTTPException(400, "SMTP non configurato. Configura prima le impostazioni email.")
+    
+    if not smtp_settings.public_url:
+        raise HTTPException(400, "URL pubblico non configurato nelle impostazioni SMTP.")
+    
+    # Generate magic token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=48)
+    
+    magic_token = WgMagicToken(
+        token=token,
+        client_id=client.id,
+        expires_at=expires_at
+    )
+    db.add(magic_token)
+    await db.commit()
+    
+    # Build download URL
+    base_url = smtp_settings.public_url.rstrip('/')
+    download_url = f"{base_url}/api/modules/wireguard/download/{token}"
+    
+    # Send email
+    body_html = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px;">
+            <h2 style="color: #206bc4;">🔐 Configurazione VPN WireGuard</h2>
+            <p>Ciao,</p>
+            <p>Ecco il link per scaricare la tua configurazione VPN:</p>
+            <p style="text-align: center; margin: 30px 0;">
+                <a href="{download_url}" 
+                   style="background: #206bc4; color: white; padding: 12px 24px; 
+                          text-decoration: none; border-radius: 6px; font-weight: bold;">
+                    📥 Scarica Configurazione
+                </a>
+            </p>
+            <p><strong>Client:</strong> {client_name}</p>
+            <p><strong>Istanza:</strong> {instance.name}</p>
+            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
+            <p style="color: #666; font-size: 12px;">
+                ⚠️ Questo link è valido per <strong>48 ore</strong> e può essere usato <strong>una sola volta</strong>.<br>
+                Dopo il download il link non sarà più utilizzabile.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    result = await send_email(
+        smtp_host=smtp_settings.smtp_host,
+        smtp_port=smtp_settings.smtp_port,
+        smtp_encryption=smtp_settings.smtp_encryption,
+        smtp_username=smtp_settings.smtp_username,
+        smtp_password=smtp_settings.smtp_password,
+        sender_email=smtp_settings.sender_email,
+        sender_name=smtp_settings.sender_name,
+        recipient_email=data.email,
+        subject=f"VPN Config - {client_name}",
+        body_html=body_html
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(500, result.get("message", "Errore invio email"))
+    
+    return {"success": True, "message": f"Email inviata a {data.email}"}
+
+
+async def _validate_token(token: str, db: AsyncSession):
+    """
+    Validate magic token and return (magic_token, client, instance) or raise HTTPException.
+    Does NOT mark token as used.
+    """
+    result = await db.execute(select(WgMagicToken).where(WgMagicToken.token == token))
+    magic_token = result.scalar_one_or_none()
+    
+    if not magic_token:
+        raise HTTPException(404, "Link non valido o scaduto")
+    
+    if magic_token.used:
+        raise HTTPException(410, "Questo link è già stato utilizzato")
+    
+    if magic_token.expires_at < datetime.utcnow():
+        raise HTTPException(410, "Questo link è scaduto")
+    
+    result = await db.execute(select(WgClient).where(WgClient.id == magic_token.client_id))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(404, "Client non trovato")
+    
+    result = await db.execute(select(WgInstance).where(WgInstance.id == client.instance_id))
+    instance = result.scalar_one_or_none()
+    if not instance:
+        raise HTTPException(404, "Istanza non trovata")
+    
+    return magic_token, client, instance
+
+
+@router.get("/download/{token}", response_class=HTMLResponse)
+async def download_landing_page(
+    token: str,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Public landing page with setup instructions for WireGuard.
+    Shows mobile/desktop tabs with QR code and download buttons.
+    """
+    from fastapi.responses import HTMLResponse
+    from pathlib import Path
+    
+    magic_token, client, instance = await _validate_token(token, db)
+    
+    # Load and render template
+    template_path = Path(__file__).parent / "static" / "download_page.html"
+    html_content = template_path.read_text(encoding="utf-8")
+    
+    # Format expiry date
+    expires_str = magic_token.expires_at.strftime("%d/%m/%Y alle %H:%M")
+    
+    # Build URLs
+    base_path = f"/api/modules/wireguard/download/{token}"
+    
+    html_content = html_content.replace("{client_name}", client.name)
+    html_content = html_content.replace("{expires_at}", expires_str)
+    html_content = html_content.replace("{download_url}", f"{base_path}/file")
+    html_content = html_content.replace("{qr_url}", f"{base_path}/qr")
+    
+    return HTMLResponse(content=html_content)
+
+
+@router.get("/download/{token}/file")
+async def download_config_file(
+    token: str,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Download the actual .conf file.
+    Marks the token as used after successful download.
+    """
+    magic_token, client, instance = await _validate_token(token, db)
+    
+    # Generate config
+    from .service import get_public_ip
+    endpoint = instance.endpoint or get_public_ip() or "YOUR_SERVER_IP"
+    config = wireguard_service.generate_client_config(instance, client, endpoint)
+    
+    # Mark token as used
+    magic_token.used = True
+    await db.commit()
+    
+    return Response(
+        content=config,
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={client.name}.conf"}
+    )
+
+
+@router.get("/download/{token}/qr")
+async def download_qr_code(
+    token: str,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get QR code image for the config.
+    Does NOT mark token as used (user might still need to download file).
+    """
+    magic_token, client, instance = await _validate_token(token, db)
+    
+    # Generate config and QR
+    from .service import get_public_ip
+    endpoint = instance.endpoint or get_public_ip() or "YOUR_SERVER_IP"
     config = wireguard_service.generate_client_config(instance, client, endpoint)
     qr_bytes = wireguard_service.generate_qr_code(config)
     

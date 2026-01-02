@@ -176,6 +176,11 @@ class WgClientRead(SQLModel):
 
 # --- Group Schemas ---
 
+class SendConfigRequest(SQLModel):
+    """Request schema for sending client config via email."""
+    email: str
+
+
 class WgGroupCreate(SQLModel):
     name: str
     description: str = ""
