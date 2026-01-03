@@ -10,7 +10,10 @@
             "wireguard-tools",
             "qrencode"
         ],
-        "pip": []
+        "pip": [
+            "qrcode>=7.3",
+            "pillow>=9.0"
+        ]
     },
     "database_migrations": [
         "migrations/001_initial.py"
