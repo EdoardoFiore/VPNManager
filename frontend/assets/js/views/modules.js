@@ -1,7 +1,7 @@
 /**
  * MADMIN - Modules View
  * 
- * Manages installed modules, ZIP upload, and staging installation.
+ * Manages installed modules, ZIP upload, staging installation, and Store.
  */
 
 import { apiGet, apiPost, apiDelete, apiPatch, apiPut } from '../api.js';
@@ -10,6 +10,7 @@ import { checkPermission } from '../app.js';
 
 let modules = [];
 let stagingModules = [];
+let storeModules = [];
 let moduleChains = [];
 
 export async function render(container) {
@@ -24,6 +25,11 @@ export async function render(container) {
                             <i class="ti ti-package me-1"></i>Installati
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="#tab-store" class="nav-link" data-bs-toggle="tab">
+                            <i class="ti ti-building-store me-1"></i>Store
+                        </a>
+                    </li>
                     ${canManage ? `
                     <li class="nav-item">
                         <a href="#tab-upload" class="nav-link" data-bs-toggle="tab">
@@ -32,7 +38,7 @@ export async function render(container) {
                     </li>
                     <li class="nav-item">
                         <a href="#tab-staging" class="nav-link" data-bs-toggle="tab">
-                            <i class="ti ti-folder me-1"></i>Disponibili
+                            <i class="ti ti-folder me-1"></i>Staging
                             <span class="badge bg-blue ms-1" id="staging-badge" style="display:none;">0</span>
                         </a>
                     </li>
@@ -48,6 +54,14 @@ export async function render(container) {
                             </div>
                         </div>
                         <div id="firewall-priority-section" class="mt-4"></div>
+                    </div>
+                    <div class="tab-pane" id="tab-store">
+                        <div id="store-container">
+                            <div class="text-center py-4">
+                                <div class="spinner-border spinner-border-sm"></div>
+                                <p class="text-muted mt-2">Caricamento store...</p>
+                            </div>
+                        </div>
                     </div>
                     ${canManage ? `
                     <div class="tab-pane" id="tab-upload">
@@ -83,6 +97,7 @@ export async function render(container) {
 
     setupEventListeners();
     await loadModules();
+    loadStoreModules(); // Load async without await
     if (canManage) {
         await loadStagingModules();
         await loadModuleChains();
@@ -142,6 +157,141 @@ async function loadModuleChains() {
         renderFirewallPriority();
     } catch (e) {
         console.error('Failed to load module chains:', e);
+    }
+}
+
+async function loadStoreModules() {
+    const container = document.getElementById('store-container');
+    if (!container) return;
+
+    try {
+        const response = await apiGet('/modules/store/available');
+        storeModules = response.modules || [];
+        renderStore();
+    } catch (e) {
+        container.innerHTML = `
+            <div class="alert alert-warning">
+                <i class="ti ti-alert-circle me-2"></i>
+                Impossibile caricare lo store: ${escapeHtml(e.message)}
+            </div>
+        `;
+    }
+}
+
+function renderStore() {
+    const container = document.getElementById('store-container');
+    if (!container) return;
+    const canManage = checkPermission('modules.manage');
+
+    if (storeModules.length === 0) {
+        container.innerHTML = emptyState('ti-building-store', 'Nessun modulo disponibile', 'Lo store è vuoto al momento.');
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="mb-3">
+            <div class="row align-items-center">
+                <div class="col">
+                    <span class="text-muted">${storeModules.length} moduli disponibili</span>
+                </div>
+                <div class="col-auto">
+                    <button class="btn btn-ghost-primary btn-sm" id="btn-refresh-store">
+                        <i class="ti ti-refresh me-1"></i>Aggiorna
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            ${storeModules.map(m => `
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-start mb-2">
+                                <span class="avatar bg-azure-lt me-3">
+                                    <i class="ti ti-${m.icon || 'puzzle'}"></i>
+                                </span>
+                                <div class="flex-fill">
+                                    <h4 class="card-title mb-0">${escapeHtml(m.name)}</h4>
+                                    <small class="text-muted">${m.author?.name || 'Autore sconosciuto'}</small>
+                                </div>
+                                ${m.verified ? '<span class="badge bg-green-lt" title="Verificato"><i class="ti ti-check"></i></span>' : ''}
+                            </div>
+                            <p class="text-muted small mb-2" style="min-height: 40px;">
+                                ${escapeHtml(m.description?.substring(0, 100) || 'Nessuna descrizione')}${m.description?.length > 100 ? '...' : ''}
+                            </p>
+                            <div class="mb-2">
+                                ${(m.tags || []).slice(0, 3).map(t => `<span class="badge bg-azure-lt me-1">${escapeHtml(t)}</span>`).join('')}
+                            </div>
+                            <div class="d-flex align-items-center text-muted small mb-3">
+                                <span class="me-3"><i class="ti ti-star me-1"></i>${m.stars || 0}</span>
+                                <span><i class="ti ti-download me-1"></i>${m.downloads || 0}</span>
+                                <span class="ms-auto badge bg-secondary">v${m.version || '0.0.0'}</span>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            ${renderStoreButton(m, canManage)}
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    // Refresh button
+    document.getElementById('btn-refresh-store')?.addEventListener('click', async (e) => {
+        e.target.disabled = true;
+        await loadStoreModules();
+        showToast('Store aggiornato', 'success');
+    });
+
+    // Install buttons
+    container.querySelectorAll('.btn-store-install').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+            try {
+                await apiPost('/modules/store/install', { module_id: id });
+                showToast('Modulo scaricato! Vai su Staging per installarlo.', 'success');
+                await loadStoreModules();
+                await loadStagingModules();
+                // Switch to staging tab
+                document.querySelector('[href="#tab-staging"]')?.click();
+            } catch (e) {
+                showToast(e.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        });
+    });
+}
+
+function renderStoreButton(module, canManage) {
+    const status = module.install_status;
+
+    switch (status) {
+        case 'installed':
+            return `<span class="btn btn-success w-100 disabled">
+                <i class="ti ti-check me-1"></i>Installato
+            </span>`;
+        case 'update_available':
+            return canManage
+                ? `<button class="btn btn-warning w-100 btn-store-install" data-id="${module.id}">
+                    <i class="ti ti-refresh me-1"></i>Aggiorna a v${module.version}
+                </button>`
+                : `<span class="btn btn-outline-warning w-100 disabled">Aggiornamento disponibile</span>`;
+        case 'in_staging':
+            return `<span class="btn btn-outline-secondary w-100 disabled">
+                <i class="ti ti-folder me-1"></i>In Staging
+            </span>`;
+        default:
+            return canManage
+                ? `<button class="btn btn-primary w-100 btn-store-install" data-id="${module.id}">
+                    <i class="ti ti-download me-1"></i>Scarica
+                </button>`
+                : `<span class="btn btn-outline-primary w-100 disabled">Disponibile</span>`;
     }
 }
 

@@ -365,3 +365,121 @@ async def disable_module(
     await session.commit()
     
     return {"status": "ok", "message": f"Module {module_id} disabled. Restart required."}
+
+
+# ============== STORE ENDPOINTS ==============
+
+from .store import module_store, StoreModule
+
+
+class StoreInstallRequest(BaseModel):
+    """Request to install module from store."""
+    module_id: str
+    version: Optional[str] = None
+
+
+@router.get("/store/available")
+async def get_store_modules(
+    current_user: User = Depends(require_permission("modules.view")),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Get all modules available in the store.
+    Returns modules from cloud registry with install status.
+    """
+    try:
+        available = await module_store.get_available_modules()
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Impossibile contattare il registry: {str(e)}"
+        )
+    
+    # Get installed module IDs
+    result = await session.execute(select(InstalledModule.id, InstalledModule.version))
+    installed = {row[0]: row[1] for row in result.fetchall()}
+    
+    # Get staging module IDs
+    staging_path = Path(settings.staging_dir)
+    staging_ids = set()
+    if staging_path.exists():
+        for item in staging_path.iterdir():
+            if item.is_dir() and (item / "manifest.json").exists():
+                staging_ids.add(item.name)
+    
+    # Enrich with install status
+    modules = []
+    for mod in available:
+        status = "available"
+        if mod.id in installed:
+            current_ver = installed[mod.id]
+            if mod.version > current_ver:
+                status = "update_available"
+            else:
+                status = "installed"
+        elif mod.id in staging_ids:
+            status = "in_staging"
+        
+        modules.append({
+            **mod.model_dump(),
+            "install_status": status,
+            "installed_version": installed.get(mod.id)
+        })
+    
+    return {"modules": modules}
+
+
+@router.get("/store/module/{module_id}")
+async def get_store_module_details(
+    module_id: str,
+    current_user: User = Depends(require_permission("modules.view"))
+):
+    """Get details for a specific module from the store."""
+    module = await module_store.get_module_info(module_id)
+    
+    if not module:
+        raise HTTPException(status_code=404, detail="Modulo non trovato nel registry")
+    
+    return module.model_dump()
+
+
+@router.post("/store/install")
+async def install_from_store(
+    request: StoreInstallRequest,
+    current_user: User = Depends(require_permission("modules.manage")),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Download and install a module from the store (GitHub).
+    
+    Downloads to staging folder. Use /install endpoint to complete installation.
+    """
+    result = await module_store.install_module(
+        request.module_id,
+        request.version
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("error", "Installazione fallita")
+        )
+    
+    return result
+
+
+@router.get("/store/updates")
+async def check_store_updates(
+    current_user: User = Depends(require_permission("modules.view")),
+    session: AsyncSession = Depends(get_session)
+):
+    """Check for available updates for installed modules."""
+    result = await session.execute(
+        select(InstalledModule.id, InstalledModule.version)
+    )
+    installed = [{"id": row[0], "version": row[1]} for row in result.fetchall()]
+    
+    updates = await module_store.check_updates(installed)
+    
+    return {"updates": updates, "count": len(updates)}
+
